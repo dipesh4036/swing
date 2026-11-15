@@ -24,16 +24,19 @@ export const THEME_COLORS = {
 };
 
 export const STOCK_UNIVERSES = [
-  { id: "all", label: "All stocks", count: 2561 },
-  { id: "liquid", label: "Liquid stocks", count: 1508 },
   { id: "nifty500", label: "Nifty 500", count: 501 },
-  { id: "nifty200", label: "Nifty 200", count: 201 },
-  { id: "nifty100", label: "Nifty 100", count: 101 },
+  { id: "nifty200", label: "Nifty 200", count: 200 },
+  { id: "nifty100", label: "Nifty 100", count: 100 },
+  { id: "nifty_midcap150", label: "Midcap 150", count: 150 },
+  { id: "nifty_smallcap250", label: "Smallcap 250", count: 251 },
+  { id: "all", label: "All stocks", count: 2599 },
 ];
 
 export const PERIOD_OPTIONS = [
   { id: "1M", label: "1M" },
   { id: "3M", label: "3M" },
+  { id: "6M", label: "6M" },
   { id: "1Y", label: "1Y" },
+  { id: "YTD", label: "YTD" },
+  { id: "ALL", label: "ALL" },
 ];
-

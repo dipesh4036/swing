@@ -9,7 +9,7 @@ import LargeMidSmall from "./LargeMidSmall";
 import BreakoutsBreakdowns from "./BreakoutsBreakdowns";
 import ParticipationHistory from "./ParticipationHistory";
 
-export function MarketInternals({ breadth, breadthHistory = [] }) {
+export function MarketInternals({ keyMetrics, history = [], performance = {} }) {
   return (
     <div className="space-y-3">
       {/* Section Header */}
@@ -21,20 +21,17 @@ export function MarketInternals({ breadth, breadthHistory = [] }) {
           <span title="Granular underlying market health indicators">
             <Info size={13} className="text-[#94A3B8] cursor-pointer" />
           </span>
-          <span className="text-[11px] text-[#64748B] ml-2 hidden sm:inline">
-            — Nifty 500 (grey line)
-          </span>
         </div>
       </div>
 
       {/* 6 Analytics Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <NewHighsLows breadth={breadth} breadthHistory={breadthHistory} />
-        <AdvanceDecline breadth={breadth} breadthHistory={breadthHistory} />
-        <FourPercentMovers breadth={breadth} breadthHistory={breadthHistory} />
-        <LargeMidSmall breadth={breadth} breadthHistory={breadthHistory} />
-        <BreakoutsBreakdowns breadth={breadth} breadthHistory={breadthHistory} />
-        <ParticipationHistory breadth={breadth} breadthHistory={breadthHistory} />
+        <NewHighsLows keyMetrics={keyMetrics} history={history} />
+        <AdvanceDecline keyMetrics={keyMetrics} history={history} />
+        <FourPercentMovers keyMetrics={keyMetrics} history={history} />
+        <LargeMidSmall performance={performance} history={history} />
+        <BreakoutsBreakdowns keyMetrics={keyMetrics} history={history} />
+        <ParticipationHistory keyMetrics={keyMetrics} history={history} />
       </div>
     </div>
   );

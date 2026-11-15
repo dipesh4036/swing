@@ -4,9 +4,9 @@ import React, { useState, useMemo } from "react";
 import BaseCard from "@/components/ui/card";
 import SegmentedControl from "@/components/ui/segmented-control";
 import BaseAreaChart from "@/components/charts/BaseAreaChart";
-import { mockMarketInternals } from "@/data/mockMarketInternals";
+import { formatShortDate } from "@/lib/formatters";
 
-export function NewHighsLows({ breadth, breadthHistory = [] }) {
+export function NewHighsLows({ keyMetrics, history = [] }) {
   const [period, setPeriod] = useState("20D");
 
   const PERIODS = [
@@ -14,44 +14,40 @@ export function NewHighsLows({ breadth, breadthHistory = [] }) {
     { id: "52W", label: "52W" },
   ];
 
-  // Derive dynamic values
   const is52W = period === "52W";
-  const liveHighs = is52W
-    ? breadth?.new52wHighs ?? 85
-    : (breadth?.new52wHighs ? Math.round(breadth.new52wHighs * 2.8) : 349);
-  const liveLows = is52W
-    ? breadth?.new52wLows ?? 22
-    : (breadth?.new52wLows ? Math.round(breadth.new52wLows * 2.5) : 67);
-  const liveNet = liveHighs - liveLows;
+  const hl = keyMetrics?.highsLows;
+  const liveHighs = is52W ? hl?.highs52w : hl?.highs20d;
+  const liveLows = is52W ? hl?.lows52w : hl?.lows20d;
+  const liveNet = is52W ? hl?.net52w : hl?.net20d;
 
-  // Chart data updates dynamically based on selected period
   const chartData = useMemo(() => {
-    if (breadthHistory.length > 0) {
-      return breadthHistory.map((b) => {
-        const h = b.new52wHighs ?? 20;
-        const l = b.new52wLows ?? 10;
-        const net = is52W ? (b.netHighLow ?? (h - l)) : Math.round((b.netHighLow ?? (h - l)) * 2.5);
-        return {
-          date: new Date(b.tradeDate).toLocaleDateString("en-IN", {
-            month: "short",
-            day: "numeric",
-          }),
-          net,
-          benchmark: b.nifty500ChangePct ?? 0,
-        };
-      });
-    }
+    return history.map((b) => {
+      const net = is52W ? b.net52w : b.netHighs20d;
+      return {
+        date: formatShortDate(b.date),
+        net: net !== null && net !== undefined ? net : null,
+      };
+    });
+  }, [history, is52W]);
 
-    // Adapt mock data if 52W vs 20D
-    return mockMarketInternals.newHighsLows.chartData.map((d) => ({
-      date: d.date,
-      net: is52W ? Math.round(d.net * 0.4) : d.net,
-      benchmark: d.benchmark,
-    }));
-  }, [breadthHistory, is52W]);
+  const weeklyChangeText = useMemo(() => {
+    if (history.length < 6) return null;
+    const curNet = is52W ? history[history.length - 1]?.net52w : history[history.length - 1]?.netHighs20d;
+    const pastNet = is52W ? history[history.length - 6]?.net52w : history[history.length - 6]?.netHighs20d;
+    if (curNet === null || pastNet === null || curNet === undefined || pastNet === undefined) return null;
+    const diff = curNet - pastNet;
+    const sign = diff >= 0 ? "+" : "−";
+    return `${sign}${Math.abs(diff)} in a week`;
+  }, [history, is52W]);
 
-  const statusText = liveNet >= 0 ? "More highs than lows" : "More lows than highs";
-  const weeklyChange = liveNet >= 0 ? "+198 in a week" : "−85 in a week";
+  const statusText =
+    liveNet === null || liveNet === undefined
+      ? "—"
+      : liveNet >= 0
+      ? "More highs than lows"
+      : "More lows than highs";
+
+  const isPositive = (liveNet ?? 0) >= 0;
 
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
@@ -76,27 +72,30 @@ export function NewHighsLows({ breadth, breadthHistory = [] }) {
         <div className="flex items-baseline gap-2">
           <span
             className={`text-[18px] font-bold tabular-nums ${
-              liveNet >= 0 ? "text-[#3478F6]" : "text-[#F05283]"
+              isPositive ? "text-[#3478F6]" : "text-[#F05283]"
             }`}
           >
-            {liveNet > 0 ? "+" : ""}{liveNet}
+            {liveNet !== null && liveNet !== undefined ? `${liveNet > 0 ? "+" : ""}${liveNet}` : "—"}
           </span>
           <span className="text-[11px] font-medium text-[#64748B]">
             {statusText}
           </span>
         </div>
         <div className="text-[10px] text-[#64748B]">
-          {liveHighs} highs / {liveLows} lows
+          {liveHighs !== null && liveHighs !== undefined ? liveHighs : "—"} highs /{" "}
+          {liveLows !== null && liveLows !== undefined ? liveLows : "—"} lows
         </div>
       </div>
 
-      <div
-        className={`text-[10px] font-semibold ${
-          liveNet >= 0 ? "text-[#16A878]" : "text-[#F05283]"
-        }`}
-      >
-        {weeklyChange}
-      </div>
+      {weeklyChangeText && (
+        <div
+          className={`text-[10px] font-semibold ${
+            isPositive ? "text-[#16A878]" : "text-[#F05283]"
+          }`}
+        >
+          {weeklyChangeText}
+        </div>
+      )}
 
       {/* Chart */}
       <BaseAreaChart
@@ -105,22 +104,13 @@ export function NewHighsLows({ breadth, breadthHistory = [] }) {
         series={[
           {
             key: "net",
-            name: `${period} Net Highs`,
-            color: liveNet >= 0 ? "#3478F6" : "#F05283",
+            name: `Net ${period} Highs`,
+            color: isPositive ? "#3478F6" : "#F05283",
             fill: true,
-            strokeWidth: 1.5,
-          },
-          {
-            key: "benchmark",
-            name: "Nifty 500",
-            color: "#94A3B8",
-            fill: false,
-            strokeWidth: 1,
+            strokeWidth: 1.75,
           },
         ]}
-        height={115}
-        yDomain={is52W ? [-150, 150] : [-300, 300]}
-        referenceLines={[{ y: 0, color: "#E2E8F0" }]}
+        height={95}
       />
     </BaseCard>
   );

@@ -1,5 +1,5 @@
 /**
- * Formatting utilities for financial numbers, percentages and currency.
+ * Formatting utilities for financial numbers, percentages, currency, and trade dates.
  */
 
 export function formatINR(val, decimals = 2) {
@@ -35,3 +35,35 @@ export function formatPoints(val) {
   return `${sign}${Math.abs(val).toFixed(1)} pts`;
 }
 
+export function formatTradeDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatDayMonth(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+export function formatShortDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-IN", {
+    month: "short",
+    day: "numeric",
+  });
+}

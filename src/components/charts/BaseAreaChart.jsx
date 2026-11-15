@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useId } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -27,6 +27,8 @@ export function BaseAreaChart({
   className = "",
 }) {
   const [mounted, setMounted] = useState(false);
+  const rawId = useId();
+  const uniqueId = rawId.replace(/[^a-zA-Z0-9-_]/g, "");
 
   useEffect(() => {
     setMounted(true);
@@ -66,7 +68,7 @@ export function BaseAreaChart({
             {series.map((s) => (
               <linearGradient
                 key={s.key}
-                id={`gradient-${s.key}`}
+                id={`${uniqueId}-gradient-${s.key}`}
                 x1="0"
                 y1="0"
                 x2="0"
@@ -126,7 +128,7 @@ export function BaseAreaChart({
               name={s.name || s.key}
               stroke={s.color || CHART_THEME.colors.primary}
               strokeWidth={s.strokeWidth || 1.75}
-              fill={s.fill ? `url(#gradient-${s.key})` : "none"}
+              fill={s.fill ? `url(#${uniqueId}-gradient-${s.key})` : "none"}
               dot={false}
               activeDot={{
                 r: 4,

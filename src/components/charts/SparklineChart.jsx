@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useId } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -20,6 +20,8 @@ export function SparklineChart({
   className = "",
 }) {
   const [mounted, setMounted] = useState(false);
+  const rawId = useId();
+  const uniqueId = rawId.replace(/[^a-zA-Z0-9-_]/g, "");
 
   useEffect(() => {
     setMounted(true);
@@ -46,7 +48,7 @@ export function SparklineChart({
           <AreaChart data={data} margin={{ top: 2, right: 1, left: 1, bottom: 2 }}>
             <defs>
               <linearGradient
-                id={`spark-${color.replace("#", "")}`}
+                id={`${uniqueId}-spark-${color.replace("#", "")}`}
                 x1="0"
                 y1="0"
                 x2="0"
@@ -62,7 +64,7 @@ export function SparklineChart({
               dataKey={dataKey}
               stroke={color}
               strokeWidth={1.5}
-              fill={`url(#spark-${color.replace("#", "")})`}
+              fill={`url(#${uniqueId}-spark-${color.replace("#", "")})`}
               dot={false}
               isAnimationActive={false}
             />

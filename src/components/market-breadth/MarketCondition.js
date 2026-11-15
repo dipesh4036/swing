@@ -5,12 +5,12 @@ import BaseCard from "@/components/ui/card";
 import { Info } from "lucide-react";
 import MarketParticipationChart from "./MarketParticipationChart";
 import StageComparisonChart from "./StageComparisonChart";
-import { mockParticipationSeries, mockParticipationStats, mockStageComparisonSeries } from "@/data/mockMarketBreadth";
 
 export function MarketCondition({
-  participationData = mockParticipationSeries,
-  participationStats = mockParticipationStats,
-  stageComparisonData = mockStageComparisonSeries,
+  participationData = [],
+  participationStats = {},
+  stageComparisonData = [],
+  asOfDate = null,
 }) {
   return (
     <BaseCard className="flex flex-col justify-between h-full space-y-4" padding="p-4">
@@ -30,6 +30,7 @@ export function MarketCondition({
       <MarketParticipationChart
         data={participationData}
         stats={participationStats}
+        asOfDate={asOfDate}
       />
 
       {/* Bottom Half: Stage 2 vs Stage 4 */}
@@ -39,4 +40,3 @@ export function MarketCondition({
 }
 
 export default MarketCondition;
-

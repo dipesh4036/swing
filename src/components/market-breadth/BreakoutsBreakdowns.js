@@ -4,9 +4,9 @@ import React, { useState, useMemo } from "react";
 import BaseCard from "@/components/ui/card";
 import SegmentedControl from "@/components/ui/segmented-control";
 import BaseAreaChart from "@/components/charts/BaseAreaChart";
-import { mockMarketInternals } from "@/data/mockMarketInternals";
+import { formatShortDate } from "@/lib/formatters";
 
-export function BreakoutsBreakdowns({ breadth, breadthHistory = [] }) {
+export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
   const [period, setPeriod] = useState("Daily");
 
   const PERIODS = [
@@ -15,44 +15,52 @@ export function BreakoutsBreakdowns({ breadth, breadthHistory = [] }) {
     { id: "Cumulative", label: "Cumulative" },
   ];
 
-  // Dynamic values derived from breadth
-  const liveHeld = breadth
-    ? Math.round((breadth.new52wHighs ?? 30) * 1.1 + 10)
-    : 41;
-  const liveFailed = breadth
-    ? Math.round((breadth.new52wLows ?? 18) * 1.1 + 12)
-    : 34;
-  const liveNet = liveHeld - liveFailed;
+  const brk = keyMetrics?.breakouts;
+  const liveHeld = brk?.breakouts20d;
+  const liveFailed = brk?.breakdowns20d;
+  const liveNet =
+    liveHeld !== null && liveFailed !== null && liveHeld !== undefined && liveFailed !== undefined
+      ? liveHeld - liveFailed
+      : null;
 
   // Chart data adapted to period
   const chartData = useMemo(() => {
     let cumulative = 0;
-    const raw = mockMarketInternals.breakoutsBreakdowns.chartData;
+    return history.map((d, idx) => {
+      const net = (d.breakouts20d ?? 0) - (d.breakdowns20d ?? 0);
+      cumulative += net;
 
-    return raw.map((d) => {
-      cumulative += d.net;
-      let val = d.net;
+      let val = net;
       if (period === "5D") {
-        val = Math.round(d.net * 2.2);
+        const slice5 = history.slice(Math.max(0, idx - 4), idx + 1);
+        val = slice5.reduce((sum, item) => sum + ((item.breakouts20d ?? 0) - (item.breakdowns20d ?? 0)), 0);
       } else if (period === "Cumulative") {
         val = cumulative;
       }
+
       return {
-        date: d.date,
+        date: formatShortDate(d.date),
         val,
       };
     });
-  }, [period]);
+  }, [history, period]);
 
   const displayValue = useMemo(() => {
+    if (liveNet === null) return "—";
     if (period === "Daily") return `${liveNet >= 0 ? "+" : ""}${liveNet}`;
-    if (period === "5D") return `${liveNet >= 0 ? "+" : ""}${Math.round(liveNet * 2.5)}`;
-    return `${liveNet >= 0 ? "+" : ""}${Math.round(liveNet * 4.2)}`;
-  }, [period, liveNet]);
+    if (period === "5D") {
+      const last5 = history.slice(-5);
+      const net5 = last5.reduce((sum, item) => sum + ((item.breakouts20d ?? 0) - (item.breakdowns20d ?? 0)), 0);
+      return `${net5 >= 0 ? "+" : ""}${net5}`;
+    }
+    const cum = history.reduce((sum, item) => sum + ((item.breakouts20d ?? 0) - (item.breakdowns20d ?? 0)), 0);
+    return `${cum >= 0 ? "+" : ""}${cum}`;
+  }, [period, liveNet, history]);
 
   const displayStatus = useMemo(() => {
+    if (liveNet === null) return "—";
     if (period === "Daily") {
-      return liveNet >= 0 ? "More held" : "More failed";
+      return liveNet >= 0 ? "More breakouts" : "More breakdowns";
     }
     if (period === "5D") {
       return liveNet >= 0 ? "Expansion pace" : "Contraction pace";
@@ -61,12 +69,15 @@ export function BreakoutsBreakdowns({ breadth, breadthHistory = [] }) {
   }, [period, liveNet]);
 
   const displaySubtext = useMemo(() => {
-    if (period === "Daily") return `${liveHeld} held / ${liveFailed} failed today`;
+    if (period === "Daily") {
+      if (liveHeld === null || liveFailed === null || liveHeld === undefined || liveFailed === undefined) return "—";
+      return `${liveHeld} breakouts / ${liveFailed} breakdowns`;
+    }
     if (period === "5D") return "5-day rolling net breakouts held";
     return "Cumulative net breakout line";
   }, [period, liveHeld, liveFailed]);
 
-  const isPositive = liveNet >= 0;
+  const isPositive = (liveNet ?? 0) >= 0;
 
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
@@ -76,7 +87,7 @@ export function BreakoutsBreakdowns({ breadth, breadthHistory = [] }) {
           <div className="text-xs font-bold text-[#17233B]">Breakouts − breakdowns</div>
           <div className="text-[10px] text-[#64748B]">
             {period === "Daily"
-              ? "Breakouts that held minus those that failed, each day"
+              ? "20D channel breakouts vs breakdowns on volume"
               : `${period} trend of breakouts vs breakdowns`}
           </div>
         </div>
@@ -112,15 +123,13 @@ export function BreakoutsBreakdowns({ breadth, breadthHistory = [] }) {
         series={[
           {
             key: "val",
-            name: period === "Daily" ? "Net Breakouts" : `${period} Net`,
+            name: period === "Daily" ? "Daily Net" : `${period} Net`,
             color: isPositive ? "#3478F6" : "#F05283",
             fill: true,
-            strokeWidth: 1.5,
+            strokeWidth: 1.75,
           },
         ]}
-        height={115}
-        yDomain={period === "Cumulative" ? [-60, 60] : [-40, 30]}
-        referenceLines={[{ y: 0, color: "#E2E8F0" }]}
+        height={95}
       />
     </BaseCard>
   );

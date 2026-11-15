@@ -4,7 +4,7 @@ import React from "react";
 import BaseAreaChart from "@/components/charts/BaseAreaChart";
 
 export function StageComparisonChart({ data = [] }) {
-  const latest = data[data.length - 1] || { stage2: 38.7, stage4: 46.1 };
+  const latest = data.length > 0 ? data[data.length - 1] : null;
 
   return (
     <div className="space-y-2 pt-3 border-t border-[#E5EAF2] w-full min-w-0">
@@ -21,11 +21,11 @@ export function StageComparisonChart({ data = [] }) {
         <div className="flex items-center gap-3 text-xs font-semibold">
           <span className="flex items-center gap-1.5 text-[#3478F6]">
             <span className="w-2 h-2 rounded-xs bg-[#3478F6]" />
-            Stage 2: {latest.stage2?.toFixed(1)}%
+            Stage 2: {latest?.stage2 !== null && latest?.stage2 !== undefined ? `${latest.stage2.toFixed(1)}%` : "—"}
           </span>
           <span className="flex items-center gap-1.5 text-[#F05283]">
             <span className="w-2 h-2 rounded-xs bg-[#F05283]" />
-            Stage 4: {latest.stage4?.toFixed(1)}%
+            Stage 4: {latest?.stage4 !== null && latest?.stage4 !== undefined ? `${latest.stage4.toFixed(1)}%` : "—"}
           </span>
         </div>
       </div>

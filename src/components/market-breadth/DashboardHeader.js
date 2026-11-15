@@ -4,14 +4,16 @@ import React from "react";
 import { Activity, ChevronDown } from "lucide-react";
 import { STOCK_UNIVERSES, PERIOD_OPTIONS } from "@/lib/constants";
 import SegmentedControl from "@/components/ui/segmented-control";
+import { formatTradeDate } from "@/lib/formatters";
 
 export function DashboardHeader({
   activeTab = "breadth",
   onTabChange,
-  selectedUniverse = "all",
+  selectedUniverse = "nifty500",
   onUniverseChange,
   selectedPeriod = "1M",
   onPeriodChange,
+  asOfDate = null,
 }) {
   const currentUniverse =
     STOCK_UNIVERSES.find((u) => u.id === selectedUniverse) || STOCK_UNIVERSES[0];
@@ -30,7 +32,7 @@ export function DashboardHeader({
                 Market Breadth
               </h1>
               <span className="text-[11px] text-[#94A3B8] font-medium leading-none">
-                Read as of Fri, 13 Nov 2026
+                {asOfDate ? `Read as of ${formatTradeDate(asOfDate)}` : "—"}
               </span>
             </div>
           </div>

@@ -4,9 +4,9 @@ import React, { useState, useMemo } from "react";
 import BaseCard from "@/components/ui/card";
 import SegmentedControl from "@/components/ui/segmented-control";
 import BaseAreaChart from "@/components/charts/BaseAreaChart";
-import { mockMarketInternals } from "@/data/mockMarketInternals";
+import { formatShortDate } from "@/lib/formatters";
 
-export function AdvanceDecline({ breadth, breadthHistory = [] }) {
+export function AdvanceDecline({ keyMetrics, history = [] }) {
   const [period, setPeriod] = useState("20D");
 
   const PERIODS = [
@@ -15,46 +15,60 @@ export function AdvanceDecline({ breadth, breadthHistory = [] }) {
     { id: "AD", label: "A-D line" },
   ];
 
-  const advances = breadth?.advances ?? 1233;
-  const declines = breadth?.declines ?? 1295;
-  const ratio = declines > 0 ? +(advances / declines).toFixed(2) : 1.0;
+  const adData = keyMetrics?.advanceDecline;
+  const advances = adData?.advances;
+  const declines = adData?.declines;
+  const ratio = period === "40D" ? adData?.ratio40d : adData?.ratio20d;
 
-  // Chart data updates dynamically based on selected period
   const chartData = useMemo(() => {
-    if (breadthHistory.length > 0) {
-      let cumulative = 0;
-      return breadthHistory.map((b) => {
-        const adv = b.advances ?? 1200;
-        const dec = b.declines ?? 1200;
-        const r = dec > 0 ? +(adv / dec).toFixed(2) : 1.0;
-        cumulative += (adv - dec);
+    return history.map((b) => {
+      const val =
+        period === "AD"
+          ? b.adLine
+          : period === "40D"
+          ? b.adRatio40d
+          : b.adRatio20d;
+      return {
+        date: formatShortDate(b.date),
+        val: val !== null && val !== undefined ? val : null,
+        benchmark: period === "AD" ? 0 : 1.0,
+      };
+    });
+  }, [history, period]);
 
-        return {
-          date: new Date(b.tradeDate).toLocaleDateString("en-IN", {
-            month: "short",
-            day: "numeric",
-          }),
-          val: period === "AD" ? cumulative : period === "40D" ? +((r * 0.95).toFixed(2)) : r,
-          benchmark: 1.0,
-        };
-      });
-    }
-
-    return mockMarketInternals.advanceDecline.chartData.map((d) => ({
-      date: d.date,
-      val: period === "AD" ? Math.round(d.ratio * 1200 - 1100) : period === "40D" ? +((d.ratio * 0.96).toFixed(2)) : d.ratio,
-      benchmark: period === "AD" ? 0 : 1.0,
-    }));
-  }, [breadthHistory, period]);
-
-  const statusText = ratio >= 1.05 ? "Bullish" : ratio <= 0.95 ? "Bearish" : "Even";
   const displayVal =
     period === "AD"
-      ? `${advances - declines > 0 ? "+" : ""}${advances - declines}`
-      : period === "40D"
-      ? (ratio * 0.96).toFixed(2)
-      : ratio.toFixed(2);
-  const isPositive = period === "AD" ? advances >= declines : ratio >= 1.0;
+      ? keyMetrics?.adLine !== null && keyMetrics?.adLine !== undefined
+        ? `${keyMetrics.adLine > 0 ? "+" : ""}${keyMetrics.adLine.toLocaleString("en-IN")}`
+        : "—"
+      : ratio !== null && ratio !== undefined
+      ? ratio.toFixed(2)
+      : "—";
+
+  const isPositive =
+    period === "AD"
+      ? (keyMetrics?.adLine ?? 0) >= 0
+      : (ratio ?? 0) >= 1.0;
+
+  const statusText =
+    ratio === null || ratio === undefined
+      ? "—"
+      : ratio >= 1.05
+      ? "Bullish"
+      : ratio <= 0.95
+      ? "Bearish"
+      : "Even";
+
+  // Calculate 1-week change from history (5 sessions ago)
+  const weeklyChangeText = useMemo(() => {
+    if (history.length < 6) return null;
+    const curVal = period === "AD" ? history[history.length - 1]?.adLine : history[history.length - 1]?.adRatio20d;
+    const pastVal = period === "AD" ? history[history.length - 6]?.adLine : history[history.length - 6]?.adRatio20d;
+    if (curVal === null || pastVal === null || curVal === undefined || pastVal === undefined) return null;
+    const diff = curVal - pastVal;
+    const sign = diff >= 0 ? "+" : "−";
+    return `${sign}${Math.abs(diff).toFixed(period === "AD" ? 0 : 2)} in a week`;
+  }, [history, period]);
 
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
@@ -63,7 +77,7 @@ export function AdvanceDecline({ breadth, breadthHistory = [] }) {
         <div>
           <div className="text-xs font-bold text-[#17233B]">Advance / Decline</div>
           <div className="text-[10px] text-[#64748B]">
-            {period === "AD" ? "Cumulative Advance minus Decline line" : `Stocks that rose vs fell, ${period} average`}
+            {period === "AD" ? "Cumulative Advance minus Decline line" : `Stocks that rose vs fell, ${period} rolling ratio`}
           </div>
         </div>
         <SegmentedControl
@@ -85,10 +99,15 @@ export function AdvanceDecline({ breadth, breadthHistory = [] }) {
             {displayVal}
           </span>
           <span className="text-[11px] font-medium text-[#64748B]">{statusText}</span>
-          <span className="text-[10px] text-[#16A878] font-semibold">+0.05 in a week</span>
+          {weeklyChangeText && (
+            <span className={`text-[10px] font-semibold ${isPositive ? "text-[#16A878]" : "text-[#F05283]"}`}>
+              {weeklyChangeText}
+            </span>
+          )}
         </div>
         <div className="text-[10px] text-[#64748B]">
-          {advances.toLocaleString("en-IN")} up / {declines.toLocaleString("en-IN")} down
+          {advances !== null && advances !== undefined ? `${advances.toLocaleString("en-IN")} up` : "—"} /{" "}
+          {declines !== null && declines !== undefined ? `${declines.toLocaleString("en-IN")} down` : "—"}
         </div>
       </div>
 
@@ -99,15 +118,25 @@ export function AdvanceDecline({ breadth, breadthHistory = [] }) {
         series={[
           {
             key: "val",
-            name: period === "AD" ? "A-D Line" : `A/D Ratio (${period})`,
+            name: period === "AD" ? "A-D Line" : `${period} Ratio`,
             color: isPositive ? "#3478F6" : "#F05283",
             fill: true,
-            strokeWidth: 1.5,
+            strokeWidth: 1.75,
           },
+          ...(period !== "AD"
+            ? [
+                {
+                  key: "benchmark",
+                  name: "Neutral (1.0)",
+                  color: "#94A3B8",
+                  fill: false,
+                  strokeWidth: 1,
+                  strokeDasharray: "2 2",
+                },
+              ]
+            : []),
         ]}
-        height={115}
-        yDomain={period === "AD" ? ["auto", "auto"] : [0.5, 1.3]}
-        referenceLines={period === "AD" ? [{ y: 0, color: "#E2E8F0" }] : [{ y: 1.0, color: "#E2E8F0" }]}
+        height={95}
       />
     </BaseCard>
   );

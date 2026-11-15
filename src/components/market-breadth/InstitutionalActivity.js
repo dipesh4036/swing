@@ -3,14 +3,16 @@
 import React from "react";
 import BaseCard from "@/components/ui/card";
 import DivergingBarChart from "@/components/charts/DivergingBarChart";
-import { formatCrores } from "@/lib/formatters";
-import { mockInstitutionalFlows, mockHighsLows22 } from "@/data/mockMarketBreadth";
+import { formatCrores, formatDayMonth } from "@/lib/formatters";
 
 export function InstitutionalActivity({
-  flows = mockInstitutionalFlows,
-  highsLows = mockHighsLows22,
+  flows = null,
+  highsLows = null,
+  asOfDate = null,
 }) {
-  const { fii, dii } = flows;
+  const dateLabel = flows?.date || (asOfDate ? formatDayMonth(asOfDate) : "—");
+  const fii = flows?.fii || null;
+  const dii = flows?.dii || null;
 
   return (
     <BaseCard className="flex flex-col space-y-4 w-full min-w-0" padding="p-4">
@@ -29,9 +31,17 @@ export function InstitutionalActivity({
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-[#17233B]">FII</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#64748B] font-normal">Fri 13 Nov</span>
-              <span className={`tabular-nums font-bold ${fii.dailyNetCr >= 0 ? "text-[#3478F6]" : "text-[#F05283]"}`}>
-                {formatCrores(fii.dailyNetCr)}
+              <span className="text-[11px] text-[#64748B] font-normal">{dateLabel}</span>
+              <span
+                className={`tabular-nums font-bold ${
+                  fii?.dailyNetCr !== null && fii?.dailyNetCr !== undefined
+                    ? fii.dailyNetCr >= 0
+                      ? "text-[#3478F6]"
+                      : "text-[#F05283]"
+                    : "text-[#64748B]"
+                }`}
+              >
+                {formatCrores(fii?.dailyNetCr)}
               </span>
             </div>
           </div>
@@ -39,7 +49,7 @@ export function InstitutionalActivity({
           {/* 22 Sessions Bar Chart */}
           <div className="py-0.5 w-full min-w-0">
             <DivergingBarChart
-              data={fii.sessions}
+              data={fii?.sessions || []}
               xKey="session"
               dataKey="val"
               height={52}
@@ -51,8 +61,16 @@ export function InstitutionalActivity({
 
           <div className="flex items-center justify-between text-[11px] text-[#64748B]">
             <span>1-month net</span>
-            <span className={`font-semibold tabular-nums ${fii.monthNetCr >= 0 ? "text-[#3478F6]" : "text-[#F05283]"}`}>
-              {formatCrores(fii.monthNetCr)}
+            <span
+              className={`font-semibold tabular-nums ${
+                fii?.monthNetCr !== null && fii?.monthNetCr !== undefined
+                  ? fii.monthNetCr >= 0
+                    ? "text-[#3478F6]"
+                    : "text-[#F05283]"
+                  : "text-[#64748B]"
+              }`}
+            >
+              {formatCrores(fii?.monthNetCr)}
             </span>
           </div>
         </div>
@@ -62,9 +80,17 @@ export function InstitutionalActivity({
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-[#17233B]">DII</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#64748B] font-normal">Fri 13 Nov</span>
-              <span className={`tabular-nums font-bold ${dii.dailyNetCr >= 0 ? "text-[#3478F6]" : "text-[#F05283]"}`}>
-                {formatCrores(dii.dailyNetCr)}
+              <span className="text-[11px] text-[#64748B] font-normal">{dateLabel}</span>
+              <span
+                className={`tabular-nums font-bold ${
+                  dii?.dailyNetCr !== null && dii?.dailyNetCr !== undefined
+                    ? dii.dailyNetCr >= 0
+                      ? "text-[#3478F6]"
+                      : "text-[#F05283]"
+                    : "text-[#64748B]"
+                }`}
+              >
+                {formatCrores(dii?.dailyNetCr)}
               </span>
             </div>
           </div>
@@ -72,7 +98,7 @@ export function InstitutionalActivity({
           {/* 22 Sessions Bar Chart */}
           <div className="py-0.5 w-full min-w-0">
             <DivergingBarChart
-              data={dii.sessions}
+              data={dii?.sessions || []}
               xKey="session"
               dataKey="val"
               height={52}
@@ -84,8 +110,16 @@ export function InstitutionalActivity({
 
           <div className="flex items-center justify-between text-[11px] text-[#64748B]">
             <span>1-month net</span>
-            <span className={`font-semibold tabular-nums ${dii.monthNetCr >= 0 ? "text-[#3478F6]" : "text-[#F05283]"}`}>
-              {formatCrores(dii.monthNetCr)}
+            <span
+              className={`font-semibold tabular-nums ${
+                dii?.monthNetCr !== null && dii?.monthNetCr !== undefined
+                  ? dii.monthNetCr >= 0
+                    ? "text-[#3478F6]"
+                    : "text-[#F05283]"
+                  : "text-[#64748B]"
+              }`}
+            >
+              {formatCrores(dii?.monthNetCr)}
             </span>
           </div>
         </div>
@@ -100,42 +134,45 @@ export function InstitutionalActivity({
           <span className="text-[10px] text-[#94A3B8]">Stocks</span>
         </div>
 
-        {/* Net Highs - Lows Values */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[#17233B]">Net highs − lows</span>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#64748B]">Fri 13 Nov</span>
-            <span className={`text-xs font-bold tabular-nums ${highsLows.latestNet >= 0 ? "text-[#3478F6]" : "text-[#F05283]"}`}>
-              {highsLows.latestNet > 0 ? "+" : ""}{highsLows.latestNet}
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-baseline gap-2">
+            <span
+              className={`text-[17px] font-bold tabular-nums ${
+                highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
+                  ? highsLows.latestNet >= 0
+                    ? "text-[#3478F6]"
+                    : "text-[#F05283]"
+                  : "text-[#64748B]"
+              }`}
+            >
+              {highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
+                ? `${highsLows.latestNet > 0 ? "+" : ""}${highsLows.latestNet}`
+                : "—"}
+            </span>
+            <span className="text-[11px] text-[#64748B]">
+              {highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
+                ? highsLows.latestNet >= 0
+                  ? "Net positive"
+                  : "Net negative"
+                : "—"}
             </span>
           </div>
+          <span className="text-[11px] text-[#64748B]">
+            {highsLows?.highsCount ?? "—"} highs / {highsLows?.lowsCount ?? "—"} lows
+          </span>
         </div>
 
-        {/* Bar chart of 22 sessions */}
+        {/* 22-session net high/low bar chart */}
         <div className="py-0.5 w-full min-w-0">
           <DivergingBarChart
-            data={highsLows.sessions}
+            data={highsLows?.sessions || []}
             xKey="session"
             dataKey="net"
-            height={52}
+            height={46}
             posColor="#3478F6"
             negColor="#F05283"
             tooltipFormatter={(val) => `${val > 0 ? "+" : ""}${val} net`}
           />
-        </div>
-
-        {/* Counts */}
-        <div className="flex items-center justify-between text-[11px] text-[#64748B]">
-          <span>Fri 13 Nov</span>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#3478F6]">
-              {highsLows.highsCount} highs
-            </span>
-            <span className="text-[#94A3B8]">/</span>
-            <span className="font-semibold text-[#F05283]">
-              {highsLows.lowsCount} lows
-            </span>
-          </div>
         </div>
       </div>
     </BaseCard>

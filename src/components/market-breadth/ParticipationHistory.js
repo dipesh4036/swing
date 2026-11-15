@@ -4,9 +4,9 @@ import React, { useState, useMemo } from "react";
 import BaseCard from "@/components/ui/card";
 import SegmentedControl from "@/components/ui/segmented-control";
 import ComparisonChart from "@/components/charts/ComparisonChart";
-import { mockMarketInternals } from "@/data/mockMarketInternals";
+import { formatShortDate } from "@/lib/formatters";
 
-export function ParticipationHistory({ breadth, breadthHistory = [] }) {
+export function ParticipationHistory({ keyMetrics, history = [] }) {
   const [period, setPeriod] = useState("All");
 
   const PERIODS = [
@@ -16,48 +16,20 @@ export function ParticipationHistory({ breadth, breadthHistory = [] }) {
     { id: "200D", label: "200 SMA" },
   ];
 
-  // Dynamic values from database
-  const pct20 = breadth?.pctAbove20Ema ?? 74.4;
-  const pct50 = breadth?.pctAbove50Sma ?? 48.2;
-  const pct200 = breadth?.pctAbove200Sma ?? 55.6;
+  const ma = keyMetrics?.movingAverages;
+  const pct20 = ma?.pctAbove20ema;
+  const pct50 = ma?.pctAbove50sma;
+  const pct200 = ma?.pctAbove200sma;
 
-  // Chart data with dynamic DB history merged with mock baseline
   const chartData = useMemo(() => {
-    if (breadthHistory.length > 0) {
-      const dbPoints = breadthHistory.map((b) => ({
-        date: new Date(b.tradeDate).toLocaleDateString("en-IN", {
-          month: "short",
-          day: "numeric",
-        }),
-        above20: b.pctAbove20Ema ?? 70,
-        above50: b.pctAbove50Sma ?? 48,
-        above200: b.pctAbove200Sma ?? 55,
-      }));
+    return history.map((b) => ({
+      date: formatShortDate(b.date),
+      above20: b.pctAbove20ema,
+      above50: b.pctAbove50sma,
+      above200: b.pctAbove200sma,
+    }));
+  }, [history]);
 
-      if (dbPoints.length < 6) {
-        const base = mockMarketInternals.participationHistory.chartData.slice(
-          0,
-          6 - dbPoints.length
-        );
-        return [...base, ...dbPoints];
-      }
-      return dbPoints;
-    }
-
-    // Default mock series with today's live values replacing the last point
-    const base = [...mockMarketInternals.participationHistory.chartData];
-    if (breadth && base.length > 0) {
-      base[base.length - 1] = {
-        ...base[base.length - 1],
-        above20: pct20,
-        above50: pct50,
-        above200: pct200,
-      };
-    }
-    return base;
-  }, [breadth, breadthHistory, pct20, pct50, pct200]);
-
-  // Dynamic lines configuration based on active button
   const lines = useMemo(() => {
     if (period === "20D") {
       return [
@@ -108,31 +80,22 @@ export function ParticipationHistory({ breadth, breadthHistory = [] }) {
         />
       </div>
 
-      {/* Numerical row */}
-      <div className="flex items-center gap-2.5 text-[11px] font-semibold flex-wrap">
-        <span
-          className={`flex items-center gap-1 transition-opacity ${
-            period === "All" || period === "20D" ? "opacity-100 text-[#3478F6] font-bold" : "opacity-40 text-[#64748B]"
-          }`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3478F6]" />
-          20 EMA: {pct20}%
+      {/* Pill Row showing current stats */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3478F6] shrink-0" />
+          <span className="text-[#64748B]">&gt;20 EMA:</span>
+          <span className="text-[#17233B]">{pct20 !== null && pct20 !== undefined ? `${pct20.toFixed(1)}%` : "—"}</span>
         </span>
-        <span
-          className={`flex items-center gap-1 transition-opacity ${
-            period === "All" || period === "50D" ? "opacity-100 text-[#F97316] font-bold" : "opacity-40 text-[#64748B]"
-          }`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#F97316]" />
-          50 SMA: {pct50}%
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#F97316] shrink-0" />
+          <span className="text-[#64748B]">&gt;50 SMA:</span>
+          <span className="text-[#17233B]">{pct50 !== null && pct50 !== undefined ? `${pct50.toFixed(1)}%` : "—"}</span>
         </span>
-        <span
-          className={`flex items-center gap-1 transition-opacity ${
-            period === "All" || period === "200D" ? "opacity-100 text-[#16A878] font-bold" : "opacity-40 text-[#64748B]"
-          }`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#16A878]" />
-          200 SMA: {pct200}%
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#16A878] shrink-0" />
+          <span className="text-[#64748B]">&gt;200 SMA:</span>
+          <span className="text-[#17233B]">{pct200 !== null && pct200 !== undefined ? `${pct200.toFixed(1)}%` : "—"}</span>
         </span>
       </div>
 
@@ -140,9 +103,8 @@ export function ParticipationHistory({ breadth, breadthHistory = [] }) {
       <ComparisonChart
         data={chartData}
         xKey="date"
-        lines={lines}
-        height={115}
-        yUnit="%"
+        series={lines}
+        height={95}
       />
     </BaseCard>
   );
