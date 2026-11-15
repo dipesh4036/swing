@@ -132,6 +132,12 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
           },
         ]}
         height={145}
+        yDomain={["auto", "auto"]}
+        yUnit=""
+        referenceLines={[{ y: 0, color: "#94A3B8", strokeDasharray: "2 2" }]}
+        tooltipFormatter={(val) =>
+          typeof val === "number" ? `${val > 0 ? "+" : ""}${val} stocks` : val
+        }
       />
     </BaseCard>
   );

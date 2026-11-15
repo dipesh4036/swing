@@ -96,79 +96,126 @@ export async function GET(request) {
     const latest = historyRows[historyRows.length - 1];
     const asOfDate = latest.trade_date ? new Date(latest.trade_date).toISOString().split("T")[0] : null;
 
-    // 2. Fetch latest index OHLCV and previous day for change calculation
-    const indexQuery = `
-      WITH ranked_indices AS (
-        SELECT 
-          index_name,
-          trade_date,
-          close,
-          ROW_NUMBER() OVER (PARTITION BY index_name ORDER BY trade_date DESC) as rn
-        FROM daily_index_ohlcv
-      )
-      SELECT 
-        curr.index_name,
-        curr.close as current_close,
-        prev.close as prev_close
-      FROM ranked_indices curr
-      LEFT JOIN ranked_indices prev ON curr.index_name = prev.index_name AND prev.rn = 2
-      WHERE curr.rn = 1;
+    // 1b. Coverage metadata
+    const UNIVERSE_COVERAGE = {
+      nifty500: {
+        total: 501,
+        excludedReason: "3 REIT units (EMBASSY, BIRET, BAGMANE) and 1 corporate demerger placeholder (DUMMYHEG) are excluded from equity OHLCV as non-equity/non-traded instruments.",
+      },
+      nifty200: { total: 200, excludedReason: "" },
+      nifty100: { total: 100, excludedReason: "" },
+      nifty_midcap150: { total: 150, excludedReason: "" },
+      nifty_smallcap250: { total: 251, excludedReason: "1 non-trading unit excluded" },
+      all: { total: 2599, excludedReason: "SME and debt instruments excluded" },
+    };
+    const validStocksCount =
+      (latest.advances !== null ? Number(latest.advances) : 0) +
+      (latest.declines !== null ? Number(latest.declines) : 0) +
+      (latest.unchanged !== null ? Number(latest.unchanged) : 0);
+    const universeMeta = UNIVERSE_COVERAGE[universe] || { total: validStocksCount, excludedReason: "" };
+    const coverage = {
+      valid: validStocksCount,
+      total: universeMeta.total,
+      pct: universeMeta.total > 0 ? Math.round((validStocksCount / universeMeta.total) * 1000) / 10 : 100,
+      excludedReason: universeMeta.excludedReason,
+    };
+
+    // 2. Fetch index history (past 280 days for sparklines and 52W high calculation)
+    const indexHistoryQuery = `
+      SELECT index_name, trade_date, close
+      FROM daily_index_ohlcv
+      WHERE trade_date >= (CURRENT_DATE - INTERVAL '390 days')
+      ORDER BY index_name, trade_date ASC;
     `;
-    const indexResult = await pool.query(indexQuery);
+    const indexHistoryResult = await pool.query(indexHistoryQuery);
+    const indexGroups = {};
+    for (const row of indexHistoryResult.rows) {
+      if (!indexGroups[row.index_name]) indexGroups[row.index_name] = [];
+      indexGroups[row.index_name].push({
+        date: row.trade_date,
+        close: parseFloat(row.close),
+      });
+    }
+
     const indices = {};
-    for (const row of indexResult.rows) {
-      const cur = parseFloat(row.current_close);
-      const prev = row.prev_close ? parseFloat(row.prev_close) : null;
+    const keyMap = {
+      "NIFTY 50": "nifty50",
+      "NIFTY 500": "nifty500",
+      "NIFTY MIDCAP 150": "midcap150",
+      "NIFTY SMALLCAP 250": "smallcap250",
+      "INDIA VIX": "vix",
+    };
+
+    for (const [indexName, rows] of Object.entries(indexGroups)) {
+      if (!rows.length) continue;
+      const cur = rows[rows.length - 1].close;
+      const prev = rows.length >= 2 ? rows[rows.length - 2].close : null;
       const change = prev !== null ? cur - prev : 0;
       const pctChange = prev && prev !== 0 ? (change / prev) * 100 : 0;
-      
-      const keyMap = {
-        "NIFTY 50": "nifty50",
-        "NIFTY 500": "nifty500",
-        "NIFTY MIDCAP 150": "midcap150",
-        "NIFTY SMALLCAP 250": "smallcap250",
-        "INDIA VIX": "vix",
-      };
-      const key = keyMap[row.index_name] || row.index_name.toLowerCase().replace(/\s+/g, "");
+
+      // 52-week high over past 252 trading sessions
+      const pastYearRows = rows.slice(-252);
+      const high52w = Math.max(...pastYearRows.map((r) => r.close));
+      const distFromHighPct =
+        high52w > 0 ? Math.round(((cur - high52w) / high52w) * 1000) / 10 : 0;
+
+      // Sparkline (last 20 sessions)
+      const sparkline = rows.slice(-20).map((r) => ({ val: r.close }));
+
+      const key = keyMap[indexName] || indexName.toLowerCase().replace(/\s+/g, "");
       indices[key] = {
-        name: row.index_name,
+        name: indexName,
         close: cur,
         change: Math.round(change * 100) / 100,
         pctChange: Math.round(pctChange * 100) / 100,
+        high52w: Math.round(high52w * 100) / 100,
+        distFromHighPct: indexName === "INDIA VIX" ? null : distFromHighPct,
+        sparkline,
       };
     }
 
-    // 3. Fetch latest macro rates
-    const macroQuery = `
-      WITH ranked_macro AS (
-        SELECT 
-          series,
-          trade_date,
-          close,
-          ROW_NUMBER() OVER (PARTITION BY series ORDER BY trade_date DESC) as rn
-        FROM daily_macro_rates
-      )
-      SELECT 
-        curr.series,
-        curr.close as current_close,
-        prev.close as prev_close
-      FROM ranked_macro curr
-      LEFT JOIN ranked_macro prev ON curr.series = prev.series AND prev.rn = 2
-      WHERE curr.rn = 1;
+    // 3. Fetch macro rates history (past 280 days for sparklines and 52W high calculation)
+    const macroHistoryQuery = `
+      SELECT series, trade_date, close
+      FROM daily_macro_rates
+      WHERE trade_date >= (CURRENT_DATE - INTERVAL '390 days')
+      ORDER BY series, trade_date ASC;
     `;
-    const macroResult = await pool.query(macroQuery);
+    const macroHistoryResult = await pool.query(macroHistoryQuery);
+    const macroGroups = {};
+    for (const row of macroHistoryResult.rows) {
+      if (!macroGroups[row.series]) macroGroups[row.series] = [];
+      macroGroups[row.series].push({
+        date: row.trade_date,
+        close: parseFloat(row.close),
+      });
+    }
+
     const macro = {};
-    for (const row of macroResult.rows) {
-      const cur = parseFloat(row.current_close);
-      const prev = row.prev_close ? parseFloat(row.prev_close) : null;
+    for (const [series, rows] of Object.entries(macroGroups)) {
+      if (!rows.length) continue;
+      const rawCur = rows[rows.length - 1].close;
+      const rawPrev = rows.length >= 2 ? rows[rows.length - 2].close : null;
+      const cur = Math.round(rawCur * 100) / 100;
+      const prev = rawPrev !== null ? Math.round(rawPrev * 100) / 100 : null;
       const change = prev !== null ? cur - prev : 0;
       const pctChange = prev && prev !== 0 ? (change / prev) * 100 : 0;
-      const key = row.series.toLowerCase();
+
+      const pastYearRows = rows.slice(-252);
+      const high52w = Math.max(...pastYearRows.map((r) => r.close));
+      const distFromHighPct =
+        high52w > 0 ? Math.round(((cur - high52w) / high52w) * 1000) / 10 : 0;
+
+      const sparkline = rows.slice(-20).map((r) => ({ val: Math.round(r.close * 100) / 100 }));
+      const key = series.toLowerCase();
       macro[key] = {
-        series: row.series,
+        series,
         close: cur,
         change: Math.round(change * 100) / 100,
         pctChange: Math.round(pctChange * 100) / 100,
+        high52w: Math.round(high52w * 100) / 100,
+        distFromHighPct,
+        sparkline,
       };
     }
 
@@ -324,6 +371,7 @@ export async function GET(request) {
       asOfDate,
       universe,
       period,
+      coverage,
       marketRegime,
       keyMetrics,
       history,

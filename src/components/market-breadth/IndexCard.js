@@ -31,7 +31,11 @@ export function IndexCard({ item }) {
 
       {/* Main numerical value */}
       <div className="text-[17px] font-bold text-[#17233B] tabular-nums tracking-tight">
-        {isDollar ? `$${value}` : formatINR(value, isDollar || value < 100 ? 2 : 0)}
+        {value === null || value === undefined
+          ? "—"
+          : isDollar
+          ? `$${Number(value).toFixed(2)}`
+          : formatINR(value, value < 100 ? 2 : 0)}
       </div>
 
       {/* Mini Sparkline Chart */}
@@ -45,13 +49,23 @@ export function IndexCard({ item }) {
       </div>
 
       {/* Bottom Subtext */}
-      <div className="flex items-center justify-between text-[10px] text-[#64748B] pt-1 border-t border-[#F1F5F9]">
-        {distFromHighPct !== undefined ? (
+      <div className="flex items-center justify-between text-[10px] text-[#64748B] pt-1 border-t border-[#F1F5F9] gap-1">
+        {distFromHighPct !== null && distFromHighPct !== undefined ? (
           <>
-            <span>{distFromHighPct.toFixed(1)}% from high</span>
-            {supportResistance && (
-              <span className="text-[#3478F6] font-medium">{supportResistance}</span>
-            )}
+            <span
+              className={
+                distFromHighPct >= -3
+                  ? "text-[#16A878] font-semibold shrink-0"
+                  : distFromHighPct <= -15
+                  ? "text-[#F05283] font-medium shrink-0"
+                  : "text-[#64748B] font-medium shrink-0"
+              }
+            >
+              {distFromHighPct === 0
+                ? "At 52W High"
+                : `${distFromHighPct.toFixed(1)}% from 52W high`}
+            </span>
+            <span className="text-[#94A3B8] truncate text-right">{subtext}</span>
           </>
         ) : (
           <span className="text-[#94A3B8] truncate">{subtext}</span>

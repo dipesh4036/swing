@@ -5,7 +5,7 @@ import BaseCard from "@/components/ui/card";
 import StageAnalysis from "./StageAnalysis";
 
 export function MarketRead({ data }) {
-  const { indicators = [], stageAnalysis } = data || {};
+  const { indicators = [], stageAnalysis, divergenceNote } = data || {};
 
   const getToneDot = (tone) => {
     switch (tone) {
@@ -62,6 +62,16 @@ export function MarketRead({ data }) {
             </div>
           ))}
         </div>
+
+        {/* Divergence Explainer (Daily momentum vs short-term participation) */}
+        {divergenceNote && (
+          <div className="mt-3.5 p-2.5 rounded-[6px] bg-[#EFF6FF] border border-[#BFDBFE] text-[11px] leading-relaxed text-[#1E40AF]">
+            <span className="font-semibold block mb-0.5 text-[#1E3A8A]">
+              Daily Momentum vs Participation:
+            </span>
+            <span>{divergenceNote}</span>
+          </div>
+        )}
       </div>
 
       {/* Stage Analysis Section */}

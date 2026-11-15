@@ -140,6 +140,22 @@ export function FourPercentMovers({ keyMetrics, history = [] }) {
           },
         ]}
         height={145}
+        yDomain={["auto", "auto"]}
+        yUnit={period === "Daily" ? "%" : "x"}
+        referenceLines={[
+          {
+            y: period === "Daily" ? 0 : 1.0,
+            color: "#94A3B8",
+            strokeDasharray: "2 2",
+          },
+        ]}
+        tooltipFormatter={(val) =>
+          typeof val === "number"
+            ? period === "Daily"
+              ? `${val > 0 ? "+" : ""}${val.toFixed(2)}%`
+              : `${val.toFixed(2)}x`
+            : val
+        }
       />
     </BaseCard>
   );

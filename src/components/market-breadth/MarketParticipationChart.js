@@ -72,7 +72,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-0.5 bg-[#94A3B8] inline-block rounded" />
-            Benchmark 50%
+            50% breadth threshold
           </span>
         </div>
       </div>
@@ -91,7 +91,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
           },
           {
             key: "benchmark",
-            name: "Benchmark",
+            name: "50% breadth threshold",
             color: "#94A3B8",
             fill: false,
             strokeWidth: 1.5,

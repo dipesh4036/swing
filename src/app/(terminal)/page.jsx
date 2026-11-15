@@ -20,6 +20,7 @@ export default function MarketBreadthDashboardPage() {
     isLoading,
     error,
     asOfDate,
+    coverage,
     keyMetrics,
     history,
     marketRead,
@@ -43,6 +44,7 @@ export default function MarketBreadthDashboardPage() {
         selectedPeriod={selectedPeriod}
         onPeriodChange={setSelectedPeriod}
         asOfDate={asOfDate}
+        coverage={coverage}
       />
 
       {/* ── Error Banner ────────────────────────────────────────── */}

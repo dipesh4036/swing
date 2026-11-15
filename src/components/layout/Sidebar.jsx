@@ -29,63 +29,9 @@ const NAV_ITEMS = [
         href: "/",
         icon: Activity,
         active: true,
-        badge: "Live",
-      },
-      {
-        id: "scans",
-        name: "Technical Scans",
-        href: "#scans",
-        icon: TrendingUp,
-        active: false,
-      },
-      {
-        id: "flows",
-        name: "FII / DII Activity",
-        href: "#flows",
-        icon: Landmark,
-        active: false,
-      },
-      {
-        id: "sectors",
-        name: "Sector Health",
-        href: "#sectors",
-        icon: Layers,
-        active: false,
-      },
+      }
     ],
-  },
-  {
-    group: "WORKSPACE",
-    items: [
-      {
-        id: "watchlist",
-        name: "Watchlist",
-        href: "#watchlist",
-        icon: Bookmark,
-        active: false,
-      },
-      {
-        id: "portfolio",
-        name: "Positions",
-        href: "#portfolio",
-        icon: Briefcase,
-        active: false,
-      },
-    ],
-  },
-  {
-    group: "SYSTEM",
-    items: [
-      {
-        id: "pipeline",
-        name: "Pipeline & Data",
-        href: "#pipeline",
-        icon: Database,
-        active: false,
-        subtext: "Angel One API",
-      },
-    ],
-  },
+  }
 ];
 
 export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
@@ -181,11 +127,6 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                     {!collapsed && (
                       <div className="flex items-center justify-between flex-1 min-w-0">
                         <span className="truncate">{item.name}</span>
-                        {item.badge && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-[4px] bg-[#3478F6] text-white tabular-nums shrink-0">
-                            {item.badge}
-                          </span>
-                        )}
                       </div>
                     )}
                   </Link>

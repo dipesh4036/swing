@@ -49,8 +49,9 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
   const rawFlows = useMemo(() => data?.institutionalFlows || null, [data]);
   const performance = useMemo(() => data?.performance || {}, [data]);
   const marketRegime = useMemo(() => data?.marketRegime || null, [data]);
+  const coverage = useMemo(() => data?.coverage || null, [data]);
 
-  // 1. Format Market Read 6 Indicators & Weinstein Stage Analysis
+  // 1. Format Market Read 8 Indicators & Weinstein Stage Analysis
   const marketRead = useMemo(() => {
     if (!keyMetrics || history.length === 0) {
       return null;
@@ -63,8 +64,11 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     const p50 = movingAverages?.pctAbove50sma;
     const p200 = movingAverages?.pctAbove200sma;
     const net20d = highsLows?.net20d ?? 0;
+    const net52w = highsLows?.net52w ?? 0;
+    const highs52w = highsLows?.highs52w ?? 0;
+    const lows52w = highsLows?.lows52w ?? 0;
 
-    // 1. Momentum
+    // 1. Momentum (Daily flow)
     const isPosMom = adv >= dec * 1.2;
     const isNegMom = dec >= adv * 1.2;
     const momentum = {
@@ -79,7 +83,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         : `Market balanced: ${adv.toLocaleString("en-IN")} rising vs ${dec.toLocaleString("en-IN")} falling.`,
     };
 
-    // 2. Short-term
+    // 2. Short-term (20 EMA trend)
     const isShortUp = p20 !== null && p20 >= 50 && net20d >= 0;
     const shortTerm = {
       id: "short-term",
@@ -93,7 +97,50 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         : "Insufficient historical data for 20-day average.",
     };
 
-    // 3. Big trend
+    // Coexistence explanation between daily momentum & short-term participation
+    let divergenceNote = null;
+    if (isNegMom && isShortUp) {
+      divergenceNote =
+        "Negative daily momentum and positive short-term participation coexist because they measure different things: daily momentum reflects single-session net advancers/decliners, whereas short-term participation measures 20-day moving average positioning. This pattern is common during routine pullbacks within an ongoing uptrend.";
+    } else if (isPosMom && !isShortUp) {
+      divergenceNote =
+        "Positive daily momentum alongside cautious short-term participation indicates a single-session bounce or short-covering rally that has not yet reclaimed 20-day trend lines.";
+    }
+
+    // 3. Market Sentiment Score
+    const regimeScore = marketRegime?.score ?? null;
+    const regimeStatus = marketRegime?.status ?? "—";
+    const sentimentScore = {
+      id: "sentiment",
+      name: "Market sentiment score",
+      status: regimeScore !== null ? `${regimeScore}/100 · ${regimeStatus}` : "—",
+      tone:
+        regimeScore !== null
+          ? regimeScore >= 60
+            ? "positive"
+            : regimeScore <= 40
+            ? "negative"
+            : "warning"
+          : "neutral",
+      description:
+        "Overall bullish/bearish market condition derived from moving-average breadth, intermediate trend, and volume distribution.",
+    };
+
+    // 4. 52-week Highs / Lows (Long-term market strength)
+    const is52wPositive = net52w > 0;
+    const highsLows52w = {
+      id: "highs-lows-52w",
+      name: "52-week highs/lows",
+      status:
+        highsLows?.net52w !== null && highsLows?.net52w !== undefined
+          ? `${net52w > 0 ? "+" : ""}${net52w} (${highs52w}H / ${lows52w}L)`
+          : "—",
+      tone: is52wPositive ? "positive" : net52w < 0 ? "negative" : "neutral",
+      description:
+        "Long-term market strength. Net 52-week highs demonstrate broad institutional expansion; net 52-week lows signal structural distribution.",
+    };
+
+    // 5. Big trend (200 DMA)
     const isBull = p200 !== null && p200 >= 50;
     const isBear = p200 !== null && p200 < 35;
     const bigTrend = {
@@ -110,7 +157,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         : "Insufficient historical data for 200 DMA.",
     };
 
-    // 4. Breakouts
+    // 6. Breakouts
     const isBrkWorking = (brk?.breakouts20d ?? 0) >= (brk?.breakdowns20d ?? 0);
     const breakouts = {
       id: "breakouts",
@@ -122,7 +169,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         : `Breakouts are struggling: higher breakdown rate; wait for volume confirmation.`,
     };
 
-    // 5. Overdone?
+    // 7. Overdone?
     const isOverbought = p20 !== null && p20 > 80;
     const isOversold = p20 !== null && p20 < 25;
     const overdone = {
@@ -137,7 +184,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         : `Not overdone: market breadth within healthy historical boundaries.`,
     };
 
-    // 6. Leadership
+    // 8. Leadership
     const nf50Chg = rawIndices.nifty50?.pctChange ?? 0;
     const nf500Chg = rawIndices.nifty500?.pctChange ?? 0;
     const isLargeCapLeading = nf50Chg > nf500Chg;
@@ -165,6 +212,12 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
 
     const stageAnalysis = {
       totalStocks,
+      coverage: coverage || {
+        valid: totalStocks,
+        total: totalStocks,
+        pct: 100,
+        excludedReason: "",
+      },
       timeframe: "150-day SMA",
       stages: [
         { id: "base", name: "Base", stageNum: 1, pct: s1, change1D: 0, color: "#94A3B8" },
@@ -175,10 +228,20 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     };
 
     return {
-      indicators: [momentum, shortTerm, bigTrend, breakouts, overdone, leadership],
+      indicators: [
+        sentimentScore,
+        momentum,
+        shortTerm,
+        highsLows52w,
+        bigTrend,
+        breakouts,
+        overdone,
+        leadership,
+      ],
+      divergenceNote,
       stageAnalysis,
     };
-  }, [keyMetrics, history, rawIndices]);
+  }, [keyMetrics, history, rawIndices, marketRegime, coverage]);
 
   // 2. Format Market Participation chart series
   const participationData = useMemo(() => {
@@ -283,6 +346,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "NIFTY 50",
         value: rawIndices.nifty50?.close ?? null,
         changePct: rawIndices.nifty50?.pctChange ?? null,
+        distFromHighPct: rawIndices.nifty50?.distFromHighPct ?? null,
+        sparkline: rawIndices.nifty50?.sparkline ?? [],
         subtext: "Large caps benchmark",
       },
       {
@@ -290,6 +355,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "NIFTY 500",
         value: rawIndices.nifty500?.close ?? null,
         changePct: rawIndices.nifty500?.pctChange ?? null,
+        distFromHighPct: rawIndices.nifty500?.distFromHighPct ?? null,
+        sparkline: rawIndices.nifty500?.sparkline ?? [],
         subtext: "Broad market index",
       },
       {
@@ -297,6 +364,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "MIDCAP 150",
         value: rawIndices.midcap150?.close ?? null,
         changePct: rawIndices.midcap150?.pctChange ?? null,
+        distFromHighPct: rawIndices.midcap150?.distFromHighPct ?? null,
+        sparkline: rawIndices.midcap150?.sparkline ?? [],
         subtext: "Mid-tier growth",
       },
       {
@@ -304,6 +373,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "SMALLCAP 250",
         value: rawIndices.smallcap250?.close ?? null,
         changePct: rawIndices.smallcap250?.pctChange ?? null,
+        distFromHighPct: rawIndices.smallcap250?.distFromHighPct ?? null,
+        sparkline: rawIndices.smallcap250?.sparkline ?? [],
         subtext: "Small cap momentum",
       },
       {
@@ -311,6 +382,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "INDIA VIX",
         value: rawIndices.vix?.close ?? null,
         changePct: rawIndices.vix?.pctChange ?? null,
+        distFromHighPct: null,
+        sparkline: rawIndices.vix?.sparkline ?? [],
         subtext: "Volatility gauge",
       },
       {
@@ -318,6 +391,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "USD / INR",
         value: rawMacro.usdinr?.close ?? null,
         changePct: rawMacro.usdinr?.pctChange ?? null,
+        distFromHighPct: rawMacro.usdinr?.distFromHighPct ?? null,
+        sparkline: rawMacro.usdinr?.sparkline ?? [],
         subtext: "Rupee exchange rate",
       },
       {
@@ -325,6 +400,8 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         name: "BRENT CRUDE",
         value: rawMacro.brent?.close ?? null,
         changePct: rawMacro.brent?.pctChange ?? null,
+        distFromHighPct: rawMacro.brent?.distFromHighPct ?? null,
+        sparkline: rawMacro.brent?.sparkline ?? [],
         isDollar: true,
         subtext: "Crude oil benchmark",
       },
@@ -337,6 +414,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     isLoading,
     error,
     asOfDate,
+    coverage,
     marketRegime,
     keyMetrics,
     history,

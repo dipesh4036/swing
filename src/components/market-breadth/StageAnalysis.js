@@ -4,7 +4,7 @@ import React from "react";
 import { Info } from "lucide-react";
 
 export function StageAnalysis({ data }) {
-  const { totalStocks = 0, timeframe = "150-day SMA", stages = [] } = data || {};
+  const { totalStocks = 0, timeframe = "150-day SMA", stages = [], coverage = null } = data || {};
 
   return (
     <div className="pt-4 border-t border-[#E5EAF2]">
@@ -16,9 +16,22 @@ export function StageAnalysis({ data }) {
             <Info size={12} className="text-[#94A3B8] cursor-pointer" />
           </span>
         </div>
-        <span className="text-[#94A3B8]">
-          of {totalStocks.toLocaleString("en-IN")} stocks ({timeframe})
-        </span>
+        <div className="flex items-center gap-1.5 text-[11px] text-[#64748B]">
+          <span>
+            Coverage:{" "}
+            <strong className="text-[#17233B] font-semibold">
+              {coverage ? `${coverage.valid}/${coverage.total} (${coverage.pct}%)` : `${totalStocks} stocks`}
+            </strong>
+          </span>
+          {coverage?.excludedReason && (
+            <span
+              className="text-[#94A3B8] hover:text-[#64748B] cursor-pointer inline-flex items-center"
+              title={coverage.excludedReason}
+            >
+              <Info size={12} />
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Stacked Progress Bar */}

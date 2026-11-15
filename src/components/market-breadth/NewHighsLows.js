@@ -56,7 +56,9 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
         <div className="min-w-0">
           <div className="text-xs font-bold text-[#17233B] truncate">New highs − lows</div>
           <div className="text-[10px] text-[#64748B] truncate">
-            Stocks at a {period} high minus those at a {period} low
+            {is52W
+              ? "Long-term market strength (52-week new highs minus lows)"
+              : "Short-term momentum (20-day new highs minus lows)"}
           </div>
         </div>
         <div className="shrink-0">
@@ -72,20 +74,26 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
       {/* Numerical row */}
       <div className="flex items-baseline justify-between gap-2 flex-wrap min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span
-            className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
-              isPositive ? "text-[#3478F6]" : "text-[#F05283]"
-            }`}
-          >
-            {liveNet !== null && liveNet !== undefined ? `${liveNet > 0 ? "+" : ""}${liveNet}` : "—"}
-          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
+                isPositive ? "text-[#3478F6]" : "text-[#F05283]"
+              }`}
+            >
+              {liveNet !== null && liveNet !== undefined ? `${liveNet > 0 ? "+" : ""}${liveNet}` : "—"}
+            </span>
+            <span className="text-[10px] uppercase font-semibold text-[#64748B] tracking-wider">
+              {period} Net Stocks
+            </span>
+          </div>
           <span className="text-[11px] font-medium text-[#64748B]">
             {statusText}
           </span>
         </div>
-        <div className="text-[10px] text-[#64748B] shrink-0">
-          {liveHighs !== null && liveHighs !== undefined ? liveHighs : "—"} highs /{" "}
-          {liveLows !== null && liveLows !== undefined ? liveLows : "—"} lows
+        <div className="text-[10px] text-[#64748B] shrink-0 bg-[#F8FAFC] border border-[#E5EAF2] rounded-[4px] px-2 py-0.5">
+          <span className="font-semibold text-[#16A878]">{liveHighs !== null && liveHighs !== undefined ? liveHighs : "—"} highs</span>
+          <span className="text-[#94A3B8]"> / </span>
+          <span className="font-semibold text-[#F05283]">{liveLows !== null && liveLows !== undefined ? liveLows : "—"} lows</span>
         </div>
       </div>
 
@@ -113,6 +121,12 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
           },
         ]}
         height={145}
+        yDomain={["auto", "auto"]}
+        yUnit=""
+        referenceLines={[{ y: 0, color: "#94A3B8", strokeDasharray: "2 2" }]}
+        tooltipFormatter={(val) =>
+          typeof val === "number" ? `${val > 0 ? "+" : ""}${val} stocks` : val
+        }
       />
     </BaseCard>
   );

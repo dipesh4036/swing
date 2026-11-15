@@ -14,6 +14,7 @@ export function DashboardHeader({
   selectedPeriod = "1M",
   onPeriodChange,
   asOfDate = null,
+  coverage = null,
 }) {
   const currentUniverse =
     STOCK_UNIVERSES.find((u) => u.id === selectedUniverse) || STOCK_UNIVERSES[0];
@@ -37,11 +38,21 @@ export function DashboardHeader({
             </div>
           </div>
 
-          {/* Navigation Tab */}
-          <div className="hidden xs:flex items-center gap-1 border-l border-[#E5EAF2] pl-3 sm:pl-4">
+          {/* Navigation Tab & Coverage Pill */}
+          <div className="hidden xs:flex items-center gap-2 border-l border-[#E5EAF2] pl-3 sm:pl-4">
             <span className="text-xs font-semibold px-2.5 sm:px-3 py-1 rounded-[6px] bg-[#EFF6FF] text-[#3478F6]">
               Market Breadth
             </span>
+            {coverage && (
+              <span
+                className="hidden md:inline-flex items-center gap-1 text-[11px] text-[#64748B] bg-[#F8FAFC] border border-[#E5EAF2] rounded-[6px] px-2 py-0.5 cursor-help"
+                title={coverage.excludedReason || `${coverage.valid} of ${coverage.total} covered (${coverage.pct}%)`}
+              >
+                <span className="text-[#94A3B8]">Coverage:</span>
+                <span className="font-semibold text-[#17233B]">{coverage.valid}/{coverage.total}</span>
+                <span className="text-[#3478F6] font-semibold">({coverage.pct}%)</span>
+              </span>
+            )}
           </div>
         </div>
 
