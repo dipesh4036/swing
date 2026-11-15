@@ -5,7 +5,7 @@ import { Info } from "lucide-react";
 
 export function PageContainer({ children, className = "" }) {
   return (
-    <div className={`w-full space-y-4 pb-12 ${className}`}>
+    <div className={`w-full max-w-[1680px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-5 space-y-4 pb-12 min-w-0 ${className}`}>
       {children}
     </div>
   );
@@ -46,4 +46,3 @@ export function SectionHeader({
 }
 
 export default PageContainer;
-

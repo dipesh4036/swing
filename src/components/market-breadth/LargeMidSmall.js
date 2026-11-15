@@ -58,26 +58,28 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-bold text-[#17233B]">Large · Mid · Small</div>
-          <div className="text-[10px] text-[#64748B]">{referenceText}</div>
+      <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
+        <div className="min-w-0">
+          <div className="text-xs font-bold text-[#17233B] truncate">Large · Mid · Small</div>
+          <div className="text-[10px] text-[#64748B] truncate">{referenceText}</div>
         </div>
-        <SegmentedControl
-          options={PERIODS}
-          value={period}
-          onChange={setPeriod}
-          size="xs"
-        />
+        <div className="shrink-0">
+          <SegmentedControl
+            options={PERIODS}
+            value={period}
+            onChange={setPeriod}
+            size="xs"
+          />
+        </div>
       </div>
 
       {/* Segment Pill Returns */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
           {segmentStats.map((seg) => (
             <span
               key={seg.id}
-              className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums"
+              className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums"
             >
               <span
                 className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -98,7 +100,7 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
             </span>
           ))}
         </div>
-        <span className="text-[11px] font-medium text-[#17233B] shrink-0 pl-1">{leaderText}</span>
+        <span className="text-[10px] sm:text-[11px] font-medium text-[#17233B] shrink-0 pl-1">{leaderText}</span>
       </div>
 
       {/* Comparison Chart */}

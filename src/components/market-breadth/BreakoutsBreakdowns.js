@@ -82,28 +82,30 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-bold text-[#17233B]">Breakouts − breakdowns</div>
-          <div className="text-[10px] text-[#64748B]">
+      <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
+        <div className="min-w-0">
+          <div className="text-xs font-bold text-[#17233B] truncate">Breakouts − breakdowns</div>
+          <div className="text-[10px] text-[#64748B] truncate">
             {period === "Daily"
               ? "20D channel breakouts vs breakdowns on volume"
               : `${period} trend of breakouts vs breakdowns`}
           </div>
         </div>
-        <SegmentedControl
-          options={PERIODS}
-          value={period}
-          onChange={setPeriod}
-          size="xs"
-        />
+        <div className="shrink-0">
+          <SegmentedControl
+            options={PERIODS}
+            value={period}
+            onChange={setPeriod}
+            size="xs"
+          />
+        </div>
       </div>
 
       {/* Numerical row */}
-      <div className="flex items-baseline justify-between">
-        <div className="flex items-baseline gap-2">
+      <div className="flex items-baseline justify-between gap-2 flex-wrap min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <span
-            className={`text-[18px] font-bold tabular-nums ${
+            className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
               isPositive ? "text-[#3478F6]" : "text-[#F05283]"
             }`}
           >
@@ -113,7 +115,7 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
             {displayStatus}
           </span>
         </div>
-        <div className="text-[10px] text-[#64748B]">{displaySubtext}</div>
+        <div className="text-[10px] text-[#64748B] shrink-0">{displaySubtext}</div>
       </div>
 
       {/* Chart */}

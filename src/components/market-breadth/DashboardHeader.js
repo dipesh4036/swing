@@ -19,36 +19,36 @@ export function DashboardHeader({
     STOCK_UNIVERSES.find((u) => u.id === selectedUniverse) || STOCK_UNIVERSES[0];
 
   return (
-    <div className="bg-white border-b border-[#E5EAF2] px-4 py-3 -mx-3 sm:-mx-4 md:-mx-5 -mt-3 sm:-mt-4 md:-mt-5 mb-4">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full">
+    <div className="bg-white border border-[#E5EAF2] rounded-[8px] sm:rounded-[10px] px-3.5 sm:px-4 py-3 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] mb-4 w-full min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full min-w-0">
         {/* Left: Product title, date & navigation tabs */}
-        <div className="flex items-center gap-5 flex-wrap">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-[6px] bg-[#3478F6] flex items-center justify-center text-white shadow-xs">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-[6px] bg-[#3478F6] flex items-center justify-center text-white shadow-xs shrink-0">
               <Activity size={16} strokeWidth={2.5} />
             </div>
-            <div>
-              <h1 className="text-[15px] font-bold text-[#17233B] tracking-tight leading-none">
+            <div className="min-w-0">
+              <h1 className="text-[14px] sm:text-[15px] font-bold text-[#17233B] tracking-tight leading-none truncate">
                 Market Breadth
               </h1>
-              <span className="text-[11px] text-[#94A3B8] font-medium leading-none">
+              <span className="text-[10px] sm:text-[11px] text-[#94A3B8] font-medium leading-none block mt-1 truncate">
                 {asOfDate ? `Read as of ${formatTradeDate(asOfDate)}` : "—"}
               </span>
             </div>
           </div>
 
           {/* Navigation Tab */}
-          <div className="flex items-center gap-1 border-l border-[#E5EAF2] pl-4">
-            <span className="text-xs font-semibold px-3 py-1.5 rounded-[6px] bg-[#EFF6FF] text-[#3478F6]">
+          <div className="hidden xs:flex items-center gap-1 border-l border-[#E5EAF2] pl-3 sm:pl-4">
+            <span className="text-xs font-semibold px-2.5 sm:px-3 py-1 rounded-[6px] bg-[#EFF6FF] text-[#3478F6]">
               Market Breadth
             </span>
           </div>
         </div>
 
-        {/* Right: Stock universe dropdown, stock count, period selector */}
-        <div className="flex items-center gap-3 self-end lg:self-auto flex-wrap">
+        {/* Right: Stock universe dropdown & period selector */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap justify-between sm:justify-end w-full sm:w-auto min-w-0">
           {/* Stock universe dropdown */}
-          <div className="relative inline-block z-10">
+          <div className="relative inline-block z-10 shrink-0">
             <select
               value={selectedUniverse}
               onChange={(e) => {
@@ -56,7 +56,7 @@ export function DashboardHeader({
                   onUniverseChange(e.target.value);
                 }
               }}
-              className="appearance-none bg-[#F8FAFC] border border-[#E5EAF2] rounded-[6px] text-xs font-medium text-[#17233B] pl-2.5 pr-8 py-1 h-7.5 hover:border-[#CBD5E1] focus:outline-none focus:border-[#3478F6] focus:ring-1 focus:ring-[#3478F6] cursor-pointer shadow-2xs"
+              className="appearance-none bg-[#F8FAFC] border border-[#E5EAF2] rounded-[6px] text-[11px] sm:text-xs font-medium text-[#17233B] pl-2.5 pr-7 sm:pr-8 py-1 h-7 sm:h-7.5 hover:border-[#CBD5E1] focus:outline-none focus:border-[#3478F6] focus:ring-1 focus:ring-[#3478F6] cursor-pointer shadow-2xs max-w-[150px] sm:max-w-none"
             >
               {STOCK_UNIVERSES.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -66,21 +66,23 @@ export function DashboardHeader({
             </select>
             <ChevronDown
               size={13}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
             />
           </div>
 
-          {/* Period selector (1M / 3M / 1Y) */}
-          <SegmentedControl
-            options={PERIOD_OPTIONS}
-            value={selectedPeriod}
-            onChange={(val) => {
-              if (onPeriodChange) {
-                onPeriodChange(val);
-              }
-            }}
-            size="sm"
-          />
+          {/* Period selector */}
+          <div className="min-w-0 overflow-x-auto max-w-full">
+            <SegmentedControl
+              options={PERIOD_OPTIONS}
+              value={selectedPeriod}
+              onChange={(val) => {
+                if (onPeriodChange) {
+                  onPeriodChange(val);
+                }
+              }}
+              size="xs"
+            />
+          </div>
         </div>
       </div>
     </div>

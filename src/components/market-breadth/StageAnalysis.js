@@ -4,12 +4,12 @@ import React from "react";
 import { Info } from "lucide-react";
 
 export function StageAnalysis({ data }) {
-  const { totalStocks = 2388, timeframe = "64+ days", stages = [] } = data || {};
+  const { totalStocks = 0, timeframe = "150-day SMA", stages = [] } = data || {};
 
   return (
     <div className="pt-4 border-t border-[#E5EAF2]">
       {/* Header */}
-      <div className="flex items-center justify-between text-[11px] mb-2">
+      <div className="flex items-center justify-between text-[11px] mb-2 flex-wrap gap-1">
         <div className="flex items-center gap-1 font-semibold uppercase tracking-wider text-[#64748B]">
           <span>Stage Analysis</span>
           <span title="Stage analysis classifies stocks into Wyckoff 4 market stages: 1-Base, 2-Uptrend, 3-Top, 4-Downtrend">
@@ -34,7 +34,7 @@ export function StageAnalysis({ data }) {
       </div>
 
       {/* Stage Stats Row */}
-      <div className="grid grid-cols-4 gap-1 text-center">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-1 text-center">
         {stages.map((stg) => {
           const isPos = stg.change1D > 0;
           const isNeg = stg.change1D < 0;
