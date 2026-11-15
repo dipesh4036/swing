@@ -36,6 +36,7 @@ class SmartAPIClient:
 
         self.smart_connect = SmartConnect(api_key=self.api_key)
         self.session_data = None
+        self.reauth_count = 0
         self._authenticate()
 
     def _rate_limit(self):
@@ -45,17 +46,34 @@ class SmartAPIClient:
         self.last_req_time = time.time()
 
     def _authenticate(self):
+        if self.reauth_count >= 2:
+            logger.warning("Maximum re-authentication limit (2) reached for this run. Skipping re-auth.")
+            return False
         try:
+            self.reauth_count += 1
             totp = pyotp.TOTP(self.totp_secret).now()
-            # loginByPassword initiates session
             data = self.smart_connect.generateSession(self.client_id, self.pin, totp)
             if not data or not data.get("status"):
                 raise RuntimeError(f"SmartAPI login failed: {data.get('message', 'Unknown error')}")
             self.session_data = data
             logger.info("SmartAPI session authenticated successfully.")
+            return True
         except Exception as e:
             logger.error("SmartAPI authentication encountered an exception.")
             raise
+
+    def logout(self):
+        """Terminate the active SmartAPI session at the end of the run."""
+        if not self.session_data:
+            return
+        try:
+            logger.info("Logging out and terminating SmartAPI session...")
+            if hasattr(self.smart_connect, "terminateSession"):
+                self.smart_connect.terminateSession(self.client_id)
+        except Exception as e:
+            logger.warning(f"Error during SmartAPI logout: {e}")
+        finally:
+            self.session_data = None
 
     def get_candle_data(
         self,
@@ -64,7 +82,7 @@ class SmartAPIClient:
         interval: str,
         from_date: str,
         to_date: str,
-        max_retries: int = 5
+        max_retries: int = 3
     ) -> List[List[Any]]:
         """
         Fetch OHLCV candles from SmartAPI.
@@ -80,6 +98,9 @@ class SmartAPIClient:
             "todate": to_date
         }
 
+        # Genuine SmartAPI session/token expiry error codes
+        EXPIRY_CODES = {"AG8001", "AG8002", "AG8003"}
+
         backoff = 1.0
         for attempt in range(max_retries):
             self._rate_limit()
@@ -87,31 +108,50 @@ class SmartAPIClient:
                 res = self.smart_connect.getCandleData(params)
                 if res and res.get("status") and res.get("data") is not None:
                     return res["data"]
-                
-                msg = res.get("message", "") if res else ""
+
+                err_code = (res.get("errorcode") or "") if res else ""
+                msg = (res.get("message") or "") if res else ""
+
+                # Rate limiting
                 if "exceeding access rate" in msg.lower() or "too many requests" in msg.lower():
                     logger.warning(f"Rate limit hit for token {symbol_token}. Backing off {backoff:.1f}s...")
                     time.sleep(backoff)
-                    backoff = min(backoff * 2, 16.0)
+                    backoff = min(backoff * 2, 8.0)
                     continue
 
-                if "session" in msg.lower() or "token" in msg.lower() or "invalid" in msg.lower():
-                    logger.warning("Session might have expired. Re-authenticating...")
-                    self._authenticate()
-                    continue
+                # Genuine token expiry check (codes AG8001, AG8002, AG8003 or explicit message)
+                is_expiry = err_code in EXPIRY_CODES or "invalid token" in msg.lower() or "token expired" in msg.lower() or "session expired" in msg.lower()
+                if is_expiry:
+                    if self.reauth_count < 2:
+                        logger.warning(f"Genuine session expiry code ({err_code}) detected for token {symbol_token}. Re-authenticating (attempt {self.reauth_count + 1}/2)...")
+                        if self._authenticate():
+                            continue
+                    else:
+                        logger.error(f"Session expired but re-auth cap (2) reached. Skipping token {symbol_token}.")
+                        return []
 
-                logger.debug(f"SmartAPI returned no data or error for token {symbol_token}: {msg}")
+                # On any other error, log and skip that token
+                logger.warning(f"SmartAPI error for token {symbol_token} (code={err_code}, msg={msg}). Skipping token.")
                 return []
             except Exception as e:
                 err_str = str(e)
                 if "exceeding access rate" in err_str.lower():
                     logger.warning(f"Rate limit exception for token {symbol_token}. Backing off {backoff:.1f}s...")
                     time.sleep(backoff)
-                    backoff = min(backoff * 2, 16.0)
+                    backoff = min(backoff * 2, 8.0)
                     continue
-                logger.error(f"Error fetching candles for {symbol_token}: {err_str}")
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 8.0)
+                # On any unhandled error, skip that token
+                logger.warning(f"Exception fetching candles for token {symbol_token}: {err_str}. Skipping token.")
+                return []
 
         return []
 
+
+
+_client_instance: Optional[SmartAPIClient] = None
+
+def get_smartapi_client() -> SmartAPIClient:
+    global _client_instance
+    if _client_instance is None:
+        _client_instance = SmartAPIClient()
+    return _client_instance

@@ -13,7 +13,7 @@ import {
 export function SparklineChart({
   data = [],
   dataKey = "val",
-  color = "#3478F6",
+  color = "#2563EB",
   fill = false,
   height = 28,
   width = "100%",

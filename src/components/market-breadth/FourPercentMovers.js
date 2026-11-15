@@ -84,10 +84,10 @@ export function FourPercentMovers({ keyMetrics, history = [] }) {
 
   const isPositive =
     period === "Daily"
-      ? (netPct ?? 0) >= 0
+      ? (netPct !== null && netPct !== undefined ? netPct >= 0 : true)
       : period === "5D"
-      ? (ratio5d ?? 0) >= 1.0
-      : (ratio10d ?? 0) >= 1.0;
+      ? (ratio5d !== null && ratio5d !== undefined ? ratio5d >= 1.0 : true)
+      : (ratio10d !== null && ratio10d !== undefined ? ratio10d >= 1.0 : true);
 
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
@@ -114,7 +114,7 @@ export function FourPercentMovers({ keyMetrics, history = [] }) {
         <div className="flex items-baseline gap-2 flex-wrap">
           <span
             className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
-              isPositive ? "text-[#3478F6]" : "text-[#F05283]"
+              isPositive ? "text-[#2563EB]" : "text-[#F05283]"
             }`}
           >
             {displayValue}
@@ -134,7 +134,7 @@ export function FourPercentMovers({ keyMetrics, history = [] }) {
           {
             key: "val",
             name: period === "Daily" ? "Net %" : `${period} Ratio`,
-            color: isPositive ? "#3478F6" : "#F05283",
+            color: isPositive ? "#2563EB" : "#F05283",
             fill: true,
             strokeWidth: 1.75,
           },

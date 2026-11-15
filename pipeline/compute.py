@@ -1,7 +1,8 @@
 import os
 import sys
+import json
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 import numpy as np
 import pandas as pd
 from psycopg2.extras import execute_batch
@@ -10,111 +11,251 @@ from pipeline.db import get_connection
 
 logger = logging.getLogger("pipeline.compute")
 
-UNIVERSES = ["nifty500", "nifty200", "nifty100", "nifty_midcap150", "nifty_smallcap250", "all"]
+UNIVERSES = ["nifty500", "nifty200", "nifty100", "nifty_midcap150", "nifty_smallcap250", "liquid", "all"]
+
+def compute_seeded_ema20(closes: np.ndarray) -> np.ndarray:
+    """
+    EMA20 seeded with the SMA of the first 20 closes (per spec 4.0):
+    EMA_t = close_t * (2/21) + EMA_{t-1} * (19/21)
+    """
+    n = len(closes)
+    out = np.full(n, np.nan, dtype=np.float64)
+    if n < 20:
+        return out
+    sma20 = np.mean(closes[:20])
+    out[19] = sma20
+    alpha = 2.0 / 21.0
+    one_minus_alpha = 19.0 / 21.0
+    for i in range(20, n):
+        out[i] = closes[i] * alpha + out[i-1] * one_minus_alpha
+    return out
+
+def compute_weinstein_stages(
+    closes: np.ndarray,
+    sma150: np.ndarray,
+    slopes: np.ndarray
+) -> Dict[str, np.ndarray]:
+    """
+    Weinstein stages per spec 4.6 (mutually exclusive, exhaustive):
+    History requirement: at least 170 sessions (150 SMA + 20 slope); otherwise stage_unclassified.
+    
+    pure trend_stage:
+        2 if close > sma150 and slope >= +1.0
+        4 if close < sma150 and slope <= -1.0
+        else none (0)
+        
+    Classification (first match wins):
+    1. slope >= +1.0: close > sma150 -> Stage 2; else -> Stage 3
+    2. slope <= -1.0: close < sma150 -> Stage 4; else -> Stage 1
+    3. |slope| < 1.0 (flat): look at most recent non-none trend_stage in prior 120 sessions:
+       was 2 -> Stage 3; was 4 -> Stage 1; none -> Stage 1
+    """
+    n = len(closes)
+    stage1 = np.zeros(n, dtype=np.int32)
+    stage2 = np.zeros(n, dtype=np.int32)
+    stage3 = np.zeros(n, dtype=np.int32)
+    stage4 = np.zeros(n, dtype=np.int32)
+    unclass = np.ones(n, dtype=np.int32)
+
+    # Track pure trend stage occurrence
+    last_trend_val = 0
+    last_trend_idx = -9999
+
+    for i in range(n):
+        if i < 169 or np.isnan(sma150[i]) or np.isnan(slopes[i]):
+            continue
+
+        c = closes[i]
+        m = sma150[i]
+        s = slopes[i]
+
+        unclass[i] = 0
+
+        # Update pure trend stage history BEFORE classifying flat slopes
+        # Pure trend stage is recorded at session i
+        curr_trend = 0
+        if s >= 1.0 and c > m:
+            curr_trend = 2
+        elif s <= -1.0 and c < m:
+            curr_trend = 4
+
+        if s >= 1.0:
+            if c > m:
+                stage2[i] = 1
+            else:
+                stage3[i] = 1
+        elif s <= -1.0:
+            if c < m:
+                stage4[i] = 1
+            else:
+                stage1[i] = 1
+        else: # |s| < 1.0 flat
+            # Look at most recent non-none trend_stage within prior 120 sessions
+            if (i - last_trend_idx) <= 120 and last_trend_val in (2, 4):
+                if last_trend_val == 2:
+                    stage3[i] = 1
+                else:
+                    stage1[i] = 1
+            else:
+                stage1[i] = 1
+
+        if curr_trend != 0:
+            last_trend_val = curr_trend
+            last_trend_idx = i
+
+    return {
+        "stage_1": stage1,
+        "stage_2": stage2,
+        "stage_3": stage3,
+        "stage_4": stage4,
+        "stage_unclass": unclass,
+    }
 
 def compute_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Computes vectorised indicators across OHLCV history for all instruments.
-    Assumes df is sorted by ['token', 'trade_date'].
+    Computes per-stock indicators across OHLCV history with strict window floors.
     """
-    logger.info("Computing vectorised per-stock indicators...")
-    df = df.copy()
-    df.sort_values(by=["token", "trade_date"], inplace=True)
+    logger.info("Computing per-stock indicators with spec 4.6 & strict windows...")
+    df = df.sort_values(by=["token", "trade_date"]).copy()
     grouped = df.groupby("token")
 
     # 1. Previous close & 1-day return
     df["prev_close"] = grouped["close"].shift(1)
     df["ret_1d"] = (df["close"] - df["prev_close"]) / df["prev_close"]
-    df["advance"] = (df["close"] > df["prev_close"]).astype(int)
-    df["decline"] = (df["close"] < df["prev_close"]).astype(int)
-    df["unchanged"] = (df["close"] == df["prev_close"]).astype(int)
+    df["advance"] = ((df["close"] > df["prev_close"]) & df["prev_close"].notna()).astype(int)
+    df["decline"] = ((df["close"] < df["prev_close"]) & df["prev_close"].notna()).astype(int)
+    df["unchanged"] = ((df["close"] == df["prev_close"]) | df["prev_close"].isna()).astype(int)
 
-    # 2. Moving averages
-    # 20 EMA (adjust=False)
-    df["ema_20"] = grouped["close"].transform(lambda s: s.ewm(span=20, adjust=False).mean())
-    # 50 SMA
-    df["sma_50"] = grouped["close"].transform(lambda s: s.rolling(50, min_periods=40).mean())
-    # 150 SMA (30-week)
-    df["sma_150"] = grouped["close"].transform(lambda s: s.rolling(150, min_periods=120).mean())
-    # 200 SMA
-    df["sma_200"] = grouped["close"].transform(lambda s: s.rolling(200, min_periods=160).mean())
+    # 2. Moving averages (Strict min_periods)
+    df["ema_20"] = grouped["close"].transform(lambda s: compute_seeded_ema20(s.values))
+    df["sma_50"] = grouped["close"].transform(lambda s: s.rolling(50, min_periods=50).mean())
+    df["sma_150"] = grouped["close"].transform(lambda s: s.rolling(150, min_periods=150).mean())
+    df["sma_200"] = grouped["close"].transform(lambda s: s.rolling(200, min_periods=200).mean())
 
-    df["above_20ema"] = df["close"] > df["ema_20"]
-    df["above_50sma"] = df["close"] > df["sma_50"]
-    df["above_200sma"] = df["close"] > df["sma_200"]
+    df["above_20ema"] = ((df["close"] > df["ema_20"]) & df["ema_20"].notna()).astype(int)
+    df["has_valid_20ema"] = df["ema_20"].notna().astype(int)
 
-    # 3. Highs and Lows (20D and 52W / 252 sessions, excluding current session)
-    df["high_20d"] = grouped["high"].transform(lambda s: s.shift(1).rolling(20, min_periods=15).max())
-    df["low_20d"] = grouped["low"].transform(lambda s: s.shift(1).rolling(20, min_periods=15).min())
-    df["is_high_20d"] = (df["high"] >= df["high_20d"]).astype(int)
-    df["is_low_20d"] = (df["low"] <= df["low_20d"]).astype(int)
+    df["above_50sma"] = ((df["close"] > df["sma_50"]) & df["sma_50"].notna()).astype(int)
+    df["has_valid_50sma"] = df["sma_50"].notna().astype(int)
 
-    df["high_52w"] = grouped["high"].transform(lambda s: s.shift(1).rolling(252, min_periods=180).max())
-    df["low_52w"] = grouped["low"].transform(lambda s: s.shift(1).rolling(252, min_periods=180).min())
-    df["is_high_52w"] = (df["high"] >= df["high_52w"]).astype(int)
-    df["is_low_52w"] = (df["low"] <= df["low_52w"]).astype(int)
+    df["above_200sma"] = ((df["close"] > df["sma_200"]) & df["sma_200"].notna()).astype(int)
+    df["has_valid_200sma"] = df["sma_200"].notna().astype(int)
 
-    # 4. 4% Movers (with minimum price filter close >= 10)
-    df["mover_up_4pct"] = ((df["ret_1d"] >= 0.04) & (df["close"] >= 10)).astype(int)
-    df["mover_down_4pct"] = ((df["ret_1d"] <= -0.04) & (df["close"] >= 10)).astype(int)
+    # 3. Highs and Lows (Strict 20 and 252 windows on prior sessions)
+    df["high_20d"] = grouped["high"].transform(lambda s: s.shift(1).rolling(20, min_periods=20).max())
+    df["low_20d"] = grouped["low"].transform(lambda s: s.shift(1).rolling(20, min_periods=20).min())
+    df["is_high_20d"] = ((df["close"] >= df["high_20d"]) & df["high_20d"].notna()).astype(int)
+    df["is_low_20d"] = ((df["close"] <= df["low_20d"]) & df["low_20d"].notna()).astype(int)
 
-    # 5. Breakouts / Breakdowns (close > prior 20D high on volume >= 1.5 * 50D vol SMA)
-    df["vol_sma_50"] = grouped["volume"].transform(lambda s: s.shift(1).rolling(50, min_periods=30).mean())
-    df["breakout_20d"] = ((df["close"] > df["high_20d"]) & (df["volume"] >= 1.5 * df["vol_sma_50"])).astype(int)
-    df["breakdown_20d"] = ((df["close"] < df["low_20d"]) & (df["volume"] >= 1.5 * df["vol_sma_50"])).astype(int)
+    df["high_52w"] = grouped["high"].transform(lambda s: s.shift(1).rolling(252, min_periods=252).max())
+    df["low_52w"] = grouped["low"].transform(lambda s: s.shift(1).rolling(252, min_periods=252).min())
+    df["is_high_52w"] = ((df["close"] >= df["high_52w"]) & df["high_52w"].notna()).astype(int)
+    df["is_low_52w"] = ((df["close"] <= df["low_52w"]) & df["low_52w"].notna()).astype(int)
 
-    # 6. Weinstein Stages (Price vs 150 SMA & 20-session slope)
+    # 4. 4% Movers and Breakouts (spec 4.4b & 4.5: close >= 20, prior 50d avg vol >= 25000)
+    df["vol_sma_50"] = grouped["volume"].transform(lambda s: s.shift(1).rolling(50, min_periods=50).mean())
+    is_mover_eligible = (df["close"] >= 20) & (df["vol_sma_50"] >= 25000) & df["prev_close"].notna()
+    df["mover_eligible"] = is_mover_eligible.astype(int)
+    df["mover_up_4pct"] = (is_mover_eligible & (df["ret_1d"] >= 0.04)).astype(int)
+    df["mover_down_4pct"] = (is_mover_eligible & (df["ret_1d"] <= -0.04)).astype(int)
+
+    is_bo_eligible = (df["close"] >= 20) & (df["vol_sma_50"] >= 25000) & df["high_20d"].notna()
+    df["breakout_20d"] = (is_bo_eligible & (df["close"] > df["high_20d"]) & (df["volume"] >= 1.5 * df["vol_sma_50"])).astype(int)
+    df["breakdown_20d"] = (is_bo_eligible & (df["close"] < df["low_20d"]) & (df["volume"] >= 1.5 * df["vol_sma_50"])).astype(int)
+
+    # 5. Weinstein Stages (Spec 4.6)
     sma_150_prev20 = grouped["sma_150"].shift(20)
-    df["sma_150_slope"] = (df["sma_150"] - sma_150_prev20) / sma_150_prev20
+    df["sma_150_slope"] = ((df["sma_150"] / sma_150_prev20) - 1.0) * 100.0
 
-    is_valid_stage = df["sma_150"].notna() & df["sma_150_slope"].notna()
-    df["stage_1"] = (is_valid_stage & (df["close"] >= df["sma_150"]) & (df["sma_150_slope"] < 0.005)).astype(int)
-    df["stage_2"] = (is_valid_stage & (df["close"] >= df["sma_150"]) & (df["sma_150_slope"] >= 0.005)).astype(int)
-    df["stage_3"] = (is_valid_stage & (df["close"] < df["sma_150"]) & (df["sma_150_slope"] > -0.005)).astype(int)
-    df["stage_4"] = (is_valid_stage & (df["close"] < df["sma_150"]) & (df["sma_150_slope"] <= -0.005)).astype(int)
+    # Compute stages per token
+    stage_1_list = []
+    stage_2_list = []
+    stage_3_list = []
+    stage_4_list = []
+    stage_unclass_list = []
+
+    for _, group in grouped:
+        st_dict = compute_weinstein_stages(
+            group["close"].values,
+            group["sma_150"].values,
+            group["sma_150_slope"].values
+        )
+        stage_1_list.append(st_dict["stage_1"])
+        stage_2_list.append(st_dict["stage_2"])
+        stage_3_list.append(st_dict["stage_3"])
+        stage_4_list.append(st_dict["stage_4"])
+        stage_unclass_list.append(st_dict["stage_unclass"])
+
+    df["stage_1"] = np.concatenate(stage_1_list)
+    df["stage_2"] = np.concatenate(stage_2_list)
+    df["stage_3"] = np.concatenate(stage_3_list)
+    df["stage_4"] = np.concatenate(stage_4_list)
+    df["stage_unclass"] = np.concatenate(stage_unclass_list)
 
     logger.info("Stock indicators computation finished.")
     return df
 
-def get_distribution_days_series(conn) -> pd.Series:
+def get_nifty500_data(conn) -> pd.DataFrame:
     """
-    Computes trailing 25-session distribution days on NIFTY 50.
-    A distribution day is a day where Nifty 50 drops > 0.2% on higher volume than previous day.
+    Loads Nifty 500 OHLCV and computes metrics required for Regime & Market Read (spec 4.8).
     """
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT trade_date, close, volume
+            SELECT trade_date, close
             FROM daily_index_ohlcv
-            WHERE index_name = 'NIFTY 50'
+            WHERE index_name = 'NIFTY 500'
             ORDER BY trade_date ASC;
         """)
         rows = cur.fetchall()
 
     if not rows:
-        return pd.Series(dtype=float)
+        return pd.DataFrame(columns=["close", "sma_50", "sma_200", "ema_20", "change_pct", "had_20d_low_last_10", "up_last_3"])
 
-    df_nifty = pd.DataFrame(rows, columns=["trade_date", "close", "volume"])
-    df_nifty["trade_date"] = pd.to_datetime(df_nifty["trade_date"]).dt.strftime("%Y-%m-%d")
-    df_nifty["prev_close"] = df_nifty["close"].shift(1)
-    df_nifty["prev_volume"] = df_nifty["volume"].shift(1)
-    df_nifty["ret"] = (df_nifty["close"] - df_nifty["prev_close"]) / df_nifty["prev_close"]
-    
-    # Distribution day condition: ret <= -0.002 and volume > prev_volume
-    df_nifty["is_dist_day"] = ((df_nifty["ret"] <= -0.002) & (df_nifty["volume"] > df_nifty["prev_volume"])).astype(int)
-    # Trailing 25 sessions sum
-    df_nifty["dist_days_25"] = df_nifty["is_dist_day"].rolling(25, min_periods=1).sum().astype(int)
-    return df_nifty.set_index("trade_date")["dist_days_25"]
+    df_n = pd.DataFrame(rows, columns=["trade_date", "close"])
+    df_n["trade_date"] = pd.to_datetime(df_n["trade_date"]).dt.strftime("%Y-%m-%d")
+    df_n["close"] = df_n["close"].astype(float)
+    df_n["sma_50"] = df_n["close"].rolling(50, min_periods=50).mean()
+    df_n["sma_200"] = df_n["close"].rolling(200, min_periods=200).mean()
+    df_n["ema_20"] = compute_seeded_ema20(df_n["close"].values)
+
+    prev_c = df_n["close"].shift(1)
+    df_n["change_pct"] = (df_n["close"] - prev_c) / prev_c * 100.0
+
+    prior_20_low = prev_c.rolling(20, min_periods=20).min()
+    is_20d_low = (df_n["close"] <= prior_20_low).astype(int)
+    df_n["had_20d_low_last_10"] = is_20d_low.rolling(10, min_periods=1).max() == 1
+
+    c = df_n["close"]
+    df_n["up_last_3"] = (c > c.shift(1)) & (c.shift(1) > c.shift(2)) & (c.shift(2) > c.shift(3))
+
+    return df_n.set_index("trade_date")
 
 def compute_breadth_for_universe(
     df_ind: pd.DataFrame,
     universe: str,
-    symbols: Optional[Set[str]],
-    dist_days_series: pd.Series
+    symbols: Optional[Set[str]] = None,
+    constituents_df: Optional[pd.DataFrame] = None,
+    nifty500_df: Optional[pd.DataFrame] = None,
+    dist_days_series: Optional[pd.Series] = None
 ) -> List[Dict[str, Any]]:
     """
-    Aggregates per-stock indicators into daily market breadth metrics for a universe.
+    Aggregates per-stock indicators into daily market breadth metrics for a universe per spec 4.1-4.8.
     """
-    if symbols is not None:
+    if universe not in ("all", "liquid") and symbols is None and (constituents_df is None or constituents_df.empty):
+        logger.warning(f"Missing constituents for index universe '{universe}'. Skipping to prevent fallback to all stocks.")
+        return []
+
+    if universe == "liquid":
+        # Liquid universe: close >= 20 and 50-day average volume >= 25,000 (or volume >= 25,000)
+        vol_col = "vol_sma_50" if "vol_sma_50" in df_ind.columns else "volume"
+        df_sub = df_ind[(df_ind["close"] >= 20) & ((df_ind[vol_col] >= 25000) | (df_ind["volume"] >= 25000))].copy()
+    elif constituents_df is not None and not constituents_df.empty:
+        # Point-in-time constituent filtering
+        merged = pd.merge(df_ind, constituents_df[["symbol", "effective_from", "effective_to"]], on="symbol", how="inner")
+        cond_from = merged["effective_from"].isna() | (merged["trade_date"] >= merged["effective_from"])
+        cond_to = merged["effective_to"].isna() | (merged["trade_date"] < merged["effective_to"])
+        df_sub = merged[cond_from & cond_to].copy()
+    elif symbols is not None:
         df_sub = df_ind[df_ind["symbol"].isin(symbols)].copy()
     else:
         df_sub = df_ind.copy()
@@ -123,7 +264,6 @@ def compute_breadth_for_universe(
         logger.warning(f"No stock records found for universe: {universe}")
         return []
 
-    # Group by trade_date
     grouped_date = df_sub.groupby("trade_date")
 
     agg_df = pd.DataFrame({
@@ -131,16 +271,17 @@ def compute_breadth_for_universe(
         "declines": grouped_date["decline"].sum(),
         "unchanged": grouped_date["unchanged"].sum(),
         "total_active": grouped_date["close"].count(),
-        "valid_20ema": grouped_date["above_20ema"].count(),
+        "valid_20ema": grouped_date["has_valid_20ema"].sum(),
         "count_above_20ema": grouped_date["above_20ema"].sum(),
-        "valid_50sma": grouped_date["above_50sma"].count(),
+        "valid_50sma": grouped_date["has_valid_50sma"].sum(),
         "count_above_50sma": grouped_date["above_50sma"].sum(),
-        "valid_200sma": grouped_date["above_200sma"].count(),
+        "valid_200sma": grouped_date["has_valid_200sma"].sum(),
         "count_above_200sma": grouped_date["above_200sma"].sum(),
         "highs_20d": grouped_date["is_high_20d"].sum(),
         "lows_20d": grouped_date["is_low_20d"].sum(),
         "highs_52w": grouped_date["is_high_52w"].sum(),
         "lows_52w": grouped_date["is_low_52w"].sum(),
+        "valid_movers": grouped_date["mover_eligible"].sum(),
         "movers_up": grouped_date["mover_up_4pct"].sum(),
         "movers_down": grouped_date["mover_down_4pct"].sum(),
         "breakouts_20d": grouped_date["breakout_20d"].sum(),
@@ -149,76 +290,151 @@ def compute_breadth_for_universe(
         "stage_2_count": grouped_date["stage_2"].sum(),
         "stage_3_count": grouped_date["stage_3"].sum(),
         "stage_4_count": grouped_date["stage_4"].sum(),
+        "stage_unclass": grouped_date["stage_unclass"].sum(),
     }).sort_index()
 
-    # Derived rolling metrics
-    agg_df["ad_ratio"] = np.where(agg_df["declines"] > 0, agg_df["advances"] / agg_df["declines"], np.nan)
-    adv_20 = agg_df["advances"].rolling(20, min_periods=10).sum()
-    dec_20 = agg_df["declines"].rolling(20, min_periods=10).sum()
-    agg_df["ad_ratio_20d"] = np.where(dec_20 > 0, adv_20 / dec_20, np.nan)
+    # Spec 4.2: A/D ratios use max(1, declines)
+    agg_df["ad_ratio"] = agg_df["advances"] / np.maximum(1, agg_df["declines"])
+    adv_20 = agg_df["advances"].rolling(20, min_periods=20).sum()
+    dec_20 = agg_df["declines"].rolling(20, min_periods=20).sum()
+    agg_df["ad_ratio_20d"] = np.where(dec_20.notna(), adv_20 / np.maximum(1, dec_20), np.nan)
 
-    adv_40 = agg_df["advances"].rolling(40, min_periods=20).sum()
-    dec_40 = agg_df["declines"].rolling(40, min_periods=20).sum()
-    agg_df["ad_ratio_40d"] = np.where(dec_40 > 0, adv_40 / dec_40, np.nan)
+    adv_40 = agg_df["advances"].rolling(40, min_periods=40).sum()
+    dec_40 = agg_df["declines"].rolling(40, min_periods=40).sum()
+    agg_df["ad_ratio_40d"] = np.where(dec_40.notna(), adv_40 / np.maximum(1, dec_40), np.nan)
 
-    agg_df["ad_line"] = (agg_df["advances"] - agg_df["declines"]).cumsum()
-
+    # Spec 4.3: % Above MAs (count with valid window only)
     agg_df["pct_above_20ema"] = np.where(agg_df["valid_20ema"] > 0, (agg_df["count_above_20ema"] / agg_df["valid_20ema"]) * 100.0, np.nan)
     agg_df["pct_above_50sma"] = np.where(agg_df["valid_50sma"] > 0, (agg_df["count_above_50sma"] / agg_df["valid_50sma"]) * 100.0, np.nan)
     agg_df["pct_above_200sma"] = np.where(agg_df["valid_200sma"] > 0, (agg_df["count_above_200sma"] / agg_df["valid_200sma"]) * 100.0, np.nan)
 
+    # Spec 4.4: Highs & Lows net
     agg_df["net_highs_20d"] = agg_df["highs_20d"] - agg_df["lows_20d"]
     agg_df["net_52w"] = agg_df["highs_52w"] - agg_df["lows_52w"]
 
-    agg_df["pct_movers_up_4pct"] = np.where(agg_df["total_active"] > 0, (agg_df["movers_up"] / agg_df["total_active"]) * 100.0, np.nan)
-    agg_df["pct_movers_down_4pct"] = np.where(agg_df["total_active"] > 0, (agg_df["movers_down"] / agg_df["total_active"]) * 100.0, np.nan)
+    # Spec 4.4b: 4% Movers percentage & ratios
+    agg_df["pct_movers_up_4pct"] = np.where(agg_df["valid_movers"] > 0, (agg_df["movers_up"] / agg_df["valid_movers"]) * 100.0, np.nan)
+    agg_df["pct_movers_down_4pct"] = np.where(agg_df["valid_movers"] > 0, (agg_df["movers_down"] / agg_df["valid_movers"]) * 100.0, np.nan)
 
-    mup_5 = agg_df["movers_up"].rolling(5, min_periods=3).sum()
-    mdown_5 = agg_df["movers_down"].rolling(5, min_periods=3).sum()
-    agg_df["movers_ratio_5d"] = np.where(mdown_5 > 0, mup_5 / mdown_5, np.nan)
+    mup_5 = agg_df["movers_up"].rolling(5, min_periods=5).sum()
+    mdown_5 = agg_df["movers_down"].rolling(5, min_periods=5).sum()
+    agg_df["movers_ratio_5d"] = np.where(mdown_5.notna(), mup_5 / np.maximum(1, mdown_5), np.nan)
 
-    mup_10 = agg_df["movers_up"].rolling(10, min_periods=5).sum()
-    mdown_10 = agg_df["movers_down"].rolling(10, min_periods=5).sum()
-    agg_df["movers_ratio_10d"] = np.where(mdown_10 > 0, mup_10 / mdown_10, np.nan)
+    mup_10 = agg_df["movers_up"].rolling(10, min_periods=10).sum()
+    mdown_10 = agg_df["movers_down"].rolling(10, min_periods=10).sum()
+    agg_df["movers_ratio_10d"] = np.where(mdown_10.notna(), mup_10 / np.maximum(1, mdown_10), np.nan)
 
-    stage_total = agg_df["stage_1_count"] + agg_df["stage_2_count"] + agg_df["stage_3_count"] + agg_df["stage_4_count"]
-    agg_df["weinstein_stage_1_pct"] = np.where(stage_total > 0, (agg_df["stage_1_count"] / stage_total) * 100.0, np.nan)
-    agg_df["weinstein_stage_2_pct"] = np.where(stage_total > 0, (agg_df["stage_2_count"] / stage_total) * 100.0, np.nan)
-    agg_df["weinstein_stage_3_pct"] = np.where(stage_total > 0, (agg_df["stage_3_count"] / stage_total) * 100.0, np.nan)
-    agg_df["weinstein_stage_4_pct"] = np.where(stage_total > 0, (agg_df["stage_4_count"] / stage_total) * 100.0, np.nan)
+    # Spec 4.6: Weinstein Stage Percentages
+    classified_total = agg_df["stage_1_count"] + agg_df["stage_2_count"] + agg_df["stage_3_count"] + agg_df["stage_4_count"]
+    agg_df["weinstein_stage_1_pct"] = np.where(classified_total > 0, (agg_df["stage_1_count"] / classified_total) * 100.0, np.nan)
+    agg_df["weinstein_stage_2_pct"] = np.where(classified_total > 0, (agg_df["stage_2_count"] / classified_total) * 100.0, np.nan)
+    agg_df["weinstein_stage_3_pct"] = np.where(classified_total > 0, (agg_df["stage_3_count"] / classified_total) * 100.0, np.nan)
+    agg_df["weinstein_stage_4_pct"] = np.where(classified_total > 0, (agg_df["stage_4_count"] / classified_total) * 100.0, np.nan)
 
     # Zweig Breadth Thrust: 10-day EMA of Advances / (Advances + Declines)
     total_adv_dec = agg_df["advances"] + agg_df["declines"]
     adv_ratio_raw = np.where(total_adv_dec > 0, agg_df["advances"] / total_adv_dec, 0.5)
     thrust_ema = pd.Series(adv_ratio_raw, index=agg_df.index).ewm(span=10, adjust=False).mean()
-    # Thrust condition: in the last 10 days, crossed from < 0.40 to > 0.615
     agg_df["breadth_thrust"] = (thrust_ema > 0.615) & (thrust_ema.shift(10) < 0.40)
 
-    # Composite regime score (0 to 100)
-    # 40% weight on % > 50 SMA, 30% weight on % > 200 SMA, 30% weight on 20D A/D ratio (scaled 0-2 -> 0-100)
-    s50 = agg_df["pct_above_50sma"].fillna(50)
-    s200 = agg_df["pct_above_200sma"].fillna(50)
-    ad20 = (agg_df["ad_ratio_20d"].fillna(1.0).clip(0.0, 2.0) / 2.0) * 100.0
-    composite = (0.40 * s50 + 0.30 * s200 + 0.30 * ad20).round().astype(int)
-    agg_df["regime_score"] = composite
-
-    def get_regime(score: int) -> str:
-        if score >= 70:
-            return "Confirmed Uptrend"
-        elif score >= 50:
-            return "Uptrend Under Pressure"
-        elif score >= 35:
-            return "Rally Attempt"
-        else:
-            return "Market in Correction"
-
-    agg_df["regime"] = agg_df["regime_score"].apply(get_regime)
-
-    # Add distribution days
-    agg_df["distribution_days"] = agg_df.index.map(lambda d: int(dist_days_series.get(d, 0)))
+    # Spec 4.8 Distribution Sessions (breadth-based: Nifty 500 chg <= -0.5% and declines >= 1.5 * advances)
+    if dist_days_series is not None and not dist_days_series.empty:
+        agg_df["distribution_days"] = agg_df.index.map(lambda d: int(dist_days_series.get(d, 0)))
+    elif nifty500_df is not None and not nifty500_df.empty:
+        n_chg = agg_df.index.map(lambda d: nifty500_df.loc[d, "change_pct"] if d in nifty500_df.index else 0.0)
+        is_dist = (n_chg <= -0.5) & (agg_df["declines"] >= 1.5 * agg_df["advances"])
+        agg_df["distribution_days"] = is_dist.astype(int).rolling(10, min_periods=1).sum().astype(int)
+    else:
+        agg_df["distribution_days"] = 0
 
     records = []
     for trade_date, row in agg_df.iterrows():
+        # Spec 4.8: Regime & 6 Market Read indicators
+        regime = "MARKET_CORRECTION"
+        read_indicators = []
+
+        if nifty500_df is not None and trade_date in nifty500_df.index:
+            n_row = nifty500_df.loc[trade_date]
+            n_close = float(n_row["close"])
+            n_sma50 = float(n_row["sma_50"]) if pd.notna(n_row["sma_50"]) else None
+            n_sma200 = float(n_row["sma_200"]) if pd.notna(n_row["sma_200"]) else None
+            n_ema20 = float(n_row["ema_20"]) if pd.notna(n_row["ema_20"]) else None
+            had_20d_low = bool(n_row["had_20d_low_last_10"])
+            up_3 = bool(n_row["up_last_3"])
+
+            b50 = row["pct_above_50sma"]
+            nh52 = int(row["net_52w"])
+            dist10 = int(row["distribution_days"])
+            ad20 = row["ad_ratio_20d"]
+
+            # Regime (first match wins):
+            if (n_sma50 and n_ema20 and n_close > n_sma50 and n_close > n_ema20 and
+                pd.notna(b50) and b50 >= 50 and nh52 > 0 and dist10 < 3):
+                regime = "CONFIRMED_UPTREND"
+            elif n_sma50 and n_close > n_sma50:
+                regime = "UPTREND_UNDER_PRESSURE"
+            elif (n_sma50 and n_close <= n_sma50 and had_20d_low and up_3):
+                regime = "RALLY_ATTEMPT"
+            else:
+                regime = "MARKET_CORRECTION"
+
+            # 6 Market Read indicators
+            # 1. long_term: N >= SMA200 Positive, else Negative
+            lt_status = "Positive" if (n_sma200 and n_close >= n_sma200) else "Negative"
+            read_indicators.append({
+                "id": "long_term",
+                "status": lt_status,
+                "value": round(n_close - n_sma200, 2) if n_sma200 else None
+            })
+
+            # 2. medium_term: N >= SMA50 Positive, else Negative
+            mt_status = "Positive" if (n_sma50 and n_close >= n_sma50) else "Negative"
+            read_indicators.append({
+                "id": "medium_term",
+                "status": mt_status,
+                "value": round(n_close - n_sma50, 2) if n_sma50 else None
+            })
+
+            # 3. short_term: N >= EMA20 Positive, else Negative
+            st_status = "Positive" if (n_ema20 and n_close >= n_ema20) else "Negative"
+            read_indicators.append({
+                "id": "short_term",
+                "status": st_status,
+                "value": round(n_close - n_ema20, 2) if n_ema20 else None
+            })
+
+            # 4. ad_momentum: ad_ratio_20d >= 1.05 Positive, <= 0.95 Negative, else Neutral
+            if pd.notna(ad20):
+                adm_status = "Positive" if ad20 >= 1.05 else ("Negative" if ad20 <= 0.95 else "Neutral")
+            else:
+                adm_status = "Neutral"
+            read_indicators.append({
+                "id": "ad_momentum",
+                "status": adm_status,
+                "value": round(float(ad20), 4) if pd.notna(ad20) else None
+            })
+
+            # 5. highs_vs_lows: highs_52w > lows_52w Positive, < Negative, equal Neutral
+            h52 = int(row["highs_52w"])
+            l52 = int(row["lows_52w"])
+            hvl_status = "Positive" if h52 > l52 else ("Negative" if h52 < l52 else "Neutral")
+            read_indicators.append({
+                "id": "highs_vs_lows",
+                "status": hvl_status,
+                "value": nh52
+            })
+
+            # 6. participation: B50 >= 50 Positive, 40 <= B50 < 50 Neutral, < 40 Negative
+            if pd.notna(b50):
+                part_status = "Positive" if b50 >= 50 else ("Neutral" if b50 >= 40 else "Negative")
+            else:
+                part_status = "Negative"
+            read_indicators.append({
+                "id": "participation",
+                "status": part_status,
+                "value": round(float(b50), 2) if pd.notna(b50) else None
+            })
+
         records.append({
             "trade_date": trade_date,
             "universe": universe,
@@ -228,7 +444,7 @@ def compute_breadth_for_universe(
             "ad_ratio": round(float(row["ad_ratio"]), 4) if pd.notna(row["ad_ratio"]) else None,
             "ad_ratio_20d": round(float(row["ad_ratio_20d"]), 4) if pd.notna(row["ad_ratio_20d"]) else None,
             "ad_ratio_40d": round(float(row["ad_ratio_40d"]), 4) if pd.notna(row["ad_ratio_40d"]) else None,
-            "ad_line": round(float(row["ad_line"]), 2) if pd.notna(row["ad_line"]) else None,
+            "ad_line": None, # Spec 4.2 / 8: Stop storing ad_line. Computed in API from window start.
             "pct_above_20ema": round(float(row["pct_above_20ema"]), 2) if pd.notna(row["pct_above_20ema"]) else None,
             "pct_above_50sma": round(float(row["pct_above_50sma"]), 2) if pd.notna(row["pct_above_50sma"]) else None,
             "pct_above_200sma": round(float(row["pct_above_200sma"]), 2) if pd.notna(row["pct_above_200sma"]) else None,
@@ -248,10 +464,20 @@ def compute_breadth_for_universe(
             "weinstein_stage_2_pct": round(float(row["weinstein_stage_2_pct"]), 2) if pd.notna(row["weinstein_stage_2_pct"]) else None,
             "weinstein_stage_3_pct": round(float(row["weinstein_stage_3_pct"]), 2) if pd.notna(row["weinstein_stage_3_pct"]) else None,
             "weinstein_stage_4_pct": round(float(row["weinstein_stage_4_pct"]), 2) if pd.notna(row["weinstein_stage_4_pct"]) else None,
-            "regime": str(row["regime"]),
-            "regime_score": int(row["regime_score"]),
+            "regime": regime,
+            "regime_score": None, # Spec 4.8 / 5: Deleted invented 40/30/30 score
             "distribution_days": int(row["distribution_days"]),
             "breadth_thrust": bool(row["breadth_thrust"]),
+            "total_stocks": int(row["total_active"]),
+            "stage_1_count": int(row["stage_1_count"]),
+            "stage_2_count": int(row["stage_2_count"]),
+            "stage_3_count": int(row["stage_3_count"]),
+            "stage_4_count": int(row["stage_4_count"]),
+            "stage_unclassified": int(row["stage_unclass"]),
+            "movers_up_count": int(row["movers_up"]),
+            "movers_down_count": int(row["movers_down"]),
+            "read_indicators": json.dumps(read_indicators) if read_indicators else None,
+            "definitions_version": "2.0",
         })
 
     logger.info(f"Computed {len(records)} breadth rows for universe {universe}.")
@@ -261,10 +487,11 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
     """
     Main computation runner:
     1. Loads equity candles from parquet.
-    2. Computes per-stock vectorised technical indicators.
-    3. Loads index constituents from Neon PostgreSQL.
+    2. Computes per-stock technical indicators with spec 4.6 & strict min_periods.
+    3. Loads index constituents and Nifty 500 index data from Neon PostgreSQL.
     4. Computes daily market breadth for each universe.
-    5. Upserts into `daily_market_breadth` table in Neon PostgreSQL.
+    5. Applies the 252-session publish floor (no zero rows from partial windows).
+    6. Upserts into `daily_market_breadth` table in Neon PostgreSQL.
     """
     if not os.path.exists(parquet_path):
         logger.error(f"Parquet file {parquet_path} does not exist. Run ingest first.")
@@ -280,27 +507,54 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
 
     conn = get_connection()
     try:
-        # Load constituents
+        # Load constituents with versioning (effective_from, effective_to)
         with conn.cursor() as cur:
-            cur.execute("SELECT index_name, symbol FROM index_constituents;")
+            cur.execute("""
+                SELECT index_name, symbol, effective_from, effective_to
+                FROM index_constituents;
+            """)
             const_rows = cur.fetchall()
 
-        constituents_by_universe = {}
-        for idx_name, sym in const_rows:
-            if idx_name not in constituents_by_universe:
-                constituents_by_universe[idx_name] = set()
-            constituents_by_universe[idx_name].add(sym)
+        const_df_all = pd.DataFrame(
+            const_rows, columns=["index_name", "symbol", "effective_from", "effective_to"]
+        )
+        if not const_df_all.empty:
+            const_df_all["effective_from"] = pd.to_datetime(const_df_all["effective_from"]).dt.strftime("%Y-%m-%d")
+            const_df_all["effective_to"] = pd.to_datetime(const_df_all["effective_to"]).dt.strftime("%Y-%m-%d")
 
-        dist_days_series = get_distribution_days_series(conn)
+        nifty500_df = get_nifty500_data(conn)
+
+        # Spec 4.12 / 7: Publish breadth rows only for dates at least 252 sessions after history start
+        all_trade_dates = sorted(df_ind["trade_date"].unique())
+        publish_floor_date = all_trade_dates[251] if len(all_trade_dates) >= 252 else all_trade_dates[0]
+        logger.info(f"Publish floor date: {publish_floor_date} (sessions total: {len(all_trade_dates)}).")
 
         all_breadth_records = []
         for universe in UNIVERSES:
-            symbols = constituents_by_universe.get(universe) if universe != "all" else None
-            records = compute_breadth_for_universe(df_ind, universe, symbols, dist_days_series)
-            all_breadth_records.extend(records)
+            if universe in ("all", "liquid"):
+                u_const_df = None
+            else:
+                if const_df_all.empty:
+                    logger.warning(f"No constituents found in database for universe '{universe}'. Skipping.")
+                    continue
+                u_const_df = const_df_all[const_df_all["index_name"] == universe]
+                if u_const_df.empty:
+                    logger.warning(f"No constituents found in database for universe '{universe}'. Skipping.")
+                    continue
+
+            records = compute_breadth_for_universe(
+                df_ind=df_ind,
+                universe=universe,
+                symbols=None,
+                constituents_df=u_const_df,
+                nifty500_df=nifty500_df
+            )
+            # Filter rows by 252-session publish floor
+            filtered_records = [r for r in records if r["trade_date"] >= publish_floor_date]
+            all_breadth_records.extend(filtered_records)
 
         logger.info(f"Publishing {len(all_breadth_records)} breadth records to Neon PostgreSQL...")
-        
+
         insert_sql = """
         INSERT INTO daily_market_breadth (
             trade_date, universe, advances, declines, unchanged,
@@ -310,7 +564,9 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             pct_movers_up_4pct, pct_movers_down_4pct, movers_ratio_5d, movers_ratio_10d,
             breakouts_20d, breakdowns_20d,
             weinstein_stage_1_pct, weinstein_stage_2_pct, weinstein_stage_3_pct, weinstein_stage_4_pct,
-            regime, regime_score, distribution_days, breadth_thrust
+            regime, regime_score, distribution_days, breadth_thrust,
+            total_stocks, stage_1_count, stage_2_count, stage_3_count, stage_4_count, stage_unclassified,
+            movers_up_count, movers_down_count, read_indicators, definitions_version
         ) VALUES (
             %(trade_date)s, %(universe)s, %(advances)s, %(declines)s, %(unchanged)s,
             %(ad_ratio)s, %(ad_ratio_20d)s, %(ad_ratio_40d)s, %(ad_line)s,
@@ -319,7 +575,9 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             %(pct_movers_up_4pct)s, %(pct_movers_down_4pct)s, %(movers_ratio_5d)s, %(movers_ratio_10d)s,
             %(breakouts_20d)s, %(breakdowns_20d)s,
             %(weinstein_stage_1_pct)s, %(weinstein_stage_2_pct)s, %(weinstein_stage_3_pct)s, %(weinstein_stage_4_pct)s,
-            %(regime)s, %(regime_score)s, %(distribution_days)s, %(breadth_thrust)s
+            %(regime)s, %(regime_score)s, %(distribution_days)s, %(breadth_thrust)s,
+            %(total_stocks)s, %(stage_1_count)s, %(stage_2_count)s, %(stage_3_count)s, %(stage_4_count)s, %(stage_unclassified)s,
+            %(movers_up_count)s, %(movers_down_count)s, %(read_indicators)s, %(definitions_version)s
         )
         ON CONFLICT (trade_date, universe) DO UPDATE SET
             advances = EXCLUDED.advances,
@@ -351,13 +609,23 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             regime = EXCLUDED.regime,
             regime_score = EXCLUDED.regime_score,
             distribution_days = EXCLUDED.distribution_days,
-            breadth_thrust = EXCLUDED.breadth_thrust;
+            breadth_thrust = EXCLUDED.breadth_thrust,
+            total_stocks = EXCLUDED.total_stocks,
+            stage_1_count = EXCLUDED.stage_1_count,
+            stage_2_count = EXCLUDED.stage_2_count,
+            stage_3_count = EXCLUDED.stage_3_count,
+            stage_4_count = EXCLUDED.stage_4_count,
+            stage_unclassified = EXCLUDED.stage_unclassified,
+            movers_up_count = EXCLUDED.movers_up_count,
+            movers_down_count = EXCLUDED.movers_down_count,
+            read_indicators = EXCLUDED.read_indicators,
+            definitions_version = EXCLUDED.definitions_version;
         """
 
         with conn.cursor() as cur:
             execute_batch(cur, insert_sql, all_breadth_records, page_size=1000)
         conn.commit()
-        logger.info(f"Successfully published {len(all_breadth_records)} rows into daily_market_breadth.")
+        logger.info(f"Successfully published {len(all_breadth_records)} rows to daily_market_breadth.")
         return True
     finally:
         conn.close()
@@ -365,4 +633,3 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     compute_and_publish_all()
-

@@ -1,104 +1,91 @@
-# Market Breadth Dashboard — Implementation Plan (Angel One SmartAPI Edition)
+# Market Breadth Dashboard — Master Implementation Plan & Architecture
 
-Based on **Build Specification v2**, this plan details the phases, architecture, verification tests, data models, and safety rules to transition the dashboard from placeholder data to 100% real NSE data backed by Angel One SmartAPI, Parquet, and Neon PostgreSQL.
-
----
-
-## 0. Hard Rules & Constraints
-
-1. **No static, mock, or fabricated data**: Delete `src/data/mock*.js` and every import of it.
-2. **No numeric fallbacks**: No `?? 1233` or `|| 50`. Missing data renders as `—` or an explicit empty/error state.
-3. **No invented formulas**: No multipliers, synthetic ratios, or universe offsets.
-4. **No hardcoded dates**: Dates ("Fri, 13 Nov 2026") are dynamically populated from `asOfDate`.
-5. **Secrets safety**:
-   - Credentials come strictly from environment variables: `API_KEY`, `CLIENT_ID`, `PIN`, `TOTP_SECRET`.
-   - Never print, log, commit, or persist session JWTs, tokens, or credentials anywhere.
-   - Read-only market data calls only. Zero order or trade endpoints.
-6. **Work in phases and stop after each phase for user review.**
+Based on **Build Specification v2** and **MARKET_BREADTH_SPEC_ANGELONE.md**, this document tracks the completed phases, architectural foundations, data models, and verification tests powering the 100% real-data Market Breadth Terminal.
 
 ---
 
-## 1. System Architecture
+## 🏛️ Operating Environment & Hosting Architecture (Free Tiers)
 
-```
-GitHub Actions cron (or self-hosted runner)
-   └─ pipeline/ (Python 3.11+, pandas, pyarrow)
-        1. login   -> SmartAPI session (API_KEY + CLIENT_ID + PIN + TOTP)
-        2. ingest  -> daily candles per instrument -> equity_ohlcv.parquet (raw store)
-        3. adjust  -> Case A overlapping 10-day diffing (corporate-action handling)
-        4. compute -> per-stock indicators (vectorised) -> per-universe aggregates
-        5. publish -> upsert aggregates + index/macro/flow data into Neon Postgres
-        6. trim    -> rolling 3-year retention (floor 504 sessions) on parquet
-Neon Postgres  <-  Next.js API route (read only, cached)  <-  React Dashboard
-```
-
-- **Raw Store (`equity_ohlcv.parquet`)**: Stored locally and backed up as a GitHub Release asset. Contains raw OHLCV for ~2,300 active NSE equities.
-- **Neon PostgreSQL**: Stores only aggregated breadth, index closes, macro rates, institutional cash flows, constituents, instruments, and run logs.
-- **Client App**: Next.js 15 (App Router, React 19, Tailwind CSS, Recharts) reads exclusively from `GET /api/terminal/data`.
+1. **Frontend & Edge API:** Vercel Hobby tier (Next.js 15 App Router, React 19, Tailwind CSS, Recharts).
+2. **Database:** Neon PostgreSQL free tier (1 GB storage limit, 100 compute hours/month, sleep after 5 minutes idle).
+3. **Pipeline Runner:** GitHub Actions on public repository (Free compute, concurrency-locked).
+4. **Raw Price Store:** `equity_ohlcv.parquet` (~2,300 active NSE equities across 3 years) hosted as GitHub Release asset `data-latest` with atomic swapping and `.backup` retention.
+5. **Zero Mock Guarantee:** Zero synthetic multipliers, zero placeholder fallback numbers (`??` / `||`), and zero hardcoded dates.
 
 ---
 
-## 2. Phase-by-Phase Roadmap
+## 📋 Phase Roadmap & Execution Status
 
-### Phase 1: Plan & Verification (No Application Code)
-- Record real test results in `docs/METRICS.md`:
-  - [x] SmartAPI Login: verified locally via TOTP session generation.
-  - [x] Rate limit & candle semantics: confirmed ~2.5 to 3.0 req/s rate limit; max days $\ge$ 755 days (3 years returned in 1 call); timestamp format `YYYY-MM-DDTHH:MM:SS+05:30`.
-  - [x] Corporate action adjustments: **Case A confirmed** (candles are pre-adjusted across Reliance 1:1 bonus, Tata Steel 10:1 split, and Nestle India 10:1 split).
-  - [x] Index tokens confirmed:
-    - Nifty 50: `99926000`
-    - Nifty 500: `99926004`
-    - Nifty Midcap 150: `99926060`
-    - Nifty Smallcap 250: `99926062`
-    - India VIX: `99926017`
-  - [x] Join Angel Master to NSE `EQUITY_L.csv`: 2,599 of 2,600 INE EQ/BE stocks matched (99.96%).
-  - [ ] Closes comparison for 20 sample stocks on a single trading date against official NSE Bhavcopy.
-  - [ ] Document token stability across renames and confirm FII/DII forward collection policy.
-- *Stop for user review.*
+### Phase 1: Make Pipeline Run on GitHub Actions (COMPLETED)
+- [x] Fixed `pipeline/compute.py` import crash (added missing `Set` from `typing`).
+- [x] Wired full daily execution sequence in `pipeline/workflow.py`: `sync_instruments -> sync_constituents -> sync_indices -> sync_macro -> sync_fii_dii -> ingest_equities -> adjust -> quality_gate -> compute_and_publish_all -> trim`.
+- [x] Enforced hard rule: trim runs **only** as the final step if all prior steps succeed; any failure halts the pipeline before trimming.
+- [x] Added CLI subcommands in `pipeline/cli.py`: `daily`, `catch-up`, `weekly`, `backfill`, `recompute-all`, `test-connection`, `trim`.
+- [x] Created `.github/workflows/pipeline.yml` with scheduled UTC crons:
+  - Daily: `30 11 * * 1-5` (17:00 IST)
+  - Catch-up: `30 15 * * 1-5` (21:00 IST)
+  - Weekly: `0 2 * * 6` (07:30 IST Saturday)
+- [x] Implemented `pipeline/store.py` with GitHub Release asset download, temporary upload, size verification, and atomic swap.
+- [x] Measured full 3-year peak RAM during compute: **107.10 MB** (and **101.63 MB** with `float32`), safely operating within free runner memory bounds.
+- [x] Created `tests/test_phase1.py` with synthetic fixtures.
 
-### Phase 2: Pipeline Core & Data Storage
-- Database schema migration for Neon PostgreSQL:
-  - `instruments`, `trading_days`, `daily_index_ohlcv`, `daily_macro_rates`, `daily_fii_dii_cash`, `index_constituents`, `price_adjustments`, `ingest_runs`, `daily_market_breadth`.
-- Ingestion engine (`pipeline/`):
-  - Token-bucket rate limiter (2.5 req/s) with exponential backoff on rate-limit warnings.
-  - 3-year initial backfill script.
-  - Case A diffing: re-fetches overlapping 10 sessions, triggers token full re-fetch if $>1\%$ divergence detected.
-  - Rolling 3-year retention `trim` command with 504-session floor.
-  - Quality gates and post-compute assertions.
-- Verify with sample database queries proving real data.
-- *Stop for user review.*
+### Phase 2: Data Correctness & Quality Gates (COMPLETED)
+- [x] Case A corporate action handling in `pipeline/adjust.py`: compares 10-session overlapping close prices against stored rows. If any close diverges by $>1\%$, triggers full token history re-fetch, replaces stored rows, and logs to `price_adjustments`.
+- [x] Vectorised large-move detector: logs single-day price moves $\ge 20\%$ to `price_adjustments` as `LARGE_MOVE_20PCT`.
+- [x] Implemented `pipeline/quality_gate.py`: blocks publish and trim if $<1,500$ instruments have a candle on the latest date, Nifty 50 or Nifty 500 candles are missing, or $>5\%$ of fetches failed. Records outcome in `ingest_runs`.
+- [x] Telegram alerting via `pipeline/alerts.py` on pipeline or FII/DII fetch failures.
+- [x] Universe constituent bug fix: missing constituent files skip that universe with a warning instead of defaulting to all stocks. Added `liquid` universe.
+- [x] Point-in-time constituent versioning in `pipeline/instruments.py`: tracks `effective_from` and `effective_to` with `is_active` flags. Vectorised filtering ensures removed stocks leave the universe on their removal date.
+- [x] `SmartAPIClient` resilience: authenticates once per run, re-auths only on genuine expiry error codes (`AG8001`, `AG8002`, `AG8003`) capped at 2 per run; terminates sessions on `logout()`.
+- [x] Versioned SQL migrations in `pipeline/migrations/` (`001_initial_schema.sql`, `002_add_spec_columns.sql`, `003_constituents_versioning.sql`, `004_readonly_role.sql`).
+- [x] Created `tests/test_phase2.py` with synthetic fixtures.
 
-### Phase 3: Metrics Computation & API Layer
-- Implement vectorised metric calculators in pandas:
-  - Advances / Declines, 20D / 40D rolling ratios, cumulative A-D line.
-  - 20 EMA, 50 SMA, 200 SMA participation percentages.
-  - 20-day and 52-week highs, lows, and net.
-  - 4% movers with liquidity filter, 5D and 10D ratios.
-  - 20-day breakouts and breakdowns (close > prior 20D high on $\ge 1.5\times$ 50D volume).
-  - Weinstein Stages 1 through 4 (150 SMA + 20-day slope with historical memory).
-  - Market Regime and 6 Market Read indicators.
-  - Large / Mid / Small performance for 1M (21 sessions), 3M (63 sessions), YTD.
-- Next.js API Route `GET /api/terminal/data?universe=&period=`:
-  - Parameterized PostgreSQL queries.
-  - Edge caching (`revalidate = 900`).
-  - Empty database returns `asOfDate: null` and empty structures (no 0/fallback inflation).
-- *Stop for user review.*
+### Phase 3: Metrics Computation per Specification (COMPLETED)
+- [x] Weinstein Stages per spec 4.6 in `pipeline/compute.py`:
+  - 1% slope threshold on 150-day SMA ($> +1\%$ rising, $< -1\%$ declining, $[-1\%, +1\%]$ flat).
+  - 120-session stage memory for Basing (Stage 1) and Topping (Stage 3) transitions.
+  - Strict minimum history requirement: $\ge 170$ sessions required, otherwise classified as `stage_unclassified`.
+  - Mutually exclusive and exhaustive stages (Stages 1 through 4 + unclassified sum to 100%).
+- [x] Strict `min_periods` enforced: removed all relaxed moving average windows.
+- [x] Liquidity filter on 4% movers and breakouts: requires close $\ge ₹20$ and prior 50-day average volume $\ge 25,000$ shares.
+- [x] Advance/Decline ratio uses `np.maximum(1, declines)` to protect against division by zero.
+- [x] 20 EMA seeded with the first 20-session SMA, followed by recursive smoothing ($\alpha = 2/21$).
+- [x] Deterministic Market Regime and 6 Market Read indicators (spec 4.8) stored as JSONB in `read_indicators`.
+- [x] Breadth-based distribution days: Nifty 500 change $\le -0.5\%$ and declines $\ge 1.5 \times$ advances.
+- [x] 252-session publish floor: rows prior to the 252nd trading session are not published.
+- [x] Cumulative A-D line storage removed (computed dynamically by API per spec 4.2).
+- [x] Created `tests/test_phase3.py` with synthetic fixtures.
 
-### Phase 4: Frontend Rewiring & Mock Deletion
-- Delete all `src/data/mock*.js` files and eliminate all imports.
-- Extract data fetching and derivation from `src/app/(terminal)/page.jsx` into custom React hook `useMarketBreadth()`.
-- Implement clean loading skeletons, error banners, and empty states.
-- Clean all numeric fallbacks (`??`, `||`) across all components.
-- Ensure unique SVG gradient IDs across all charts (`useId`).
-- *Stop for user review.*
+### Phase 4: Vercel Hobby + Neon Free API & Frontend (COMPLETED)
+- [x] Database pooling in `src/lib/db.js`: capped at `max: 2` connections with `connectionTimeoutMillis: 10000`, `idleTimeoutMillis: 30000`, and `queryWithRetry()` for Neon sleep wakeups.
+- [x] Read-only security role `web_readonly` configured via `pipeline/migrations/004_readonly_role.sql`.
+- [x] HTTP caching headers in `src/app/api/terminal/data/route.js`: `Cache-Control: public, s-maxage=900, stale-while-revalidate=3600` on success; `no-store` on error.
+- [x] Strict session slicing for requested periods: `1M` (21 sessions), `3M` (63 sessions), `1Y` (252 sessions).
+- [x] True YTD computation: returns price change relative to the final close of the previous calendar year.
+- [x] Real 22-session FII/DII cash flows returned without padding, along with `fiiDiiSessionsAvailable`.
+- [x] Rebased series (Large, Mid, Small, and Benchmark rebased to 100 at window start).
+- [x] Completely purged all synthetic numbers, mock files, and `?? <number>` fallbacks.
+- [x] Unified palette to `#2563EB` across Tailwind configuration, design tokens, and SVG chart gradients.
 
-### Phase 5: Cleanup & Definition of Done
-- Delete unused UI components (`MetricValue.jsx`, `TrendIndicator.jsx`, `button.jsx`, `loader.tsx`, `select.jsx`, `format.ts`).
-- Remove redundant route `src/app/market-breadth/page.jsx` (replace with redirect to `/`).
-- Unify color palette to design tokens (resolving `#3478F6` vs `#2563EB`).
-- Replace Google Fonts link with `next/font`.
-- Fix `tsconfig.json` and configure ESLint.
-- Update `README.md` and `.env.example`.
-- Run golden-date check and verify definition of done.
-- *Final delivery.*
+### Phase 5: Long-Term Operation on Free Plans (COMPLETED)
+- [x] Health check route `/api/health` protected by optional `CRON_SECRET` Bearer token.
+- [x] Vercel Cron configured in `vercel.json` (`0 4 * * *`) for daily 04:00 UTC execution.
+- [x] Alert triggered if breadth data is $>4$ calendar days old (handles weekends and holidays), capped at 1 alert per calendar day via `health_alerts` table.
+- [x] GitHub 60-day inactivity alert: checks latest commit on `main`. If $\ge 45$ days old, warns that GitHub Actions will pause scheduled runs.
+- [x] Weekly backups: exports `daily_market_breadth` to CSV and uploads dated parquet snapshot `equity_ohlcv_<YYYYMMDD>.parquet` to release `data-latest`.
+- [x] Backup retention: `prune_dated_backups()` retains the last 4 dated backups and cleans up older snapshots.
+- [x] Neon 700 MB storage guard: daily check on `pg_database_size()`; sends alert and prunes `ingest_runs` older than 90 days if storage exceeds 700 MB.
+- [x] UI footer data freshness line: displays `Data as of <asOfDate> · Updated N hours ago` based on `ingest_runs.completed_at`.
+- [x] Created `tests/test_phase5.py` with synthetic fixtures.
 
+### Phase 6: Honest Documentation & Specification Reference (COMPLETED)
+- [x] Updated `README.md` documenting architecture, free tier constraints, disaster recovery, and CLI commands.
+- [x] Updated `PLAN.md` with complete implementation logs and specifications.
+- [x] Created `docs/METRICS.md` with exhaustive mathematical formulas, stage transition logic, regime definitions, and data sources.
+
+---
+
+## 🔒 Security & Safe Operation Commitments
+- **Zero Secrets in Code or Repositories:** All credentials remain strictly in environment variables (`API_KEY`, `CLIENT_ID`, `PIN`, `TOTP_SECRET`, `DATABASE_URL`, `CRON_SECRET`).
+- **Read-Only API Calls:** Only historical candle and market quote APIs are used. Zero trading, placement, or profile endpoints.
+- **Explicit Confirmation for Git Push:** Commits and remote pushes are executed only upon explicit user confirmation.

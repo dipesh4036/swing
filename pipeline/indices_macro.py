@@ -217,8 +217,11 @@ def sync_fii_dii(conn=None) -> int:
         logger.info(f"Upserted {len(records)} FII/DII cash records into daily_fii_dii_cash.")
         return len(records)
     except Exception as e:
-        logger.error(f"Error fetching FII/DII data: {e}")
-        return 0
+        msg = f"FII/DII cash flow fetch failure: {e}"
+        logger.error(msg)
+        from pipeline.alerts import send_telegram_alert
+        send_telegram_alert(msg)
+        raise RuntimeError(msg)
     finally:
         if should_close:
             conn.close()

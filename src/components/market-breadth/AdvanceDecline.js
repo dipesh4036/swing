@@ -47,8 +47,8 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
 
   const isPositive =
     period === "AD"
-      ? (keyMetrics?.adLine ?? 0) >= 0
-      : (ratio ?? 0) >= 1.0;
+      ? (keyMetrics?.adLine !== null && keyMetrics?.adLine !== undefined ? keyMetrics.adLine >= 0 : true)
+      : (ratio !== null && ratio !== undefined ? ratio >= 1.0 : true);
 
   const statusText =
     ratio === null || ratio === undefined
@@ -96,7 +96,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
           <div className="flex items-baseline gap-1.5">
             <span
               className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
-                isPositive ? "text-[#3478F6]" : "text-[#F05283]"
+                isPositive ? "text-[#2563EB]" : "text-[#F05283]"
               }`}
             >
               {displayVal}
@@ -128,7 +128,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
           {
             key: "val",
             name: period === "AD" ? "A-D Line" : `${period} Ratio`,
-            color: isPositive ? "#3478F6" : "#F05283",
+            color: isPositive ? "#2563EB" : "#F05283",
             fill: true,
             strokeWidth: 1.75,
           },

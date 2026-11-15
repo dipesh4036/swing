@@ -15,7 +15,7 @@ export function StatusBadge({
     bearish: "bg-[#FEF0F4] text-[#F05283] border-[#FCCEDB]",
     neutral: "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]",
     warning: "bg-[#FEF7EC] text-[#E9A23B] border-[#FBDFA9]",
-    info: "bg-[#EFF6FF] text-[#3478F6] border-[#BFDBFE]",
+    info: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
   }[status] || "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]";
 
   const dotColors = {
@@ -25,7 +25,7 @@ export function StatusBadge({
     bearish: "bg-[#F05283]",
     neutral: "bg-[#94A3B8]",
     warning: "bg-[#E9A23B]",
-    info: "bg-[#3478F6]",
+    info: "bg-[#2563EB]",
   }[status] || "bg-[#94A3B8]";
 
   return (
@@ -44,7 +44,7 @@ export function PillBadge({ children, active = false, onClick, className = "" })
       onClick={onClick}
       className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
         active
-          ? "bg-[#3478F6] text-white shadow-xs"
+          ? "bg-[#2563EB] text-white shadow-xs"
           : "bg-[#F1F5F9] text-[#64748B] hover:text-[#17233B] hover:bg-[#E2E8F0]"
       } ${className}`}
     >

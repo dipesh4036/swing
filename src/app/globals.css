@@ -41,10 +41,10 @@
   --color-text-faint: #94A3B8;
 
   /* Brand / Action Blue */
-  --color-primary: #3478F6;
-  --color-primary-hover: #2563EB;
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
   --color-primary-subtle: #EFF6FF;
-  --color-accent: #3478F6;
+  --color-accent: #2563EB;
   --color-accent-hover: #2563EB;
   --color-accent-tint: #EFF6FF;
   --color-accent-border: #BFDBFE;

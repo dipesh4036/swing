@@ -50,6 +50,7 @@ def log_ingest_run(
     failed: int,
     started_at: datetime,
     error_msg: Optional[str] = None,
+    quality_gate_passed: bool = True,
     conn=None
 ) -> int:
     should_close = False
@@ -60,10 +61,13 @@ def log_ingest_run(
     try:
         with conn.cursor() as cur:
             cur.execute("""
-            INSERT INTO ingest_runs (run_type, started_at, completed_at, status, instruments_total, instruments_success, instruments_failed, error_message)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO ingest_runs (
+                run_type, started_at, completed_at, status, instruments_total,
+                instruments_success, instruments_failed, quality_gate_passed, error_message
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING run_id;
-            """, (run_type, started_at, datetime.now(), status, total, success, failed, error_msg))
+            """, (run_type, started_at, datetime.now(), status, total, success, failed, quality_gate_passed, error_msg))
             run_id = cur.fetchone()[0]
         conn.commit()
         return run_id
@@ -122,8 +126,10 @@ def ingest_equities(
     Saves to parquet atomically.
     """
     started_at = datetime.now()
+    created_client = False
     if client is None:
         client = SmartAPIClient()
+        created_client = True
 
     instruments = load_target_instruments(limit=tokens_limit)
     total_inst = len(instruments)
@@ -205,6 +211,9 @@ def ingest_equities(
         logger.error(f"Ingest failed: {e}")
         log_ingest_run("equities", "failed", total_inst, success_count, fail_count, started_at, error_msg=str(e))
         raise
+    finally:
+        if created_client and client:
+            client.logout()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

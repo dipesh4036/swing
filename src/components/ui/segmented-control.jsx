@@ -34,7 +34,7 @@ export function SegmentedControl({
             }}
             className={`font-medium rounded-[4px] transition-all flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0 ${sizeClasses} ${
               isSelected
-                ? "bg-white text-[#3478F6] font-semibold shadow-xs"
+                ? "bg-white text-[#2563EB] font-semibold shadow-xs"
                 : "text-[#64748B] hover:text-[#17233B]"
             }`}
           >

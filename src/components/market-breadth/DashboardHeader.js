@@ -25,7 +25,7 @@ export function DashboardHeader({
         {/* Left: Product title, date & navigation tabs */}
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap min-w-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-[6px] bg-[#3478F6] flex items-center justify-center text-white shadow-xs shrink-0">
+            <div className="w-7 h-7 rounded-[6px] bg-[#2563EB] flex items-center justify-center text-white shadow-xs shrink-0">
               <Activity size={16} strokeWidth={2.5} />
             </div>
             <div className="min-w-0">
@@ -40,7 +40,7 @@ export function DashboardHeader({
 
           {/* Navigation Tab & Coverage Pill */}
           <div className="hidden xs:flex items-center gap-2 border-l border-[#E5EAF2] pl-3 sm:pl-4">
-            <span className="text-xs font-semibold px-2.5 sm:px-3 py-1 rounded-[6px] bg-[#EFF6FF] text-[#3478F6]">
+            <span className="text-xs font-semibold px-2.5 sm:px-3 py-1 rounded-[6px] bg-[#EFF6FF] text-[#2563EB]">
               Market Breadth
             </span>
             {coverage && (
@@ -50,7 +50,7 @@ export function DashboardHeader({
               >
                 <span className="text-[#94A3B8]">Coverage:</span>
                 <span className="font-semibold text-[#17233B]">{coverage.valid}/{coverage.total}</span>
-                <span className="text-[#3478F6] font-semibold">({coverage.pct}%)</span>
+                <span className="text-[#2563EB] font-semibold">({coverage.pct}%)</span>
               </span>
             )}
           </div>
@@ -67,7 +67,7 @@ export function DashboardHeader({
                   onUniverseChange(e.target.value);
                 }
               }}
-              className="appearance-none bg-[#F8FAFC] border border-[#E5EAF2] rounded-[6px] text-[11px] sm:text-xs font-medium text-[#17233B] pl-2.5 pr-7 sm:pr-8 py-1 h-7 sm:h-7.5 hover:border-[#CBD5E1] focus:outline-none focus:border-[#3478F6] focus:ring-1 focus:ring-[#3478F6] cursor-pointer shadow-2xs max-w-[150px] sm:max-w-none"
+              className="appearance-none bg-[#F8FAFC] border border-[#E5EAF2] rounded-[6px] text-[11px] sm:text-xs font-medium text-[#17233B] pl-2.5 pr-7 sm:pr-8 py-1 h-7 sm:h-7.5 hover:border-[#CBD5E1] focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] cursor-pointer shadow-2xs max-w-[150px] sm:max-w-none"
             >
               {STOCK_UNIVERSES.map((u) => (
                 <option key={u.id} value={u.id}>

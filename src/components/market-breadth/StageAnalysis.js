@@ -61,7 +61,7 @@ export function StageAnalysis({ data }) {
                 <span>{stg.name}</span>
               </div>
               <div className="text-[13px] font-bold text-[#17233B] tabular-nums mt-0.5">
-                {stg.pct.toFixed(1)}%
+                {stg.pct !== null && stg.pct !== undefined ? `${stg.pct.toFixed(1)}%` : "—"}
               </div>
               <div
                 className={`text-[10px] font-semibold tabular-nums mt-0.5 ${
@@ -76,8 +76,7 @@ export function StageAnalysis({ data }) {
                     : "text-[#64748B]"
                 }`}
               >
-                {isPos ? "+" : ""}
-                {stg.change1D} 1D
+                {stg.change1D !== null && stg.change1D !== undefined ? `${isPos ? "+" : ""}${stg.change1D} 1D` : "—"}
               </div>
             </div>
           );

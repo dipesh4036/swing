@@ -19,8 +19,8 @@ export function StageComparisonChart({ data = [] }) {
 
         {/* Legend with latest values */}
         <div className="flex items-center gap-3 text-xs font-semibold">
-          <span className="flex items-center gap-1.5 text-[#3478F6]">
-            <span className="w-2 h-2 rounded-xs bg-[#3478F6]" />
+          <span className="flex items-center gap-1.5 text-[#2563EB]">
+            <span className="w-2 h-2 rounded-xs bg-[#2563EB]" />
             Stage 2: {latest?.stage2 !== null && latest?.stage2 !== undefined ? `${latest.stage2.toFixed(1)}%` : "—"}
           </span>
           <span className="flex items-center gap-1.5 text-[#F05283]">
@@ -38,7 +38,7 @@ export function StageComparisonChart({ data = [] }) {
           {
             key: "stage2",
             name: "Stage 2 (Uptrend)",
-            color: "#3478F6",
+            color: "#2563EB",
             fill: true,
             strokeWidth: 1.75,
           },

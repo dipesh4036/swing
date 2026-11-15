@@ -1,0 +1,85 @@
+name: Market Breadth Pipeline
+
+on:
+  schedule:
+    # Daily post-market close: 11:30 UTC (17:00 IST) weekdays
+    - cron: "30 11 * * 1-5"
+    # Catch-up run: 15:30 UTC (21:00 IST) weekdays
+    - cron: "30 15 * * 1-5"
+    # Weekly full re-fetch: 02:00 UTC Saturdays
+    - cron: "0 2 * * 6"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Pipeline command to execute"
+        required: true
+        default: "daily"
+        type: choice
+        options:
+          - daily
+          - catch-up
+          - weekly
+          - recompute-all
+          - backfill
+          - trim
+          - test-connection
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-breadth-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      PIN: ${{ secrets.PIN }}
+      TOTP_SECRET: ${{ secrets.TOTP_SECRET }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPO: ${{ github.repository }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      EQUITY_PARQUET_PATH: "data/equity_ohlcv.parquet"
+      RETENTION_YEARS: "3"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+
+      - name: Determine Pipeline Command
+        id: cmd
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CMD="${{ github.event.inputs.command }}"
+          elif [ "${{ github.event.schedule }}" = "0 2 * * 6" ]; then
+            CMD="weekly"
+          elif [ "${{ github.event.schedule }}" = "30 15 * * 1-5" ]; then
+            CMD="catch-up"
+          else
+            CMD="daily"
+          fi
+          echo "command=$CMD" >> $GITHUB_OUTPUT
+          echo "Selected pipeline command: $CMD"
+
+      - name: Execute Pipeline
+        run: |
+          CMD="${{ steps.cmd.outputs.command }}"
+          echo "Starting execution: python -m pipeline.cli $CMD"
+          python -m pipeline.cli "$CMD"

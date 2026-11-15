@@ -47,7 +47,7 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
       ? "More highs than lows"
       : "More lows than highs";
 
-  const isPositive = (liveNet ?? 0) >= 0;
+  const isPositive = liveNet !== null && liveNet !== undefined ? liveNet >= 0 : true;
 
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
@@ -77,7 +77,7 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
           <div className="flex items-baseline gap-1.5">
             <span
               className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
-                isPositive ? "text-[#3478F6]" : "text-[#F05283]"
+                isPositive ? "text-[#2563EB]" : "text-[#F05283]"
               }`}
             >
               {liveNet !== null && liveNet !== undefined ? `${liveNet > 0 ? "+" : ""}${liveNet}` : "—"}
@@ -115,7 +115,7 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
           {
             key: "net",
             name: `Net ${period} Highs`,
-            color: isPositive ? "#3478F6" : "#F05283",
+            color: isPositive ? "#2563EB" : "#F05283",
             fill: true,
             strokeWidth: 1.75,
           },

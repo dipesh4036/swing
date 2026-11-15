@@ -50,201 +50,167 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
   const performance = useMemo(() => data?.performance || {}, [data]);
   const marketRegime = useMemo(() => data?.marketRegime || null, [data]);
   const coverage = useMemo(() => data?.coverage || null, [data]);
+  const rebasedSeries = useMemo(() => data?.rebasedSeries || {}, [data]);
 
-  // 1. Format Market Read 8 Indicators & Weinstein Stage Analysis
+  // 1. Format Market Read Six Indicators & Weinstein Stage Analysis (Spec 4.6 & 4.8)
   const marketRead = useMemo(() => {
     if (!keyMetrics || history.length === 0) {
       return null;
     }
 
-    const { advanceDecline, movingAverages, highsLows, breakouts: brk, weinstein } = keyMetrics;
-    const adv = advanceDecline?.advances ?? 0;
-    const dec = advanceDecline?.declines ?? 0;
-    const p20 = movingAverages?.pctAbove20ema;
-    const p50 = movingAverages?.pctAbove50sma;
-    const p200 = movingAverages?.pctAbove200sma;
-    const net20d = highsLows?.net20d ?? 0;
-    const net52w = highsLows?.net52w ?? 0;
-    const highs52w = highsLows?.highs52w ?? 0;
-    const lows52w = highsLows?.lows52w ?? 0;
+    const { weinstein } = keyMetrics;
 
-    // 1. Momentum (Daily flow)
-    const isPosMom = adv >= dec * 1.2;
-    const isNegMom = dec >= adv * 1.2;
-    const momentum = {
-      id: "momentum",
-      name: "Momentum",
-      status: isPosMom ? "Positive" : isNegMom ? "Negative" : "Neutral",
-      tone: isPosMom ? "positive" : isNegMom ? "negative" : "neutral",
-      description: isPosMom
-        ? `Buying is strong: ${adv.toLocaleString("en-IN")} stocks rising vs ${dec.toLocaleString("en-IN")} falling.`
-        : isNegMom
-        ? `Selling pressure: ${dec.toLocaleString("en-IN")} stocks falling vs ${adv.toLocaleString("en-IN")} rising.`
-        : `Market balanced: ${adv.toLocaleString("en-IN")} rising vs ${dec.toLocaleString("en-IN")} falling.`,
+    // Spec 4.8: Display names and descriptions for the six indicators
+    const INDICATOR_METADATA = {
+      long_term: {
+        name: "Long-term Trend",
+        metric: "Nifty 500 vs 200 SMA",
+        positiveDesc: "Nifty 500 is trading above its 200 SMA; primary trend is intact.",
+        negativeDesc: "Nifty 500 is trading below its 200 SMA; defensive posture warranted.",
+        neutralDesc: "Long-term trend hovering near 200 SMA.",
+      },
+      medium_term: {
+        name: "Medium-term Trend",
+        metric: "Nifty 500 vs 50 SMA",
+        positiveDesc: "Nifty 500 is above its 50-day average; intermediate trend is upward.",
+        negativeDesc: "Nifty 500 is below its 50-day average; intermediate selling pressure.",
+        neutralDesc: "Medium-term trend balanced near 50 SMA.",
+      },
+      short_term: {
+        name: "Short-term Momentum",
+        metric: "Nifty 500 vs 20 EMA",
+        positiveDesc: "Short-term momentum is positive above the 20 EMA.",
+        negativeDesc: "Short-term momentum is weak below the 20 EMA.",
+        neutralDesc: "Short-term price action compressing around 20 EMA.",
+      },
+      ad_momentum: {
+        name: "A/D Momentum",
+        metric: "20-Day A/D Ratio",
+        positiveDesc: "Advancers leading decliners (20D ratio ≥ 1.05); demand expanding.",
+        negativeDesc: "Decliners leading advancers (20D ratio ≤ 0.95); supply dominant.",
+        neutralDesc: "Advance/decline breadth neutral (ratio between 0.95 and 1.05).",
+      },
+      highs_vs_lows: {
+        name: "52-Week Highs / Lows",
+        metric: "Net 52-Week Expansion",
+        positiveDesc: "New 52-week highs exceeding 52-week lows; strong expansion.",
+        negativeDesc: "New 52-week lows outnumbering highs; structural contraction.",
+        neutralDesc: "New highs and lows balanced across the universe.",
+      },
+      participation: {
+        name: "Market Participation",
+        metric: "% Stocks Above 50 SMA",
+        positiveDesc: "Healthy breadth: ≥50% of stocks above their 50 SMA.",
+        negativeDesc: "Weak breadth: <40% of stocks above their 50 SMA.",
+        neutralDesc: "Moderate breadth: 40%–50% of stocks above their 50 SMA.",
+      },
     };
 
-    // 2. Short-term (20 EMA trend)
-    const isShortUp = p20 !== null && p20 >= 50 && net20d >= 0;
-    const shortTerm = {
-      id: "short-term",
-      name: "Short-term",
-      status: isShortUp ? "Up" : "Down",
-      tone: isShortUp ? "positive" : "negative",
-      description: p20 !== null
-        ? isShortUp
-          ? `Short-term strength: ${p20.toFixed(1)}% of stocks trading above 20-day average.`
-          : `Short-term weakness: only ${p20.toFixed(1)}% of stocks above 20-day average.`
-        : "Insufficient historical data for 20-day average.",
-    };
+    const rawIndicators = marketRegime?.readIndicators || [];
+    const indicators = rawIndicators.map((ind) => {
+      const meta = INDICATOR_METADATA[ind.id] || {
+        name: ind.id,
+        metric: "",
+        positiveDesc: "",
+        negativeDesc: "",
+        neutralDesc: "",
+      };
+      const status = ind.status || "Neutral";
+      const tone =
+        status === "Positive"
+          ? "positive"
+          : status === "Negative"
+          ? "negative"
+          : "neutral";
+      const description =
+        status === "Positive"
+          ? meta.positiveDesc
+          : status === "Negative"
+          ? meta.negativeDesc
+          : meta.neutralDesc;
 
-    // Coexistence explanation between daily momentum & short-term participation
-    let divergenceNote = null;
-    if (isNegMom && isShortUp) {
-      divergenceNote =
-        "Negative daily momentum and positive short-term participation coexist because they measure different things: daily momentum reflects single-session net advancers/decliners, whereas short-term participation measures 20-day moving average positioning. This pattern is common during routine pullbacks within an ongoing uptrend.";
-    } else if (isPosMom && !isShortUp) {
-      divergenceNote =
-        "Positive daily momentum alongside cautious short-term participation indicates a single-session bounce or short-covering rally that has not yet reclaimed 20-day trend lines.";
-    }
+      return {
+        id: ind.id,
+        name: meta.name,
+        metric: meta.metric,
+        status,
+        tone,
+        value: ind.value,
+        description,
+      };
+    });
 
-    // 3. Market Sentiment Score
-    const regimeScore = marketRegime?.score ?? null;
-    const regimeStatus = marketRegime?.status ?? "—";
-    const sentimentScore = {
-      id: "sentiment",
-      name: "Market sentiment score",
-      status: regimeScore !== null ? `${regimeScore}/100 · ${regimeStatus}` : "—",
-      tone:
-        regimeScore !== null
-          ? regimeScore >= 60
-            ? "positive"
-            : regimeScore <= 40
-            ? "negative"
-            : "warning"
-          : "neutral",
-      description:
-        "Overall bullish/bearish market condition derived from moving-average breadth, intermediate trend, and volume distribution.",
-    };
+    const divergenceNote =
+      "Negative daily momentum and positive short-term participation can coexist naturally: one measures single-session buying/selling flow, while the other measures multi-day structural holding power above moving averages.";
 
-    // 4. 52-week Highs / Lows (Long-term market strength)
-    const is52wPositive = net52w > 0;
-    const highsLows52w = {
-      id: "highs-lows-52w",
-      name: "52-week highs/lows",
-      status:
-        highsLows?.net52w !== null && highsLows?.net52w !== undefined
-          ? `${net52w > 0 ? "+" : ""}${net52w} (${highs52w}H / ${lows52w}L)`
-          : "—",
-      tone: is52wPositive ? "positive" : net52w < 0 ? "negative" : "neutral",
-      description:
-        "Long-term market strength. Net 52-week highs demonstrate broad institutional expansion; net 52-week lows signal structural distribution.",
-    };
-
-    // 5. Big trend (200 DMA)
-    const isBull = p200 !== null && p200 >= 50;
-    const isBear = p200 !== null && p200 < 35;
-    const bigTrend = {
-      id: "big-trend",
-      name: "Big trend",
-      status: isBull ? "Bullish" : isBear ? "Bearish" : "Neutral",
-      tone: isBull ? "positive" : isBear ? "negative" : "neutral",
-      description: p200 !== null
-        ? isBull
-          ? `Long-term healthy: ${p200.toFixed(1)}% of stocks above their 200 DMA.`
-          : isBear
-          ? `Long-term defensive: majority of stocks below their 200 DMA.`
-          : `The bigger picture is split: neither buyers nor sellers in complete control.`
-        : "Insufficient historical data for 200 DMA.",
-    };
-
-    // 6. Breakouts
-    const isBrkWorking = (brk?.breakouts20d ?? 0) >= (brk?.breakdowns20d ?? 0);
-    const breakouts = {
-      id: "breakouts",
-      name: "Breakouts",
-      status: isBrkWorking ? "Working" : "Failing",
-      tone: isBrkWorking ? "positive" : "negative",
-      description: isBrkWorking
-        ? `Breakouts are working: favorable follow-through on volume expansion.`
-        : `Breakouts are struggling: higher breakdown rate; wait for volume confirmation.`,
-    };
-
-    // 7. Overdone?
-    const isOverbought = p20 !== null && p20 > 80;
-    const isOversold = p20 !== null && p20 < 25;
-    const overdone = {
-      id: "overdone",
-      name: "Overdone?",
-      status: isOverbought ? "Overbought" : isOversold ? "Oversold" : "Normal",
-      tone: isOverbought || isOversold ? "warning" : "neutral",
-      description: isOverbought
-        ? `Overstretched to the upside: exercise discipline on chasing extended stocks.`
-        : isOversold
-        ? `Oversold territory: watch for early accumulation and base reversals.`
-        : `Not overdone: market breadth within healthy historical boundaries.`,
-    };
-
-    // 8. Leadership
-    const nf50Chg = rawIndices.nifty50?.pctChange ?? 0;
-    const nf500Chg = rawIndices.nifty500?.pctChange ?? 0;
-    const isLargeCapLeading = nf50Chg > nf500Chg;
-    const leadership = {
-      id: "leadership",
-      name: "Leadership",
-      status: isLargeCapLeading ? "Large caps lead" : "Broad market lead",
-      tone: "neutral",
-      description: isLargeCapLeading
-        ? `Big index heavyweights leading; mid and small caps lagging.`
-        : `Broad market outperforming; mid and small caps showing relative strength.`,
-    };
-
-    // Weinstein Stage Analysis
-    const totalStocks = adv + dec + (advanceDecline?.unchanged ?? 0);
-    const prevHistory = history.length >= 2 ? history[history.length - 2] : null;
-
-    const s1 = weinstein?.stage1 ?? 0;
-    const s2 = weinstein?.stage2 ?? (p50 ?? 0);
-    const s3 = weinstein?.stage3 ?? 0;
-    const s4 = weinstein?.stage4 ?? Math.max(0, 100 - s2 - s1 - s3);
-
-    const prevS2 = prevHistory?.pctAbove50sma ?? s2;
-    const diffS2 = Math.round((s2 - prevS2) * (totalStocks / 100));
+    // Weinstein Stage Analysis per Spec 4.6
+    const totalStocks = coverage?.valid || null;
+    const s1 = weinstein?.stage1 ?? null;
+    const s2 = weinstein?.stage2 ?? null;
+    const s3 = weinstein?.stage3 ?? null;
+    const s4 = weinstein?.stage4 ?? null;
+    const change1D = weinstein?.change1D || null;
 
     const stageAnalysis = {
       totalStocks,
-      coverage: coverage || {
-        valid: totalStocks,
-        total: totalStocks,
-        pct: 100,
-        excludedReason: "",
-      },
-      timeframe: "150-day SMA",
+      coverage: coverage || null,
+      timeframe: "150-day SMA + 20-session slope",
       stages: [
-        { id: "base", name: "Base", stageNum: 1, pct: s1, change1D: 0, color: "#94A3B8" },
-        { id: "uptrend", name: "Uptrend", stageNum: 2, pct: s2, change1D: diffS2, color: "#2563EB" },
-        { id: "top", name: "Top", stageNum: 3, pct: s3, change1D: 0, color: "#F59E0B" },
-        { id: "downtrend", name: "Downtrend", stageNum: 4, pct: s4, change1D: -diffS2, color: "#F43F5E" },
+        {
+          id: "base",
+          name: "Stage 1: Base",
+          stageNum: 1,
+          pct: s1,
+          change1D: change1D?.stage1 ?? null,
+          count: weinstein?.counts?.stage1 ?? null,
+          color: "#94A3B8",
+        },
+        {
+          id: "uptrend",
+          name: "Stage 2: Uptrend",
+          stageNum: 2,
+          pct: s2,
+          change1D: change1D?.stage2 ?? null,
+          count: weinstein?.counts?.stage2 ?? null,
+          color: "#2563EB",
+        },
+        {
+          id: "top",
+          name: "Stage 3: Top",
+          stageNum: 3,
+          pct: s3,
+          change1D: change1D?.stage3 ?? null,
+          count: weinstein?.counts?.stage3 ?? null,
+          color: "#F59E0B",
+        },
+        {
+          id: "downtrend",
+          name: "Stage 4: Downtrend",
+          stageNum: 4,
+          pct: s4,
+          change1D: change1D?.stage4 ?? null,
+          count: weinstein?.counts?.stage4 ?? null,
+          color: "#F43F5E",
+        },
       ],
+      unclassifiedCount: weinstein?.counts?.unclassified ?? null,
     };
 
     return {
-      indicators: [
-        sentimentScore,
-        momentum,
-        shortTerm,
-        highsLows52w,
-        bigTrend,
-        breakouts,
-        overdone,
-        leadership,
-      ],
+      indicators,
       divergenceNote,
       stageAnalysis,
     };
-  }, [keyMetrics, history, rawIndices, marketRegime, coverage]);
+  }, [keyMetrics, history, marketRegime, coverage]);
 
-  // 2. Format Market Participation chart series
+  // 2. Format Market Participation chart series with real rebased benchmark per Spec 4.11
   const participationData = useMemo(() => {
+    const benchmarkList = rebasedSeries?.benchmark || [];
+    const benchmarkMap = {};
+    for (const b of benchmarkList) {
+      benchmarkMap[b.date] = b.rebased;
+    }
+
     return history.map((h) => ({
       date: formatShortDate(h.date),
       rawDate: h.date,
@@ -252,9 +218,9 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
       above20: h.pctAbove20ema,
       above50: h.pctAbove50sma,
       above200: h.pctAbove200sma,
-      benchmark: 50,
+      benchmark: benchmarkMap[h.date] ?? null,
     }));
-  }, [history]);
+  }, [history, rebasedSeries]);
 
   const participationStats = useMemo(() => {
     const cur = keyMetrics?.movingAverages?.pctAbove20ema;
@@ -262,7 +228,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
       return { currentPct: null, status: "—", weeklyChangePts: null };
     }
     const prev5 = history.length >= 6 ? history[history.length - 6]?.pctAbove20ema : null;
-    const diff = prev5 !== null && prev5 !== undefined ? cur - prev5 : 0;
+    const diff = prev5 !== null && prev5 !== undefined ? cur - prev5 : null;
     const status = cur >= 70 ? "Broad" : cur >= 50 ? "Moderate" : "Narrow";
     return {
       currentPct: cur,
@@ -271,51 +237,58 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     };
   }, [keyMetrics, history]);
 
-  // 3. Format Stage 2 vs Stage 4 comparison series
+  // 3. Real Stage 2 vs Stage 4 comparison series (Spec 4.6: no fabricated values)
   const stageComparisonData = useMemo(() => {
-    return history.map((h) => {
-      const s2 = h.pctAbove50sma;
-      const s4 = s2 !== null ? Math.max(0, 100 - s2 - 15) : null;
-      return {
-        date: formatShortDate(h.date),
-        stage2: s2,
-        stage4: s4,
-      };
-    });
+    return history.map((h) => ({
+      date: formatShortDate(h.date),
+      stage2: h.stage2Pct,
+      stage4: h.stage4Pct,
+    }));
   }, [history]);
 
-  // 4. Format Institutional Flows
+  // 4. Real Institutional Flows (Spec 4.7: real 22 sessions only, no fabricated values)
   const institutionalFlows = useMemo(() => {
-    if (!rawFlows) return null;
-    const lastDate = formatDayMonth(rawFlows.date);
+    if (!rawFlows || !rawFlows.sessions || rawFlows.sessions.length === 0) return null;
+    const realSessions = rawFlows.sessions;
+    const lastSession = realSessions[realSessions.length - 1];
+    const lastDate = lastSession?.date ? formatDayMonth(lastSession.date) : "—";
 
-    // Create 22-session bar representation
-    const fiiSessions = history.slice(-22).map((h, i) => ({
+    const fiiSessions = realSessions.map((s, i) => ({
       session: i + 1,
-      date: formatShortDate(h.date),
-      val: i === 21 ? (rawFlows.fiiNet ?? 0) : ((h.advances - h.declines) * 2.5),
+      date: formatShortDate(s.date),
+      val: s.fiiNet,
     }));
 
-    const diiSessions = history.slice(-22).map((h, i) => ({
+    const diiSessions = realSessions.map((s, i) => ({
       session: i + 1,
-      date: formatShortDate(h.date),
-      val: i === 21 ? (rawFlows.diiNet ?? 0) : -((h.advances - h.declines) * 1.8),
+      date: formatShortDate(s.date),
+      val: s.diiNet,
     }));
+
+    const fiiMonthNet = fiiSessions.reduce(
+      (sum, s) => (s.val !== null ? sum + s.val : sum),
+      0
+    );
+    const diiMonthNet = diiSessions.reduce(
+      (sum, s) => (s.val !== null ? sum + s.val : sum),
+      0
+    );
 
     return {
       date: lastDate,
+      sessionsAvailable: rawFlows.fiiDiiSessionsAvailable || realSessions.length,
       fii: {
-        dailyNetCr: rawFlows.fiiNet,
-        monthNetCr: fiiSessions.reduce((sum, s) => sum + s.val, 0),
+        dailyNetCr: lastSession ? lastSession.fiiNet : null,
+        monthNetCr: Math.round(fiiMonthNet * 100) / 100,
         sessions: fiiSessions,
       },
       dii: {
-        dailyNetCr: rawFlows.diiNet,
-        monthNetCr: diiSessions.reduce((sum, s) => sum + s.val, 0),
+        dailyNetCr: lastSession ? lastSession.diiNet : null,
+        monthNetCr: Math.round(diiMonthNet * 100) / 100,
         sessions: diiSessions,
       },
     };
-  }, [rawFlows, history]);
+  }, [rawFlows]);
 
   // 5. Format Highs and Lows for Institutional Activity card
   const highsLows = useMemo(() => {
@@ -325,9 +298,9 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     const sessions = history.slice(-22).map((h, i) => ({
       session: i + 1,
       date: formatShortDate(h.date),
-      highs: h.highs20d ?? 0,
-      lows: h.lows20d ?? 0,
-      net: h.netHighs20d ?? 0,
+      highs: h.highs20d,
+      lows: h.lows20d,
+      net: h.netHighs20d,
     }));
 
     return {
@@ -340,7 +313,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
 
   // 6. Format Indices list for IndicesSection
   const formattedIndices = useMemo(() => {
-    const list = [
+    return [
       {
         id: "nifty50",
         name: "NIFTY 50",
@@ -406,7 +379,6 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
         subtext: "Crude oil benchmark",
       },
     ];
-    return list;
   }, [rawIndices, rawMacro]);
 
   return {
@@ -414,6 +386,7 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     isLoading,
     error,
     asOfDate,
+    lastUpdatedAt: data?.lastUpdatedAt || data?.meta?.lastUpdatedAt || null,
     coverage,
     marketRegime,
     keyMetrics,
@@ -426,5 +399,6 @@ export function useMarketBreadth(universe = "nifty500", period = "1Y") {
     highsLows,
     formattedIndices,
     performance,
+    rebasedSeries,
   };
 }

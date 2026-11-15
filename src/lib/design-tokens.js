@@ -6,8 +6,8 @@
 export const TOKENS = {
   colors: {
     // Brand & Primary
-    primary: "#3478F6",
-    primaryHover: "#2563EB",
+    primary: "#2563EB",
+    primaryHover: "#1D4ED8",
     primarySubtle: "#EFF6FF",
     primaryBorder: "#BFDBFE",
 
@@ -42,7 +42,7 @@ export const TOKENS = {
     warningBg: "#FEF7EC",
     warningBorder: "#FBDFA9",
 
-    info: "#3478F6",
+    info: "#2563EB",
     infoBg: "#EFF6FF",
     infoBorder: "#BFDBFE",
 
@@ -50,10 +50,10 @@ export const TOKENS = {
     border: "#E5EAF2",
     borderSubtle: "#F1F5F9",
     borderStrong: "#CBD5E1",
-    borderFocus: "#3478F6",
+    borderFocus: "#2563EB",
 
     // Market Cap & Index Specific
-    largeCap: "#3478F6",
+    largeCap: "#2563EB",
     midCap: "#F97316",
     smallCap: "#16A878",
     benchmark: "#94A3B8",

@@ -21,7 +21,7 @@ export function InstitutionalActivity({
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-[#E5EAF2]">
           <span className="text-xs font-bold text-[#17233B] uppercase tracking-wider">
-            FII / DII CASH · LAST 22 SESSIONS
+            FII / DII CASH · {flows?.sessionsAvailable ? `${flows.sessionsAvailable} of 22 sessions` : "LAST 22 SESSIONS"}
           </span>
           <span className="text-[10px] text-[#94A3B8] font-mono">₹ crore</span>
         </div>
@@ -36,7 +36,7 @@ export function InstitutionalActivity({
                 className={`tabular-nums font-bold ${
                   fii?.dailyNetCr !== null && fii?.dailyNetCr !== undefined
                     ? fii.dailyNetCr >= 0
-                      ? "text-[#3478F6]"
+                      ? "text-[#2563EB]"
                       : "text-[#F05283]"
                     : "text-[#64748B]"
                 }`}
@@ -53,7 +53,7 @@ export function InstitutionalActivity({
               xKey="session"
               dataKey="val"
               height={68}
-              posColor="#3478F6"
+              posColor="#2563EB"
               negColor="#F05283"
               tooltipFormatter={(val) => formatCrores(val)}
             />
@@ -65,7 +65,7 @@ export function InstitutionalActivity({
               className={`font-semibold tabular-nums ${
                 fii?.monthNetCr !== null && fii?.monthNetCr !== undefined
                   ? fii.monthNetCr >= 0
-                    ? "text-[#3478F6]"
+                    ? "text-[#2563EB]"
                     : "text-[#F05283]"
                   : "text-[#64748B]"
               }`}
@@ -85,7 +85,7 @@ export function InstitutionalActivity({
                 className={`tabular-nums font-bold ${
                   dii?.dailyNetCr !== null && dii?.dailyNetCr !== undefined
                     ? dii.dailyNetCr >= 0
-                      ? "text-[#3478F6]"
+                      ? "text-[#2563EB]"
                       : "text-[#F05283]"
                     : "text-[#64748B]"
                 }`}
@@ -102,7 +102,7 @@ export function InstitutionalActivity({
               xKey="session"
               dataKey="val"
               height={68}
-              posColor="#3478F6"
+              posColor="#2563EB"
               negColor="#F05283"
               tooltipFormatter={(val) => formatCrores(val)}
             />
@@ -114,7 +114,7 @@ export function InstitutionalActivity({
               className={`font-semibold tabular-nums ${
                 dii?.monthNetCr !== null && dii?.monthNetCr !== undefined
                   ? dii.monthNetCr >= 0
-                    ? "text-[#3478F6]"
+                    ? "text-[#2563EB]"
                     : "text-[#F05283]"
                   : "text-[#64748B]"
               }`}
@@ -140,7 +140,7 @@ export function InstitutionalActivity({
               className={`text-[17px] font-bold tabular-nums ${
                 highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
                   ? highsLows.latestNet >= 0
-                    ? "text-[#3478F6]"
+                    ? "text-[#2563EB]"
                     : "text-[#F05283]"
                   : "text-[#64748B]"
               }`}
@@ -169,7 +169,7 @@ export function InstitutionalActivity({
             xKey="session"
             dataKey="net"
             height={62}
-            posColor="#3478F6"
+            posColor="#2563EB"
             negColor="#F05283"
             tooltipFormatter={(val) => `${val > 0 ? "+" : ""}${val} net`}
           />

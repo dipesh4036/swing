@@ -21,7 +21,7 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
 
   const segmentStats = useMemo(() => {
     return [
-      { id: "large", label: "Large", pct: largePerf, color: "#3478F6" },
+      { id: "large", label: "Large", pct: largePerf, color: "#2563EB" },
       { id: "mid", label: "Mid", pct: midPerf, color: "#F97316" },
       { id: "small", label: "Small", pct: smallPerf, color: "#16A878" },
     ];
@@ -108,7 +108,7 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
         data={chartData}
         xKey="date"
         series={[
-          { key: "large", name: "Large", color: "#3478F6", strokeWidth: 1.75 },
+          { key: "large", name: "Large", color: "#2563EB", strokeWidth: 1.75 },
           { key: "mid", name: "Mid", color: "#F97316", strokeWidth: 1.5 },
           { key: "small", name: "Small", color: "#16A878", strokeWidth: 1.25 },
         ]}

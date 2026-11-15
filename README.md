@@ -1,98 +1,149 @@
 # 📊 Market Breadth Dashboard (Angel One SmartAPI Edition)
 
-An institutional-grade Market Breadth and Internals analytics terminal for Indian Equities (NSE). Built with Next.js 15 (App Router, React 19, Tailwind CSS, Recharts) and backed by a Python pipeline connecting Angel One SmartAPI, local Parquet storage, and Neon PostgreSQL.
+An institutional-grade Market Breadth and Market Internals analytics terminal for Indian Equities (NSE), designed to run **100% free forever** on standard developer tiers without degradation.
 
-**100% Real Data Guarantee:** Zero mock data, zero synthetic fallback numbers, zero invented multipliers, and zero hardcoded dates. Every number traces directly to real market data in PostgreSQL.
-
----
-
-## ✨ Features
-
-- **Market Read:** Real-time health metrics including Advances vs Declines, % of stocks above 20 EMA / 50 SMA / 200 SMA, and composite market regime status.
-- **Stan Weinstein Stage Distribution:** Real Stage 1 (Basing), Stage 2 (Advancing), Stage 3 (Topping), Stage 4 (Declining) distributions derived from price vs 150-day SMA and 20-session slope.
-- **Market Participation & Stage Curves:** Interactive multi-timeframe curves (1M / 3M / 6M / 1Y / YTD / ALL) with dynamic universe filtering (Nifty 500, Nifty 200, Nifty 100, Midcap 150, Smallcap 250, All Equities).
-- **Institutional Flows:** Daily and monthly net FII/DII cash flows fetched directly from official NSE feeds.
-- **Market Internals (6 Granular Analytics Cards):**
-  1. *New Highs − Lows* (20D / 52W dynamic toggle with real rolling price extremes)
-  2. *Advance / Decline* (20D / 40D rolling ratios / Cumulative A-D Line)
-  3. *4% Movers* (Daily net / 5D ratio / 10D ratio momentum expansion)
-  4. *Large vs Mid vs Small* (1M / 3M / YTD comparative returns from index closes)
-  5. *Breakouts − Breakdowns* (20D channel breakout/breakdown pace on volume $\ge 1.5\times$ 50-day average)
-  6. *Participation History* (20 EMA / 50 SMA / 200 SMA historical curves)
-- **Benchmark Indices & Macro:** Sparklines and returns for Nifty 50, Nifty 500, Midcap 150, Smallcap 250, India VIX, Brent Crude, and USD/INR.
+**Zero Mock Data Guarantee:** Zero mock data, zero synthetic fallback numbers, zero invented multipliers, and zero hardcoded dates. Every metric, chart series, and indicator traces directly to verified market data stored in Neon PostgreSQL and Parquet.
 
 ---
 
-## 🛠️ Architecture
+## 🏛️ System Architecture
+
+The system operates across three coordinated free-tier cloud platforms:
 
 ```
-GitHub Actions cron (Daily after NSE close ~18:30 IST)
-   └─ pipeline/ (Python 3.11+, pandas, pyarrow, psycopg2)
-        1. login   -> SmartAPI session (API_KEY + CLIENT_ID + PIN + TOTP)
-        2. ingest  -> daily candles per instrument -> equity_ohlcv.parquet (raw store)
-        3. adjust  -> Case A corporate-action handling (10-session overlapping diffing)
-        4. compute -> vectorised technical indicators -> per-universe aggregates
-        5. publish -> upsert aggregates + index/macro/flow data into Neon Postgres
-        6. trim    -> rolling 3-year retention (floor 504 sessions) on parquet
-Neon Postgres  <-  Next.js API route (/api/terminal/data)  <-  React Dashboard
+[ GitHub Actions (Public Repo - Free) ]
+   ├── Cron Schedules (UTC):
+   │     ├── Daily:    11:30 UTC (17:00 IST)
+   │     ├── Catch-up: 15:30 UTC (21:00 IST)
+   │     └── Weekly:   02:00 UTC Sat (Full re-fetch)
+   └── pipeline/
+         1. Download equity_ohlcv.parquet from GitHub Release 'data-latest'
+         2. Login via SmartAPI TOTP (read-only token session, max 2 re-auths)
+         3. Sync instruments, point-in-time constituents, indices, macro, FII/DII
+         4. Ingest daily equity candles (~2,300 active NSE equities)
+         5. Adjust (Case A 10-day overlapping diffing for splits/bonuses)
+         6. Quality Gate (>=1,500 candles, Nifty 50/500 present, <=5% fail rate)
+         7. Compute vectorised breadth across 7 universes (Weinstein, A/D, MAs)
+         8. Publish aggregates & macro to Neon PostgreSQL
+         9. Trim parquet to rolling 3-year retention (504-session floor)
+         10. Upload updated equity_ohlcv.parquet to GitHub Release asset
+                │
+                ▼ (Aggregates & Small Tables Only - Zero OHLCV)
+[ Neon PostgreSQL (Free Tier - 1 GB Storage) ]
+   ├── Tables: daily_market_breadth, daily_index_ohlcv, daily_macro_rates,
+   │           daily_fii_dii_cash, index_constituents, instruments, ingest_runs
+   ├── Storage Guard: 700 MB alert threshold + 90-day ingest_runs pruning
+   └── Database Roles:
+         ├── Admin/Owner: Read/Write used exclusively by GitHub Actions pipeline
+         └── web_readonly: SELECT-only role used by Vercel App (Migration 004)
+                │
+                ▼ (Max 2 pooled connections, 1 retry on sleep wake)
+[ Vercel Hobby (Free Tier) ]
+   ├── Frontend: Next.js 15 (App Router, React 19, Tailwind CSS, Recharts)
+   ├── Edge API Route: GET /api/terminal/data (public cache: s-maxage=900)
+   └── Health Check Cron: GET /api/health (runs 04:00 UTC daily via Vercel Cron)
 ```
-
-- **Parquet Raw Store (`data/equity_ohlcv.parquet`):** Holds 3 years of daily OHLCV across all active NSE equities.
-- **Neon PostgreSQL:** Stores aggregated daily breadth records across all 6 universes, index OHLCV, macro rates, institutional flows, constituents, and run audit logs.
-- **Rolling Retention (`RETENTION_YEARS = 3`):** Daily raw OHLCV stored in `equity_ohlcv.parquet` is trimmed to a rolling window of 3 years (with an enforced floor of at least 504 trading sessions). Older Neon results remain permanently in the database.
 
 ---
 
-## 🚀 Getting Started
+## 🛡️ Long-Term Operation on Free Plans
 
-### 1. Configure Environment
-Copy `.env.example` to `.env` and fill in credentials:
+### 1. Zero Raw Price Storage in Database
+- Neon PostgreSQL free tier provides **1 GB of storage**.
+- Raw minute/daily OHLCV candles are **never stored in PostgreSQL**. All raw history is maintained in an optimized `equity_ohlcv.parquet` file stored as an asset in the GitHub Release `data-latest`.
+- Neon stores only lightweight aggregates (`daily_market_breadth`), index closes, macro rates, institutional flows, and constituents (~50 MB per year).
+
+### 2. Ephemeral Storage with Safe Parquet Swapping
+Because GitHub Actions runners are ephemeral, `pipeline/store.py` manages safe remote state:
+- Downloads `equity_ohlcv.parquet` at the start of every run.
+- Uploads the new file under a temporary name (`equity_ohlcv.parquet.tmp`), verifies file size, and atomically swaps it with the production asset.
+- Automatically preserves the previous file as `equity_ohlcv.parquet.backup`.
+- If any step fails or the quality gate triggers, the upload is aborted to prevent store corruption.
+
+### 3. Neon Sleep & Connection Throttling
+- Neon free compute instances sleep after 5 minutes of inactivity.
+- The web app pool is strictly capped at **2 concurrent connections** (`max: 2`) with an `idleTimeoutMillis` of 30,000 ms to prevent connection exhaustion.
+- Queries use `queryWithRetry()`, which intercepts connection dropouts and automatically retries with a 1.5-second backoff while Neon wakes up.
+- Successful API responses are cached via `Cache-Control: public, s-maxage=900, stale-while-revalidate=3600`, reducing database wakeups.
+
+### 4. 60-Day GitHub Actions Inactivity Warning
+GitHub automatically disables scheduled workflows on public repositories if no commit activity occurs within **60 days**:
+- The `/api/health` check runs daily at 04:00 UTC via Vercel Cron.
+- It inspects the latest commit date on `main`. If no commits have been pushed for **45 days**, it sends a Telegram alert:
+  > *"⚠️ GitHub Actions will pause scheduled runs in X days. Push any commit to reset the timer."*
+- **How to reset:** Simply make a minor commit or manually click "Run workflow" in GitHub Actions.
+
+### 5. Neon 700 MB Storage Guard & Pruning
+- At the start of every daily run, the pipeline inspects `SELECT pg_database_size(current_database());`.
+- If storage exceeds **700 MB**, it issues a Telegram alert and prunes audit rows older than 90 days (`DELETE FROM ingest_runs WHERE started_at < NOW() - INTERVAL '90 days'`).
+- Historical breadth aggregates (`daily_market_breadth`) and FII/DII cash flows are tiny and are **never pruned**.
+
+### 6. Read-Only Database Role (`web_readonly`)
+- Migration `004_readonly_role.sql` provisions a dedicated `web_readonly` role with `SELECT` privileges only.
+- Even in the event of an API compromise, the production database cannot be dropped, modified, or written to from the web tier.
+
+---
+
+## 🔄 Disaster Recovery: Complete Database Reconstruction
+
+If the Neon PostgreSQL database is ever wiped, corrupted, or deleted, **no market data is lost**:
+
+1. Create a fresh Neon database and run the versioned schema migrations:
+   ```bash
+   psql $DATABASE_URL -f pipeline/migrations/001_initial_schema.sql
+   psql $DATABASE_URL -f pipeline/migrations/002_add_spec_columns.sql
+   psql $DATABASE_URL -f pipeline/migrations/003_constituents_versioning.sql
+   psql $DATABASE_URL -f pipeline/migrations/004_readonly_role.sql
+   ```
+2. Reconstruct the entire database directly from the Parquet store without touching Angel One:
+   ```bash
+   python -m pipeline.cli recompute-all
+   ```
+   This command loads `equity_ohlcv.parquet` from the latest release, re-evaluates all Weinstein stages, moving averages, highs/lows, and regime rules for the past 3 years, and publishes complete breadth aggregates to Neon in minutes.
+
+---
+
+## ⚡ CLI Commands
+
+The pipeline CLI (`pipeline/cli.py`) provides commands for maintenance and automated cron execution:
+
 ```bash
-cp .env.example .env
-```
-Required credentials:
-- `DATABASE_URL`: Neon PostgreSQL connection string.
-- `API_KEY`, `CLIENT_ID`, `PIN`, `TOTP_SECRET`: Angel One SmartAPI credentials (read-only market data access).
+# Test Angel One SmartAPI login, TOTP generation, and candle fetch
+python -m pipeline.cli test-connection
 
-### 2. Install Dependencies
+# Daily execution (sync -> ingest -> adjust -> quality gate -> compute -> publish -> trim)
+python -m pipeline.cli daily
+
+# Catch-up run (re-runs daily sequence for late exchange data or failed runs)
+python -m pipeline.cli catch-up
+
+# Weekly full re-fetch (requests full 3-year history, exports breadth backup, prunes dated assets)
+python -m pipeline.cli weekly
+
+# Full recompute from local or downloaded parquet without calling Angel One API
+python -m pipeline.cli recompute-all
+
+# Manual parquet trim (enforces 3-year rolling window with 504-session floor)
+python -m pipeline.cli trim
+```
+
+---
+
+## 🧪 Testing
+
+The test suite validates trim floors, quality gates, Case A adjustments, 4% mover filters, Weinstein stages, and storage safeguards using synthetic fixtures:
+
 ```bash
-npm install
-python3 -m venv .venv
+# Activate virtual environment
 source .venv/bin/activate
-pip install -r pipeline/requirements.txt # or pip install pandas pyarrow psycopg2-binary pyotp smartapi-python requests yfinance python-dotenv pytest
+
+# Run full test suite
+pytest tests/ -v
 ```
-
-### 3. Run Pipeline Ingestion & Compute
-```bash
-# Sync active instruments and official index constituents
-PYTHONPATH=. python3 pipeline/instruments.py
-
-# Sync index OHLCV (Nifty 50/500/Mid/Small/VIX), macro rates, and FII/DII cash
-PYTHONPATH=. python3 pipeline/indices_macro.py
-
-# Ingest daily equity candles into parquet
-PYTHONPATH=. python3 pipeline/ingest.py
-
-# Compute all vectorised breadth indicators and publish to Neon DB
-PYTHONPATH=. python3 pipeline/compute.py
-```
-
-### 4. Run Development Server
-```bash
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) to view the terminal.
 
 ---
 
-## 🧪 Testing & Verification
+## 📄 License & Specification Reference
 
-```bash
-# Run Next.js lint and typecheck
-npm run lint
-npx tsc --noEmit
-npm run build
-
-# Run pipeline pytest test suite
-PYTHONPATH=. pytest pipeline/tests -v
-```
+- Metrics specification: [docs/METRICS.md](docs/METRICS.md)
+- Design tokens & palette: [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)

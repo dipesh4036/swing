@@ -20,7 +20,7 @@ export function DivergingBarChart({
   xKey = "session",
   dataKey = "val",
   height = 50,
-  posColor = "#3478F6",
+  posColor = "#2563EB",
   negColor = "#F05283",
   showAxis = false,
   tooltipFormatter,

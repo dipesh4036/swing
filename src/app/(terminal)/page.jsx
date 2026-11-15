@@ -20,6 +20,7 @@ export default function MarketBreadthDashboardPage() {
     isLoading,
     error,
     asOfDate,
+    lastUpdatedAt,
     coverage,
     keyMetrics,
     history,
@@ -32,6 +33,21 @@ export default function MarketBreadthDashboardPage() {
     formattedIndices,
     performance,
   } = useMarketBreadth(selectedUniverse, selectedPeriod);
+
+  // Compute data freshness per Phase 5 spec
+  const updatedAgoText = React.useMemo(() => {
+    if (!asOfDate) return null;
+    let targetTime = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : null;
+    if (!targetTime || isNaN(targetTime)) {
+      targetTime = new Date(`${asOfDate}T10:00:00Z`).getTime();
+    }
+    const diffHours = Math.max(0, Math.floor((Date.now() - targetTime) / (1000 * 60 * 60)));
+    if (diffHours === 0) return "just now";
+    if (diffHours === 1) return "1 hour ago";
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return diffDays === 1 ? "1 day ago" : `${diffDays} days ago`;
+  }, [asOfDate, lastUpdatedAt]);
 
   return (
     <PageContainer>
@@ -114,6 +130,15 @@ export default function MarketBreadthDashboardPage() {
 
           {/* Bottom Section: Indices Row */}
           <IndicesSection indices={formattedIndices} />
+
+          {/* Data Freshness Footer (Phase 5) */}
+          {asOfDate && (
+            <footer className="pt-4 pb-6 text-center text-xs text-[#64748B] border-t border-[#E5EAF2] mt-6">
+              <span>
+                Data as of <strong className="font-semibold text-[#17233B]">{asOfDate}</strong> · Updated {updatedAgoText}
+              </span>
+            </footer>
+          )}
         </div>
       )}
     </PageContainer>

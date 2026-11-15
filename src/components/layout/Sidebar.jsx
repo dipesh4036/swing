@@ -61,7 +61,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
         {/* Brand / Logo Top Bar */}
         <div className="h-14 border-b border-[#E5EAF2] flex items-center justify-between px-3.5 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-[8px] bg-[#3478F6] text-white flex items-center justify-center font-bold text-sm tracking-wider shadow-xs shrink-0">
+            <div className="w-8 h-8 rounded-[8px] bg-[#2563EB] text-white flex items-center justify-center font-bold text-sm tracking-wider shadow-xs shrink-0">
               SW
             </div>
             {!collapsed && (
@@ -111,7 +111,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                     title={collapsed ? item.name : undefined}
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded-[6px] text-xs font-medium transition-all group relative ${
                       isCurrent
-                        ? "bg-[#EFF6FF] text-[#3478F6] font-semibold"
+                        ? "bg-[#EFF6FF] text-[#2563EB] font-semibold"
                         : "text-[#64748B] hover:text-[#17233B] hover:bg-[#F8FAFC]"
                     }`}
                   >
@@ -120,7 +120,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                       strokeWidth={isCurrent ? 2.25 : 1.75}
                       className={`shrink-0 ${
                         isCurrent
-                          ? "text-[#3478F6]"
+                          ? "text-[#2563EB]"
                           : "text-[#64748B] group-hover:text-[#17233B]"
                       }`}
                     />

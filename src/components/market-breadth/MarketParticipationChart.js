@@ -67,7 +67,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
         {/* Legend */}
         <div className="ml-auto hidden sm:flex items-center gap-3 text-[10px] text-[#64748B]">
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-0.5 bg-[#3478F6] inline-block rounded" />
+            <span className="w-2.5 h-0.5 bg-[#2563EB] inline-block rounded" />
             Participation
           </span>
           <span className="flex items-center gap-1">
@@ -85,7 +85,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
           {
             key: activeKey,
             name: "Participation",
-            color: "#3478F6",
+            color: "#2563EB",
             fill: true,
             strokeWidth: 2,
           },

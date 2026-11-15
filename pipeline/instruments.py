@@ -106,8 +106,10 @@ def sync_instruments(conn=None) -> int:
 
 def sync_constituents(effective_date: Optional[date] = None, conn=None) -> Dict[str, int]:
     """
-    Downloads Nifty 500, 200, 100, Midcap 150, Smallcap 250 constituents
-    and upserts into `index_constituents` table in Neon PostgreSQL.
+    Downloads Nifty 500, 200, 100, Midcap 150, Smallcap 250 constituents.
+    Diffs against previous active snapshot and maintains effective_from / effective_to versioning.
+    Removed stocks have effective_to set to eff_date and is_active set to False.
+    New stocks are inserted with effective_from = eff_date and is_active = True.
     """
     eff_date = effective_date or date.today()
     should_close = False
@@ -126,25 +128,86 @@ def sync_constituents(effective_date: Optional[date] = None, conn=None) -> Dict[
                     resp.raise_for_status()
                     df = pd.read_csv(io.StringIO(resp.text))
                     df.columns = [c.strip() for c in df.columns]
-                    
-                    # Usually column is 'Symbol'
+
+                    # Find Symbol and ISIN columns
                     sym_col = next((c for c in df.columns if c.lower() == "symbol"), None)
+                    isin_col = next((c for c in df.columns if c.lower() == "isin"), None)
+
                     if not sym_col:
                         logger.warning(f"Could not find Symbol column in {idx_name} CSV.")
                         continue
-                    
-                    symbols = [str(s).strip() for s in df[sym_col].dropna().tolist() if str(s).strip()]
-                    records = [(idx_name, sym, None, eff_date) for sym in symbols]
 
-                    insert_sql = """
-                    INSERT INTO index_constituents (index_name, symbol, weight, effective_date)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (index_name, symbol, effective_date) DO NOTHING;
-                    """
-                    from psycopg2.extras import execute_batch
-                    execute_batch(cur, insert_sql, records, page_size=500)
-                    results[idx_name] = len(records)
-                    logger.info(f"Upserted {len(records)} constituents for {idx_name}.")
+                    new_symbols_map = {}
+                    for _, row in df.iterrows():
+                        sym = str(row[sym_col]).strip()
+                        isin = str(row[isin_col]).strip() if isin_col and pd.notna(row[isin_col]) else None
+                        if sym:
+                            new_symbols_map[sym] = isin
+
+                    new_symbols = set(new_symbols_map.keys())
+
+                    # Query currently active symbols from index_constituents
+                    cur.execute("""
+                        SELECT symbol FROM index_constituents
+                        WHERE index_name = %s AND (is_active = TRUE OR effective_to IS NULL);
+                    """, (idx_name,))
+                    existing_active = {r[0] for r in cur.fetchall()}
+
+                    if not existing_active:
+                        # Initial load for this universe
+                        logger.info(f"Initial constituents load for {idx_name}: {len(new_symbols)} symbols.")
+                        insert_records = [
+                            (idx_name, sym, new_symbols_map.get(sym), eff_date, eff_date, None, True)
+                            for sym in new_symbols
+                        ]
+                        insert_sql = """
+                            INSERT INTO index_constituents (
+                                index_name, symbol, isin, effective_date, effective_from, effective_to, is_active
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (index_name, symbol, effective_date) DO UPDATE
+                            SET is_active = TRUE, effective_to = NULL;
+                        """
+                        from psycopg2.extras import execute_batch
+                        execute_batch(cur, insert_sql, insert_records, page_size=500)
+                        results[idx_name] = len(insert_records)
+                    else:
+                        # Diff against current snapshot
+                        added = new_symbols - existing_active
+                        removed = existing_active - new_symbols
+                        unchanged = new_symbols & existing_active
+
+                        logger.info(f"{idx_name} diff: {len(unchanged)} unchanged, {len(added)} added, {len(removed)} removed.")
+
+                        # Mark removed symbols as expired
+                        if removed:
+                            cur.execute("""
+                                UPDATE index_constituents
+                                SET effective_to = %s, is_active = FALSE
+                                WHERE index_name = %s AND symbol = ANY(%s) AND is_active = TRUE;
+                            """, (eff_date, idx_name, list(removed)))
+                            logger.info(f"Marked {len(removed)} removed symbols as expired (effective_to={eff_date}).")
+
+                        # Insert added symbols
+                        if added:
+                            insert_records = [
+                                (idx_name, sym, new_symbols_map.get(sym), eff_date, eff_date, None, True)
+                                for sym in added
+                            ]
+                            insert_sql = """
+                                INSERT INTO index_constituents (
+                                    index_name, symbol, isin, effective_date, effective_from, effective_to, is_active
+                                )
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (index_name, symbol, effective_date) DO UPDATE
+                                SET is_active = TRUE, effective_from = EXCLUDED.effective_from, effective_to = NULL;
+                            """
+                            from psycopg2.extras import execute_batch
+                            execute_batch(cur, insert_sql, insert_records, page_size=500)
+                            logger.info(f"Inserted {len(added)} new active constituents.")
+
+                        results[idx_name] = len(new_symbols)
+
                 except Exception as e:
                     logger.error(f"Error syncing constituents for {idx_name}: {e}")
         conn.commit()

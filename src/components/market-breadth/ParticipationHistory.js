@@ -33,7 +33,7 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
   const lines = useMemo(() => {
     if (period === "20D") {
       return [
-        { key: "above20", name: ">20 EMA", color: "#3478F6", strokeWidth: 2.2 },
+        { key: "above20", name: ">20 EMA", color: "#2563EB", strokeWidth: 2.2 },
         { key: "above50", name: ">50 SMA", color: "#E2E8F0", strokeWidth: 1 },
         { key: "above200", name: ">200 SMA", color: "#CBD5E1", strokeWidth: 1 },
       ];
@@ -54,7 +54,7 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
     }
     // "All"
     return [
-      { key: "above20", name: ">20 EMA", color: "#3478F6", strokeWidth: 1.75 },
+      { key: "above20", name: ">20 EMA", color: "#2563EB", strokeWidth: 1.75 },
       { key: "above50", name: ">50 SMA", color: "#F97316", strokeWidth: 1.5 },
       { key: "above200", name: ">200 SMA", color: "#16A878", strokeWidth: 1.25 },
     ];
@@ -85,7 +85,7 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
       {/* Pill Row showing current stats */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap min-w-0">
         <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3478F6] shrink-0" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] shrink-0" />
           <span className="text-[#64748B]">&gt;20 EMA:</span>
           <span className="text-[#17233B]">{pct20 !== null && pct20 !== undefined ? `${pct20.toFixed(1)}%` : "—"}</span>
         </span>

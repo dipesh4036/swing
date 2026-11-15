@@ -13,7 +13,7 @@ export function getDbPool() {
       ssl: {
         rejectUnauthorized: false,
       },
-      max: 10,
+      max: 2, // Max 2 pooled connections for Neon serverless free tier
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     });
@@ -21,3 +21,19 @@ export function getDbPool() {
   return pool;
 }
 
+export async function queryWithRetry(text, params, maxRetries = 1) {
+  const p = getDbPool();
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await p.query(text, params);
+    } catch (err) {
+      lastErr = err;
+      // If database is waking from idle sleep or connection timed out, wait 1s and retry once
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+  throw lastErr;
+}
