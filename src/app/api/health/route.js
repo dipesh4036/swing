@@ -27,13 +27,18 @@ async function sendTelegramAlert(text) {
 }
 
 export async function GET(request) {
-  // 1. Verify CRON_SECRET if set
+  // 1. Verify CRON_SECRET is configured; return 500 if unset to prevent unauthenticated access
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!cronSecret) {
+    return NextResponse.json(
+      { error: "Server misconfigured: CRON_SECRET environment variable is missing" },
+      { status: 500 }
+    );
+  }
+
+  const authHeader = request.headers.get("authorization");
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
