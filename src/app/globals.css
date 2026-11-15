@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * UNIFIED INSTITUTIONAL DESIGN SYSTEM
+ * Centralized Design Tokens & Typography for Indian Equities Analytics
+ */
+:root {
+  /* Layout & Geometry */
+  --shell-rail-w: 240px;
+  --shell-topbar-h: 56px;
+  --canvas-max-w: 100%;
+
+  /* Typography Fonts */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Surfaces */
+  --color-bg-page: #F8FAFC;
+  --color-bg-card: #FFFFFF;
+  --color-bg-secondary: #F8FAFC;
+  --color-bg-hover: #F1F5F9;
+  --color-bg-selected: #EFF6FF;
+
+  /* Legacy aliases for backward compatibility */
+  --color-bg: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F8FAFC;
+  --color-surface-3: #FFFFFF;
+  --color-surface-inset: #F1F5F9;
+
+  /* Text & Typography */
+  --color-text-primary: #172033;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+  --color-text-disabled: #CBD5E1;
+  --color-text-inverse: #FFFFFF;
+
+  --color-text: #172033;
+  --color-text-faint: #94A3B8;
+
+  /* Brand / Action Blue */
+  --color-primary: #3478F6;
+  --color-primary-hover: #2563EB;
+  --color-primary-subtle: #EFF6FF;
+  --color-accent: #3478F6;
+  --color-accent-hover: #2563EB;
+  --color-accent-tint: #EFF6FF;
+  --color-accent-border: #BFDBFE;
+
+  /* Financial Market Status */
+  --color-bullish: #16A878;
+  --color-bullish-bg: #E8F8F3;
+  --color-bullish-border: #B5ECD9;
+  --color-up: #16A878;
+  --color-up-text: #0E7C58;
+
+  --color-bearish: #F05283;
+  --color-bearish-bg: #FEF0F4;
+  --color-bearish-border: #FCCEDB;
+  --color-down: #F05283;
+  --color-down-text: #BE185D;
+
+  --color-neutral: #94A3B8;
+  --color-neutral-bg: #F1F5F9;
+  --color-warning: #E9A23B;
+  --color-warning-bg: #FEF7EC;
+
+  /* Borders */
+  --color-border: #E5EAF2;
+  --color-border-subtle: #F1F5F9;
+  --color-border-strong: #CBD5E1;
+
+  /* Radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Typography Utility Classes */
+.font-display {
+  font-family: var(--font-sans);
+  letter-spacing: -0.02em;
+}
+
+.font-numeral {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.font-code {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabular figures for all financial numerals & metrics */
+.tnum,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv01" 1, "cv02" 1;
+}
+
+/* Uppercase card labels tracking */
+.label-caps {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-page);
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
