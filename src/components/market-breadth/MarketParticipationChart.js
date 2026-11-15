@@ -98,7 +98,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
             strokeDasharray: "2 2",
           },
         ]}
-        height={165}
+        height={185}
         yDomain={[0, 100]}
         yUnit="%"
         referenceLines={[

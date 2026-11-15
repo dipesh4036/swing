@@ -112,7 +112,7 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
           { key: "mid", name: "Mid", color: "#F97316", strokeWidth: 1.5 },
           { key: "small", name: "Small", color: "#16A878", strokeWidth: 1.25 },
         ]}
-        height={95}
+        height={145}
       />
     </BaseCard>
   );

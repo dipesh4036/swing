@@ -50,7 +50,7 @@ export function StageComparisonChart({ data = [] }) {
             strokeWidth: 1.75,
           },
         ]}
-        height={150}
+        height={170}
         yDomain={[0, 70]}
         yUnit="%"
         referenceLines={[{ y: 35, color: "#E2E8F0", strokeDasharray: "2 2" }]}

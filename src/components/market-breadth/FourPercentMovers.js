@@ -139,7 +139,7 @@ export function FourPercentMovers({ keyMetrics, history = [] }) {
             strokeWidth: 1.75,
           },
         ]}
-        height={95}
+        height={145}
       />
     </BaseCard>
   );

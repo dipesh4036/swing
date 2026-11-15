@@ -138,7 +138,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
               ]
             : []),
         ]}
-        height={95}
+        height={145}
       />
     </BaseCard>
   );

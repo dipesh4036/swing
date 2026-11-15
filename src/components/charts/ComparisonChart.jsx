@@ -18,13 +18,15 @@ export function ComparisonChart({
   data = [],
   xKey = "date",
   lines = [],
-  height = 120,
+  series = [],
+  height = 140,
   referenceLines = [{ y: 0, color: "#E2E8F0" }],
   yUnit = "%",
   tooltipFormatter,
   className = "",
 }) {
   const [mounted, setMounted] = useState(false);
+  const chartLines = lines && lines.length > 0 ? lines : series || [];
 
   useEffect(() => {
     setMounted(true);
@@ -67,7 +69,7 @@ export function ComparisonChart({
               strokeDasharray={r.strokeDasharray || CHART_THEME.referenceLine.strokeDasharray}
             />
           ))}
-          {lines.map((l) => (
+          {chartLines.map((l) => (
             <Line
               key={l.key}
               type="monotone"

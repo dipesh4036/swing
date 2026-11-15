@@ -52,7 +52,7 @@ export function InstitutionalActivity({
               data={fii?.sessions || []}
               xKey="session"
               dataKey="val"
-              height={52}
+              height={68}
               posColor="#3478F6"
               negColor="#F05283"
               tooltipFormatter={(val) => formatCrores(val)}
@@ -101,7 +101,7 @@ export function InstitutionalActivity({
               data={dii?.sessions || []}
               xKey="session"
               dataKey="val"
-              height={52}
+              height={68}
               posColor="#3478F6"
               negColor="#F05283"
               tooltipFormatter={(val) => formatCrores(val)}
@@ -168,7 +168,7 @@ export function InstitutionalActivity({
             data={highsLows?.sessions || []}
             xKey="session"
             dataKey="net"
-            height={46}
+            height={62}
             posColor="#3478F6"
             negColor="#F05283"
             tooltipFormatter={(val) => `${val > 0 ? "+" : ""}${val} net`}

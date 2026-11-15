@@ -106,7 +106,7 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
         data={chartData}
         xKey="date"
         series={lines}
-        height={95}
+        height={145}
       />
     </BaseCard>
   );

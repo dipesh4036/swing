@@ -35,12 +35,12 @@ export function IndexCard({ item }) {
       </div>
 
       {/* Mini Sparkline Chart */}
-      <div className="h-8 w-full py-0.5 min-w-0">
+      <div className="h-9 w-full py-0.5 min-w-0">
         <SparklineChart
           data={sparkline}
           dataKey="val"
           color={sparkColor}
-          height={30}
+          height={34}
         />
       </div>
 
