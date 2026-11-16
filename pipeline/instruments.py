@@ -154,10 +154,10 @@ def sync_constituents(effective_date: Optional[date] = None, conn=None) -> Dict[
                     existing_active = {r[0] for r in cur.fetchall()}
 
                     if not existing_active:
-                        # Initial load for this universe
+                        # Initial baseline load for this universe (effective from start of history)
                         logger.info(f"Initial constituents load for {idx_name}: {len(new_symbols)} symbols.")
                         insert_records = [
-                            (idx_name, sym, new_symbols_map.get(sym), eff_date, eff_date, None, True)
+                            (idx_name, sym, new_symbols_map.get(sym), eff_date, date(2000, 1, 1), None, True)
                             for sym in new_symbols
                         ]
                         insert_sql = """

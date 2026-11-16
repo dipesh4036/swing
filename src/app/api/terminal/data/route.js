@@ -22,7 +22,7 @@ const PERIOD_SESSIONS = {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const universe = (searchParams.get("universe") || "nifty500").toLowerCase();
+    const universe = (searchParams.get("universe") || "all").toLowerCase();
     const period = (searchParams.get("period") || "1Y").toUpperCase();
 
     if (!VALID_UNIVERSES.includes(universe)) {

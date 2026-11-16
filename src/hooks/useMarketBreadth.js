@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { formatShortDate, formatDayMonth, formatTradeDate } from "@/lib/formatters";
 
-export function useMarketBreadth(universe = "nifty500", period = "1Y") {
+export function useMarketBreadth(universe = "all", period = "1Y") {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);

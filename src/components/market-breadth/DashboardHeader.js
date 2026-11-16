@@ -9,7 +9,7 @@ import { formatTradeDate } from "@/lib/formatters";
 export function DashboardHeader({
   activeTab = "breadth",
   onTabChange,
-  selectedUniverse = "nifty500",
+  selectedUniverse = "all",
   onUniverseChange,
   selectedPeriod = "1M",
   onPeriodChange,

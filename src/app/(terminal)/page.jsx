@@ -13,7 +13,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function MarketBreadthDashboardPage() {
   const [activeTab, setActiveTab] = useState("breadth");
-  const [selectedUniverse, setSelectedUniverse] = useState("nifty500");
+  const [selectedUniverse, setSelectedUniverse] = useState("all");
   const [selectedPeriod, setSelectedPeriod] = useState("1M");
 
   const {
