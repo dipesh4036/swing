@@ -62,7 +62,7 @@ SCREENER_PARAMS = {
     },
     "candle_stock_cap": 300,
     "retention_dates": 10,
-    "candle_window_sessions": 260,
+    "candle_window_sessions": 5000,
 }
 
 def to_date(val: Any) -> date:

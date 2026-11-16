@@ -162,7 +162,8 @@ export default function ScreenerPage() {
     async function loadChart() {
       try {
         const res = await fetch(
-          `/api/terminal/screener/chart?token=${selectedStock.token}&screener=${activeScreener}`
+          `/api/terminal/screener/chart?token=${selectedStock.token}&screener=${activeScreener}`,
+          { cache: "no-store" }
         );
         if (!res.ok) {
           const errJson = await res.json().catch(() => ({}));
