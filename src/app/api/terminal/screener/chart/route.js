@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
+import { fetchAllCandlesFromSmartAPI } from "@/lib/smartapi";
 
 const VALID_SCREENERS = [
   "stage2_breakout",
@@ -8,6 +9,39 @@ const VALID_SCREENERS = [
   "ipo_base",
   "ema50_pullback",
 ];
+
+/**
+ * Computes standard EMAs (10, 20, 50, 200) for a given chronological candle array.
+ */
+function attachEMAs(candles) {
+  const periods = [10, 20, 50, 200];
+  const multipliers = {
+    10: 2 / (10 + 1),
+    20: 2 / (20 + 1),
+    50: 2 / (50 + 1),
+    200: 2 / (200 + 1),
+  };
+
+  const currentEMA = { 10: null, 20: null, 50: null, 200: null };
+
+  return candles.map((c, i) => {
+    const res = { ...c };
+    for (const p of periods) {
+      if (i < p - 1) {
+        res[`ema_${p}`] = null;
+      } else if (i === p - 1) {
+        let sum = 0;
+        for (let j = 0; j < p; j++) sum += candles[j].close;
+        currentEMA[p] = sum / p;
+        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
+      } else {
+        currentEMA[p] = (c.close - currentEMA[p]) * multipliers[p] + currentEMA[p];
+        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
+      }
+    }
+    return res;
+  });
+}
 
 export async function GET(request) {
   try {
@@ -50,32 +84,33 @@ export async function GET(request) {
     const stockRow = stockRes.rows[0];
     const asOfStr = String(stockRow.trade_date);
 
-    // 2. Fetch candles stored for this token (last 260 sessions)
-    const candlesRes = await queryWithRetry(
-      `SELECT trade_date::text as trade_date, open, high, low, close, volume,
-              sma_10, sma_20, sma_50, sma_150, sma_200, ema_50
-       FROM screener_candles
-       WHERE token = $1
-       ORDER BY trade_date ASC;`,
-      [token]
-    );
+    // 2. Fetch all historical candles from Angel One SmartAPI (with 1-hour cache)
+    let rawCandles = await fetchAllCandlesFromSmartAPI(token);
 
-    const candles = candlesRes.rows.map((r) => ({
-      date: typeof r.trade_date === "string" ? r.trade_date.split("T")[0] : r.trade_date.toISOString().split("T")[0],
-      open: r.open !== null ? Number(r.open) : null,
-      high: r.high !== null ? Number(r.high) : null,
-      low: r.low !== null ? Number(r.low) : null,
-      close: Number(r.close),
-      volume: r.volume !== null ? Number(r.volume) : null,
-      sma_10: r.sma_10 !== null ? Number(r.sma_10) : null,
-      sma_20: r.sma_20 !== null ? Number(r.sma_20) : null,
-      sma_50: r.sma_50 !== null ? Number(r.sma_50) : null,
-      sma_150: r.sma_150 !== null ? Number(r.sma_150) : null,
-      sma_200: r.sma_200 !== null ? Number(r.sma_200) : null,
-      ema_50: r.ema_50 !== null ? Number(r.ema_50) : null,
-    }));
+    // Fallback to database screener_candles if SmartAPI is unavailable or returns empty
+    if (!rawCandles || rawCandles.length === 0) {
+      const candlesRes = await queryWithRetry(
+        `SELECT trade_date::text as trade_date, open, high, low, close, volume
+         FROM screener_candles
+         WHERE token = $1
+         ORDER BY trade_date ASC;`,
+        [token]
+      );
 
-    // 3. Compute 1M (21 sessions) & 3M (63 sessions) return and 20-session average volume from candles
+      rawCandles = candlesRes.rows.map((r) => ({
+        date: typeof r.trade_date === "string" ? r.trade_date.split("T")[0] : r.trade_date.toISOString().split("T")[0],
+        open: r.open !== null ? Number(r.open) : null,
+        high: r.high !== null ? Number(r.high) : null,
+        low: r.low !== null ? Number(r.low) : null,
+        close: Number(r.close),
+        volume: r.volume !== null ? Number(r.volume) : null,
+      }));
+    }
+
+    // 3. Attach EMAs (10, 20, 50, 200) to all candles
+    const candles = attachEMAs(rawCandles);
+
+    // 4. Compute 1M (21 sessions) & 3M (63 sessions) return and 20-session average volume from candles
     const n = candles.length;
     let ret1m = null;
     let ret3m = null;
@@ -122,7 +157,7 @@ export async function GET(request) {
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=900, stale-while-revalidate=3600",
+          "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
         },
       }
     );

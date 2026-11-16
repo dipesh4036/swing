@@ -23,6 +23,38 @@ function formatVolume(val) {
 }
 
 /**
+ * Computes standard EMAs (10, 20, 50, 200) for a candle array.
+ */
+function computeEMAs(candles) {
+  const periods = [10, 20, 50, 200];
+  const multipliers = {
+    10: 2 / (10 + 1),
+    20: 2 / (20 + 1),
+    50: 2 / (50 + 1),
+    200: 2 / (200 + 1),
+  };
+  const currentEMA = { 10: null, 20: null, 50: null, 200: null };
+
+  return candles.map((c, i) => {
+    const res = { ...c };
+    for (const p of periods) {
+      if (i < p - 1) {
+        res[`ema_${p}`] = null;
+      } else if (i === p - 1) {
+        let sum = 0;
+        for (let j = 0; j < p; j++) sum += candles[j].close;
+        currentEMA[p] = sum / p;
+        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
+      } else {
+        currentEMA[p] = (c.close - currentEMA[p]) * multipliers[p] + currentEMA[p];
+        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
+      }
+    }
+    return res;
+  });
+}
+
+/**
  * Aggregates daily candles into weekly candles (Monday-start).
  */
 function aggregateWeekly(dailyCandles) {
@@ -49,12 +81,6 @@ function aggregateWeekly(dailyCandles) {
         low: c.low,
         close: c.close,
         volume: c.volume || 0,
-        sma_10: c.sma_10,
-        sma_20: c.sma_20,
-        sma_50: c.sma_50,
-        sma_150: c.sma_150,
-        sma_200: c.sma_200,
-        ema_50: c.ema_50,
       };
     } else {
       currWeek.date = c.date;
@@ -62,12 +88,6 @@ function aggregateWeekly(dailyCandles) {
       currWeek.low = Math.min(currWeek.low, c.low !== null && c.low !== undefined ? c.low : c.close);
       currWeek.close = c.close;
       currWeek.volume += (c.volume || 0);
-      currWeek.sma_10 = c.sma_10;
-      currWeek.sma_20 = c.sma_20;
-      currWeek.sma_50 = c.sma_50;
-      currWeek.sma_150 = c.sma_150;
-      currWeek.sma_200 = c.sma_200;
-      currWeek.ema_50 = c.ema_50;
     }
   }
   if (currWeek) weeks.push(currWeek);
@@ -85,33 +105,31 @@ export default function ScreenerChart({
   const [timeframe, setTimeframe] = useState("D"); // "D" | "W"
   const [showRulesOverlay, setShowRulesOverlay] = useState(true);
   const [visibleMAs, setVisibleMAs] = useState({
-    sma_10: true,
-    sma_20: true,
-    sma_50: true,
-    sma_150: screenerId === "stage2_breakout" || screenerId === "vcp",
-    sma_200: true,
-    ema_50: screenerId === "ema50_pullback",
+    ema_10: true,
+    ema_20: true,
+    ema_50: true,
+    ema_200: true,
   });
   const [hoveredCandle, setHoveredCandle] = useState(null);
 
-  // Available MAs based on active screener
-  const availableMAs = useMemo(() => ({
-    sma_10: true,
-    sma_20: true,
-    sma_50: true,
-    sma_150: screenerId === "stage2_breakout" || screenerId === "vcp",
-    sma_200: true,
-    ema_50: screenerId === "ema50_pullback",
-  }), [screenerId]);
+  // EMA configs (Only EMAs: 10, 20, 50, 200 - SMA 150 removed)
+  const maConfigs = useMemo(() => [
+    { key: "ema_10", color: "#F97316", label: "EMA 10" },
+    { key: "ema_20", color: "#2563EB", label: "EMA 20" },
+    { key: "ema_50", color: "#EAB308", label: "EMA 50" },
+    { key: "ema_200", color: "#9333EA", label: "EMA 200" },
+  ], []);
 
-  // Aggregate candles and compute 20D volume SMA
+  // Aggregate candles and compute 20D volume SMA and EMAs
   const candles = useMemo(() => {
     if (!stockData?.candles || stockData.candles.length === 0) return [];
     const baseCandles = timeframe === "W"
       ? aggregateWeekly(stockData.candles)
       : stockData.candles;
 
-    return baseCandles.map((c, i, arr) => {
+    const withEMAs = computeEMAs(baseCandles);
+
+    return withEMAs.map((c, i, arr) => {
       let volSum = 0;
       const count = Math.min(20, i + 1);
       for (let j = i - count + 1; j <= i; j++) {
@@ -149,14 +167,7 @@ export default function ScreenerChart({
     return Math.round((vol / activeCandle.vol_sma_20) * 100);
   }, [activeCandle]);
 
-  const maConfigs = useMemo(() => [
-    { key: "sma_10", color: "#F97316", label: "SMA 10" },
-    { key: "sma_20", color: "#2563EB", label: "SMA 20" },
-    { key: "sma_50", color: "#EAB308", label: "SMA 50" },
-    { key: "sma_150", color: "#06B6D4", label: "SMA 150" },
-    { key: "sma_200", color: "#9333EA", label: "SMA 200" },
-    { key: "ema_50", color: "#F43F5E", label: "EMA 50" },
-  ], []);
+
 
   useEffect(() => {
     if (!chartContainerRef.current || candles.length === 0) return;
@@ -273,11 +284,14 @@ export default function ScreenerChart({
       panes[1].setStretchFactor(25);
     }
 
-    // 4. Moving Average Lines (Pane 0)
+    // 4. Moving Average Lines (Pane 0 - EMAs only: 10, 20, 50, 200)
     const highlightLines = stockData?.overlay?.highlight_lines || [];
     for (const ma of maConfigs) {
-      if (!availableMAs[ma.key] || !visibleMAs[ma.key]) continue;
-      const isHighlighted = highlightLines.includes(ma.key);
+      if (!visibleMAs[ma.key]) continue;
+      const isHighlighted =
+        highlightLines.includes(ma.key) ||
+        (ma.key === "ema_50" && highlightLines.includes("sma_50")) ||
+        (ma.key === "ema_200" && highlightLines.includes("sma_200"));
       const s = chart.addSeries(LineSeries, {
         color: ma.color,
         lineWidth: isHighlighted ? 2 : 1,
@@ -488,7 +502,7 @@ export default function ScreenerChart({
         chartInstanceRef.current = null;
       }
     };
-  }, [candles, visibleMAs, availableMAs, showRulesOverlay, maConfigs, stockData?.overlay, timeframe]);
+  }, [candles, visibleMAs, showRulesOverlay, maConfigs, stockData?.overlay, timeframe]);
 
   if (loading) {
     return (
@@ -623,9 +637,9 @@ export default function ScreenerChart({
 
       {/* ── Chart Container with Absolute Overlays ────────────────── */}
       <div className="flex-1 w-full min-h-0 relative overflow-hidden">
-        {/* Top-Left MA Legend Inside the Chart Canvas */}
+        {/* Top-Left MA Legend Inside the Chart Canvas (EMAs only) */}
         <div className="absolute top-2 left-3 z-10 flex items-center gap-2 text-[11px] font-mono select-none bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-[4px] border border-[#E5EAF2] shadow-2xs flex-wrap">
-          {maConfigs.filter((ma) => availableMAs[ma.key]).map((ma) => {
+          {maConfigs.map((ma) => {
             const val = activeCandle?.[ma.key];
             const isVisible = visibleMAs[ma.key];
             return (
