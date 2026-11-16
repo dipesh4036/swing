@@ -11,11 +11,12 @@ const VALID_UNIVERSES = [
   "all",
 ];
 
-const VALID_PERIODS = ["1M", "3M", "1Y"];
+const VALID_PERIODS = ["1M", "3M", "6M", "1Y", "YTD", "ALL"];
 
 const PERIOD_SESSIONS = {
   "1M": 21,
   "3M": 63,
+  "6M": 126,
   "1Y": 252,
 };
 
@@ -39,21 +40,48 @@ export async function GET(request) {
       );
     }
 
-    const sessionLimit = PERIOD_SESSIONS[period] || 252;
+    // 1. Get breadth history for universe based on requested period
+    let historyQuery;
+    let queryParams;
 
-    // 1. Get breadth history for universe with exact session limit
-    const historyQuery = `
-      SELECT *
-      FROM (
+    if (period === "YTD") {
+      historyQuery = `
         SELECT *
         FROM daily_market_breadth
         WHERE universe = $1
-        ORDER BY trade_date DESC
-        LIMIT $2
-      ) sub
-      ORDER BY trade_date ASC;
-    `;
-    const historyResult = await queryWithRetry(historyQuery, [universe, sessionLimit]);
+          AND trade_date >= (
+            SELECT date_trunc('year', MAX(trade_date))
+            FROM daily_market_breadth
+            WHERE universe = $1
+          )
+        ORDER BY trade_date ASC;
+      `;
+      queryParams = [universe];
+    } else if (period === "ALL") {
+      historyQuery = `
+        SELECT *
+        FROM daily_market_breadth
+        WHERE universe = $1
+        ORDER BY trade_date ASC;
+      `;
+      queryParams = [universe];
+    } else {
+      const sessionLimit = PERIOD_SESSIONS[period] || 252;
+      historyQuery = `
+        SELECT *
+        FROM (
+          SELECT *
+          FROM daily_market_breadth
+          WHERE universe = $1
+          ORDER BY trade_date DESC
+          LIMIT $2
+        ) sub
+        ORDER BY trade_date ASC;
+      `;
+      queryParams = [universe, sessionLimit];
+    }
+
+    const historyResult = await queryWithRetry(historyQuery, queryParams);
     const historyRows = historyResult.rows;
 
     if (!historyRows || historyRows.length === 0) {
