@@ -65,6 +65,13 @@ def main():
 
     elif args.command in ("daily", "catch-up"):
         logger.info(f"Executing '{args.command}' workflow...")
+        try:
+            from pipeline.db import init_db
+            logger.info("Ensuring database migrations are up to date...")
+            init_db()
+        except Exception as e:
+            logger.warning(f"Database migration notice during {args.command}: {e}")
+
         download_parquet_store(args.path)
         try:
             result = run_daily_workflow(parquet_path=args.path, tokens_limit=args.tokens_limit)
@@ -80,6 +87,13 @@ def main():
 
     elif args.command == "weekly":
         logger.info("Executing 'weekly' workflow...")
+        try:
+            from pipeline.db import init_db
+            logger.info("Ensuring database migrations are up to date...")
+            init_db()
+        except Exception as e:
+            logger.warning(f"Database migration notice during weekly: {e}")
+
         download_parquet_store(args.path)
         try:
             result = run_weekly_refetch(retention_years=args.years, parquet_path=args.path, tokens_limit=args.tokens_limit)
@@ -117,6 +131,13 @@ def main():
 
     elif args.command == "recompute-all":
         logger.info("Executing 'recompute-all' breadth indicators and publish...")
+        try:
+            from pipeline.db import init_db
+            logger.info("Ensuring database migrations are up to date...")
+            init_db()
+        except Exception as e:
+            logger.warning(f"Database migration notice during recompute-all: {e}")
+
         if not os.path.exists(args.path):
             download_parquet_store(args.path)
         try:
