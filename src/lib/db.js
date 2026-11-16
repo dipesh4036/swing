@@ -1,4 +1,7 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
+
+// Return DATE (type OID 1082) as raw string 'YYYY-MM-DD' instead of converting to local Date
+types.setTypeParser(1082, (str) => str);
 
 let pool;
 

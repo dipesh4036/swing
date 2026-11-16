@@ -29,9 +29,16 @@ const NAV_ITEMS = [
         href: "/",
         icon: Activity,
         active: true,
-      }
+      },
+      {
+        id: "screener",
+        name: "Screener",
+        href: "/screener",
+        icon: Layers,
+        active: true,
+      },
     ],
-  }
+  },
 ];
 
 export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {

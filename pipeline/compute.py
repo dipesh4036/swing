@@ -626,6 +626,22 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             execute_batch(cur, insert_sql, all_breadth_records, page_size=1000)
         conn.commit()
         logger.info(f"Successfully published {len(all_breadth_records)} rows to daily_market_breadth.")
+
+        # Trigger screener calculation for the latest trade date
+        try:
+            from pipeline.screeners import run_screeners
+            latest_date = max(all_trade_dates)
+            logger.info(f"Triggering screeners for latest trade date: {latest_date}...")
+            screener_res = run_screeners(df_ind, target_date=latest_date, conn=conn)
+            logger.info(f"Screener execution finished for {latest_date}: {screener_res.get('counts')}")
+        except Exception as se:
+            logger.error(f"Screener execution encountered an error: {se}", exc_info=True)
+            try:
+                from pipeline.alerts import send_telegram_alert
+                send_telegram_alert(f"⚠️ Screener run failed for {max(all_trade_dates)}: {se}")
+            except Exception:
+                pass
+
         return True
     finally:
         conn.close()
