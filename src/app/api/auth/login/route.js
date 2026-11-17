@@ -109,6 +109,12 @@ export async function POST(request) {
     return response;
   } catch (err) {
     console.error("Auth login error:", err);
+    if (err.message && err.message.includes("AUTH_SECRET")) {
+      return NextResponse.json(
+        { error: "Server authentication secret is not configured in production environment variables (AUTH_SECRET)." },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { error: "An unexpected error occurred during authentication." },
       { status: 500 }

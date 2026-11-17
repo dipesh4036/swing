@@ -10,7 +10,7 @@ export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
 export const DUMMY_HASH = "$2a$12$e80yq7K3O96Xk1lQv/Qn0.fH3qZ9X8P8.l9z2nQvP1bY6xY5y1a9O";
 
 export function getAuthSecret() {
-  const secret = process.env.AUTH_SECRET;
+  const secret = process.env.AUTH_SECRET || process.env.JWT_SECRET;
   if (!secret || secret.length < 32) {
     throw new Error("AUTH_SECRET must be set and at least 32 characters long.");
   }

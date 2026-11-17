@@ -19,7 +19,7 @@ export async function middleware(request) {
   const token = request.cookies.get("auth_session")?.value;
   let isAuthenticated = false;
 
-  const authSecret = process.env.AUTH_SECRET;
+  const authSecret = process.env.AUTH_SECRET || process.env.JWT_SECRET;
   if (token && authSecret) {
     try {
       const secret = new TextEncoder().encode(authSecret);
