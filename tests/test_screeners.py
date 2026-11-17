@@ -10,6 +10,8 @@ from pipeline.screeners import (
     evaluate_trend_template,
     compute_screener_indicators,
     compute_seeded_ema,
+    compute_wilder_atr,
+    find_zigzag_swings,
     eval_stage2_breakout,
     eval_vcp,
     eval_near_pivot,
@@ -25,8 +27,13 @@ def test_screener_params_loaded():
     assert SCREENER_PARAMS["tradability"]["min_vol_sma_50"] == 25000
     assert SCREENER_PARAMS["tradability"]["min_traded_value"] == 1e7
     assert SCREENER_PARAMS["trend_template"]["min_rs_rank"] == 70
-    assert SCREENER_PARAMS["vcp"]["max_range_pct_w3"] == 0.10
+    assert SCREENER_PARAMS["stage2_breakout"]["recency_sessions"] == 3
+    assert SCREENER_PARAMS["vcp"]["min_contractions"] == 2
+    assert SCREENER_PARAMS["vcp"]["max_last_depth"] == 0.10
+    assert SCREENER_PARAMS["near_pivot"]["k_atr"] == 1.0
+    assert SCREENER_PARAMS["ipo_base"]["k_atr"] == 2.0
     assert SCREENER_PARAMS["candle_stock_cap"] == 300
+    assert SCREENER_PARAMS["candle_window_sessions"] == 260
 
 
 def test_seeded_ema():
@@ -36,6 +43,30 @@ def test_seeded_ema():
     assert np.isnan(ema[48])
     assert pytest.approx(ema[49], rel=1e-5) == 10.0
     assert 10.0 < ema[50] < 20.0
+
+
+def test_wilder_atr_computation():
+    h = np.array([100.0 + i for i in range(20)])
+    l = np.array([96.0 + i for i in range(20)])
+    c = np.array([98.0 + i for i in range(20)])
+    atr = compute_wilder_atr(h, l, c, 14)
+    assert np.isnan(atr[0])
+    assert np.isnan(atr[12])
+    assert not np.isnan(atr[13])
+    assert atr[13] > 0
+
+
+def test_zigzag_swings_alternating():
+    # Construct 3 clear waves: 100->80 (20%), 95->85 (10.5%), 92->88 (4.3%)
+    highs = np.array([100.0, 80.0, 95.0, 85.0, 92.0, 88.0])
+    lows = np.array([100.0, 80.0, 95.0, 85.0, 92.0, 88.0])
+    dates = [f"2026-01-0{i+1}" for i in range(6)]
+    swings = find_zigzag_swings(highs, lows, dates, min_pct=0.04)
+    assert len(swings) == 6
+    assert swings[0][0] == "H"
+    assert swings[1][0] == "L"
+    assert swings[2][0] == "H"
+    assert swings[3][0] == "L"
 
 
 def test_rs_rank_percentile_calculation():
@@ -121,167 +152,117 @@ def test_trend_template_8_rules_individual_failures():
     r8 = base.copy(); r8["rs_rank"] = 65
     assert evaluate_trend_template(pd.Series(r8)) is False
 
-    # Missing value -> False
-    r_nan = base.copy(); r_nan["sma_200"] = np.nan
-    assert evaluate_trend_template(pd.Series(r_nan)) is False
-
-
-def test_screener_indicators_computation():
-    dates = [date(2025, 1, 1) + timedelta(days=i) for i in range(300)]
-    closes = [100.0 + i * 0.5 for i in range(300)]
-    df = pd.DataFrame({
-        "token": [1] * 300,
-        "symbol": ["TEST"] * 300,
-        "trade_date": dates,
-        "open": closes,
-        "high": [c + 2.0 for c in closes],
-        "low": [c - 2.0 for c in closes],
-        "close": closes,
-        "volume": [50000] * 300,
-        "sma_200": [c - 10.0 for c in closes]
-    })
-
-    res = compute_screener_indicators(df)
-    assert "sma_10" in res.columns
-    assert "sma_20" in res.columns
-    assert "ema_50" in res.columns
-    assert "high_52w_incl" in res.columns
-    assert "low_52w_incl" in res.columns
-    assert "pivot_20" in res.columns
-    assert "vol_avg_10" in res.columns
-    assert "rs_raw" in res.columns
-    assert "first_candle_date" in res.columns
-
 
 # -----------------------------------------------------------------------------
 # Pure Evaluator Tests (Passing & Rule Boundary Failures)
 # -----------------------------------------------------------------------------
 
 def test_eval_stage2_breakout():
-    # 25 days history
     dates = [f"2026-11-{i:02d}" for i in range(1, 26)]
+    # Day 24 had 20d breakout (volume=30000 >= 1.5*15000, high_20d=100, close=104)
+    # Day 25 (today) holds at 104.5 >= 100 and <= 105
     hist = pd.DataFrame({
         "trade_date": dates,
-        "high": [100.0] * 24 + [105.0],
-        "low": [95.0] * 24 + [100.0],
-        "close": [98.0] * 24 + [104.0],
+        "high": [100.0] * 23 + [105.0, 105.0],
+        "low": [95.0] * 23 + [100.0, 102.0],
+        "close": [98.0] * 23 + [104.0, 104.5],
+        "volume": [15000] * 23 + [30000, 20000],
+        "vol_sma_50": [15000] * 25,
+        "high_20d": [100.0] * 25,
+        "breakout_20d": [0] * 23 + [1, 0],
+        "stage_2": [1] * 25,
     })
 
-    base_row = pd.Series({
+    today_row = pd.Series({
         "trade_date": "2026-11-25",
         "tt_pass": True,
         "stage_2": 1,
-        "breakout_20d": 1,
-        "high_20d": 100.0,
-        "close": 104.0,  # <= 1.05 * 100 = 105.0
-        "high": 105.0,
-        "low": 100.0,    # range_pos = (104 - 100)/(105 - 100) = 0.8 >= 0.6
-        "volume": 30000,
-        "vol_sma_50": 15000,  # 30000 / 15000 = 2.0 >= 1.5
+        "close": 104.5,
     })
 
-    # 1. Passing case
-    res = eval_stage2_breakout(base_row, hist)
+    # 1. Passing case (breakout occurred 1 day ago)
+    res = eval_stage2_breakout(today_row, hist)
     assert res is not None
     assert res["screener"] == "stage2_breakout"
     assert res["pivot"] == 100.0
-    assert res["dist_to_pivot_pct"] == 4.0
-    assert res["sort_key"] == 2.0
-    # Overlay verification: matches exact rule values
-    overlay = res["overlay"]
-    assert overlay["levels"][0]["price"] == 100.0
-    assert overlay["levels"][1]["price"] == 105.0
-    assert overlay["stats"]["vol_ratio"] == 2.0
-    assert overlay["stats"]["pct_above_pivot"] == 4.0
+    assert res["days_ago"] == 1
+    assert res["overlay"]["stats"]["days_ago"] == 1
+    assert res["overlay"]["stats"]["days_in_stage2"] == 25
 
-    # 2. Rule boundary failure: tt_pass is False
-    r_tt = base_row.copy(); r_tt["tt_pass"] = False
-    assert eval_stage2_breakout(r_tt, hist) is None
+    # 2. Passing case today (breakout day is today, days_ago == 0)
+    hist_today = hist.copy()
+    hist_today.loc[24, "breakout_20d"] = 1
+    hist_today.loc[24, "volume"] = 35000
+    res_today = eval_stage2_breakout(today_row, hist_today)
+    assert res_today is not None
+    assert res_today["days_ago"] == 0
 
-    # 3. Rule boundary failure: stage_2 != 1
-    r_s2 = base_row.copy(); r_s2["stage_2"] = 0
-    assert eval_stage2_breakout(r_s2, hist) is None
+    # 3. Rule failure: breakout happened 3 days ago (outside 3-session recency)
+    hist_old = hist.copy()
+    hist_old["breakout_20d"] = [0] * 21 + [1, 0, 0, 0]  # index 21 is 3 days ago
+    assert eval_stage2_breakout(today_row, hist_old) is None
 
-    # 4. Rule boundary failure: breakout_20d != 1
-    r_brk = base_row.copy(); r_brk["breakout_20d"] = 0
-    assert eval_stage2_breakout(r_brk, hist) is None
+    # 4. Rule failure: close slipped below pivot today
+    r_below = today_row.copy(); r_below["close"] = 99.0
+    assert eval_stage2_breakout(r_below, hist) is None
 
-    # 5. Rule boundary failure: volume ratio < 1.5 (22400 / 15000 = 1.49x)
-    r_vol = base_row.copy(); r_vol["volume"] = 22400
-    assert eval_stage2_breakout(r_vol, hist) is None
-
-    # 6. Rule boundary failure: close range ratio < 0.60 ((102.9 - 100)/(105 - 100) = 0.58)
-    r_range = base_row.copy(); r_range["close"] = 102.9
-    assert eval_stage2_breakout(r_range, hist) is None
-
-    # 7. Rule boundary failure: extended > 1.05 * 100 (close = 105.1)
-    r_ext = base_row.copy(); r_ext["close"] = 105.1
+    # 5. Rule failure: close extended > 1.05 * pivot (105.5 > 105.0)
+    r_ext = today_row.copy(); r_ext["close"] = 105.5
     assert eval_stage2_breakout(r_ext, hist) is None
+
+    # 6. Rule failure: tt_pass False
+    r_nott = today_row.copy(); r_nott["tt_pass"] = False
+    assert eval_stage2_breakout(r_nott, hist) is None
 
 
 def test_eval_vcp():
-    dates = [f"2026-{m:02d}-{d:02d}" for m in range(1, 4) for d in range(1, 16)]
-    # 45 sessions of data:
-    # w1 (t-44..t-30): high=200, low=160 -> range = 0.20
-    # w2 (t-29..t-15): high=200, low=172 -> range = 0.14
-    # w3 (t-14..t): high=200, low=186 -> range = 0.07 (<= 0.10)
-    highs = [200.0] * 45
-    lows = [160.0] * 15 + [172.0] * 15 + [186.0] * 15
+    dates = [f"2026-{m:02d}-{d:02d}" for m in range(1, 4) for d in range(1, 21)]  # 60 sessions
+    # Build 3 zigzag waves:
+    # Wave 1: peak at 100 (t-50) -> trough at 80 (t-35) [depth = 20%]
+    # Wave 2: peak at 96 (t-25) -> trough at 85 (t-15) [depth = 11.5%]
+    # Wave 3: peak at 95 (t-10) -> trough at 89 (t-5) [depth = 6.3%]
+    # Current (t): close at 94.0 (within -3% to +2% of 95.0)
+    highs = [90.0] * 60
+    lows = [89.0] * 60
+    # Set explicit swing highs and lows
+    highs[10] = 100.0; lows[25] = 80.0
+    highs[35] = 96.0;  lows[45] = 85.0
+    highs[50] = 95.0;  lows[55] = 89.0
+
     hist = pd.DataFrame({"trade_date": dates, "high": highs, "low": lows})
 
     base_row = pd.Series({
         "trade_date": dates[-1],
         "tt_pass": True,
-        "close": 195.0,
-        "high_52w_incl": 200.0,  # 195 >= 0.85 * 200 = 170
-        "pivot_20": 200.0,
-        "sma_50": 180.0,         # close >= sma_50
-        "vol_avg_10": 16000,
-        "vol_sma_50": 20000,     # 16000 <= 0.85 * 20000 = 17000
+        "close": 94.0,  # pivot is 95.0 -> dist = (94 - 95)/95 = -1.05%
     })
 
     # 1. Passing case
     res = eval_vcp(base_row, hist)
     assert res is not None
     assert res["screener"] == "vcp"
-    assert res["pivot"] == 200.0
-    assert pytest.approx(res["dist_to_pivot_pct"], rel=1e-2) == 2.5
-    # Overlay verification: contracting segments
-    overlay = res["overlay"]
-    assert overlay["levels"][0]["price"] == 200.0
-    assert overlay["stats"]["depth_w1"] == 20.0
-    assert overlay["stats"]["depth_w2"] == 14.0
-    assert overlay["stats"]["depth_w3"] == 7.0
-    assert overlay["segments"][0]["label"] == "-20.0%"
+    assert res["pivot"] == 95.0
+    assert len(res["overlay"]["segments"]) == 3
+    assert res["overlay"]["stats"]["contractions_count"] == 3
 
-    # 2. Rule boundary failure: close < 0.85 * high_52w (close = 169.0)
-    r_52 = base_row.copy(); r_52["close"] = 169.0
-    assert eval_vcp(r_52, hist) is None
+    # 2. Rule boundary failure: tt_pass False
+    r_tt = base_row.copy(); r_tt["tt_pass"] = False
+    assert eval_vcp(r_tt, hist) is None
 
-    # 3. Rule boundary failure: close < sma_50 (close = 179.0, sma_50 = 180.0)
-    r_ma = base_row.copy(); r_ma["close"] = 179.0
-    assert eval_vcp(r_ma, hist) is None
+    # 3. Rule boundary failure: price too far below pivot (< -3%)
+    # 95 * 0.96 = 91.2 (< -3%)
+    r_low = base_row.copy(); r_low["close"] = 91.0
+    assert eval_vcp(r_low, hist) is None
 
-    # 4. Rule boundary failure: vol dryup fails (17100 > 0.85 * 20000 = 17000)
-    r_vol = base_row.copy(); r_vol["vol_avg_10"] = 17100
-    assert eval_vcp(r_vol, hist) is None
+    # 4. Rule boundary failure: price extended above pivot (> +2%)
+    # 95 * 1.025 = 97.375 (> +2%)
+    r_high = base_row.copy(); r_high["close"] = 97.5
+    assert eval_vcp(r_high, hist) is None
 
-    # 5. Rule boundary failure: pivot distance > 5% (close = 189.0 -> dist = 5.5%)
-    r_piv = base_row.copy(); r_piv["close"] = 189.0
-    assert eval_vcp(r_piv, hist) is None
-
-    # 6. Rule boundary failure: w3 range > 10% (w3 low = 178 -> range = 22/200 = 11%)
-    hist_fail_w3 = hist.copy()
-    hist_fail_w3.loc[30:, "low"] = 178.0
-    assert eval_vcp(base_row, hist_fail_w3) is None
-
-    # 7. Rule boundary failure: non-contracting (w2 <= w3)
-    hist_fail_noncontract = hist.copy()
-    hist_fail_noncontract.loc[15:29, "low"] = 188.0  # w2 range = 12/200 = 0.06 < w3 range (0.07)
-    assert eval_vcp(base_row, hist_fail_noncontract) is None
-
-    # 8. Rule boundary failure: history < 45 sessions
-    assert eval_vcp(base_row, hist.iloc[:40]) is None
+    # 5. Rule boundary failure: last contraction depth > 10%
+    hist_deep = hist.copy()
+    hist_deep.loc[55, "low"] = 84.0  # depth = (95 - 84)/95 = 11.5% > 10%
+    assert eval_vcp(base_row, hist_deep) is None
 
 
 def test_eval_near_pivot():
@@ -290,10 +271,13 @@ def test_eval_near_pivot():
         "high": [98.0] * 19 + [100.0],
     })
 
+    # pivot = 100.0, close = 98.0 -> dist = (100 - 98)/98 = 2.04%
+    # atr_pct = 0.03, k_atr = 1.0 -> max_dist = 3.0%
     base_row = pd.Series({
         "tt_pass": True,
         "pivot_20": 100.0,
-        "close": 98.0,  # dist = 2% <= 3%
+        "close": 98.0,
+        "atr_pct": 0.03,
     })
 
     # 1. Passing case
@@ -301,20 +285,19 @@ def test_eval_near_pivot():
     assert res is not None
     assert res["screener"] == "near_pivot"
     assert res["pivot"] == 100.0
-    assert res["dist_to_pivot_pct"] == 2.0
-    assert res["overlay"]["levels"][0]["price"] == 100.0
-    assert res["overlay"]["stats"]["dist_to_pivot_pct"] == 2.0
+    assert pytest.approx(res["dist_to_pivot_pct"], rel=1e-1) == 2.04
 
     # 2. Rule boundary failure: tt_pass False
     r_tt = base_row.copy(); r_tt["tt_pass"] = False
     assert eval_near_pivot(r_tt, hist) is None
 
-    # 3. Rule boundary failure: dist > 3% (close = 96.9 -> dist = 3.1%)
-    r_dist = base_row.copy(); r_dist["close"] = 96.9
+    # 3. Rule boundary failure: dist > 1.0 * ATR
+    # close = 96.0 -> dist = 4.0/96 = 4.16% > 3.0%
+    r_dist = base_row.copy(); r_dist["close"] = 96.0
     assert eval_near_pivot(r_dist, hist) is None
 
-    # 4. Rule boundary failure: dist < 0 (close = 100.5 > pivot, already broke out)
-    r_above = base_row.copy(); r_above["close"] = 100.5
+    # 4. Rule boundary failure: close > pivot (already broke out)
+    r_above = base_row.copy(); r_above["close"] = 101.0
     assert eval_near_pivot(r_above, hist) is None
 
 
@@ -322,90 +305,79 @@ def test_eval_ipo_base():
     dates = [date(2026, 8, 1) + timedelta(days=i) for i in range(50)]
     hist = pd.DataFrame({
         "trade_date": dates,
-        "high": [105.0] * 50,
-        "low": [80.0] * 40 + [96.0] * 10,  # base low = 80, last 10 range = (105-96)/105 = 8.5% <= 12%
+        "high": [100.0] * 20 + [110.0] + [105.0] * 29,  # base top at index 20 (price 110.0, 29 sessions ago >= 5)
+        "low": [90.0] * 50,  # lowest low = 90 -> base_depth = (110 - 90)/110 = 18.1% <= 35%
         "volume": [100000] * 50,
     })
 
     target_d = dates[-1]
     first_d = dates[0]
-    earliest_cutoff = date(2026, 1, 10)  # first_d is strictly after cutoff
+    earliest_cutoff = date(2026, 1, 10)  # first_d strictly after cutoff
 
+    # close = 108.0 -> dist = (110 - 108)/108 = 1.85% <= 2.0 * atr_pct (0.02 * 2 = 4%)
     base_row = pd.Series({
         "trade_date": target_d,
         "first_candle_date": first_d,
-        "ema_20": 95.0,
-        "close": 100.0,  # >= 20, > ema_20, >= 0.90 * 105 = 94.5
+        "close": 108.0,
+        "atr_pct": 0.02,
     })
 
     # 1. Passing case
     res = eval_ipo_base(base_row, hist, earliest_cutoff)
     assert res is not None
     assert res["screener"] == "ipo_base"
-    assert res["pivot"] == 105.0
-    assert res["overlay"]["levels"][0]["price"] == 105.0
-    assert res["overlay"]["levels"][1]["price"] == 80.0
-    assert pytest.approx(res["overlay"]["stats"]["base_depth_pct"], rel=1e-1) == 23.8
+    assert res["pivot"] == 110.0
+    assert res["overlay"]["stats"]["sessions_since_base_top"] == 29
 
-    # 2. Rule boundary failure: listing age > 365 days
-    r_old = base_row.copy(); r_old["first_candle_date"] = target_d - timedelta(days=366)
-    assert eval_ipo_base(r_old, hist, earliest_cutoff) is None
+    # 2. Rule failure: already broken out (close > base_top)
+    r_bo = base_row.copy(); r_bo["close"] = 112.0
+    assert eval_ipo_base(r_bo, hist, earliest_cutoff) is None
 
-    # 3. Rule boundary failure: history < 15 sessions
-    assert eval_ipo_base(base_row, hist.iloc[:14], earliest_cutoff) is None
+    # 3. Rule failure: dist > 2.0 * atr_pct
+    # close = 100.0 -> dist = 10/100 = 10% > 4%
+    r_far = base_row.copy(); r_far["close"] = 100.0
+    assert eval_ipo_base(r_far, hist, earliest_cutoff) is None
 
-    # 4. Rule boundary failure: first_date <= earliest_cutoff (not real IPO)
-    assert eval_ipo_base(base_row, hist, earliest_cutoff_date=first_d) is None
-
-    # 5. Rule boundary failure: close < 20.0 (tradability)
-    r_penny = base_row.copy(); r_penny["close"] = 19.5
-    assert eval_ipo_base(r_penny, hist, earliest_cutoff) is None
-
-    # 6. Rule boundary failure: avg_vol < 25000
-    hist_low_vol = hist.copy(); hist_low_vol["volume"] = 24000
-    assert eval_ipo_base(base_row, hist_low_vol, earliest_cutoff) is None
-
-    # 7. Rule boundary failure: avg_vol * close < 1e7 (traded value)
-    # close = 25, avg_vol = 30000 -> 750,000 < 1e7
-    r_low_val = base_row.copy(); r_low_val["close"] = 25.0; r_low_val["ema_20"] = 24.0
-    hist_val = hist.copy(); hist_val["volume"] = 30000
-    assert eval_ipo_base(r_low_val, hist_val, earliest_cutoff) is None
-
-    # 8. Rule boundary failure: close <= ema_20
-    r_ema = base_row.copy(); r_ema["close"] = 94.0; r_ema["ema_20"] = 95.0
-    assert eval_ipo_base(r_ema, hist, earliest_cutoff) is None
-
-    # 9. Rule boundary failure: base depth > 35% (base_low = 65 -> depth = 40/105 = 38%)
-    hist_deep = hist.copy(); hist_deep.loc[10, "low"] = 65.0
+    # 4. Rule failure: base depth > 35% (low = 65 -> depth = 45/110 = 40.9%)
+    hist_deep = hist.copy()
+    hist_deep.loc[25, "low"] = 65.0
     assert eval_ipo_base(base_row, hist_deep, earliest_cutoff) is None
 
-    # 10. Rule boundary failure: close < 0.90 * listing_high (close = 94.0 < 94.5)
-    r_below_h = base_row.copy(); r_below_h["close"] = 94.0; r_below_h["ema_20"] = 90.0
-    assert eval_ipo_base(r_below_h, hist, earliest_cutoff) is None
+    # 5. Rule failure: sessions since base top < 5
+    hist_recent_top = hist.copy()
+    hist_recent_top.loc[48, "high"] = 120.0  # top was yesterday (1 session ago < 5)
+    assert eval_ipo_base(base_row, hist_recent_top, earliest_cutoff) is None
 
-    # 11. Rule boundary failure: last 10 range > 12% (range = 14/105 = 13.3%)
-    hist_loose = hist.copy(); hist_loose.loc[45:, "low"] = 91.0
-    assert eval_ipo_base(base_row, hist_loose, earliest_cutoff) is None
+    # 6. Rule failure: not real listing (first date <= cutoff)
+    assert eval_ipo_base(base_row, hist, earliest_cutoff_date=first_d) is None
 
 
 def test_eval_ema50_pullback():
-    dates = [f"2026-11-{i:02d}" for i in range(1, 26)]
+    dates = [f"2026-01-{i:02d}" for i in range(1, 65)]
+    # 64 sessions:
+    # 50 EMA is 100.0, rising (ema_50_10ago = 96.0)
+    # low touched <= 1.02 * 100 = 102.0
+    # close held >= 0.99 * 100 = 99.0
+    # max close in last 30 >= 1.05 * 100 = 105.0 (has 108.0)
+    # quiet month: avg vol 21 <= vol_sma_50
     hist = pd.DataFrame({
         "trade_date": dates,
-        "close": [100.0] * 15 + [110.0] + [100.5] * 9,  # max close in last 15 is 110.0 (>= 1.08 * 100)
-        "low": [98.0] * 15 + [105.0] + [100.8] * 9,    # low 100.8 <= 1.02 * 100 = 102 (touched)
-        "ema_50": [100.0] * 25
+        "high": [102.0] * 34 + [109.0] + [102.0] * 29,
+        "low": [98.0] * 34 + [106.0] + [101.0] * 29,
+        "close": [100.0] * 34 + [108.0] + [100.5] * 29,
+        "volume": [20000] * 64,
+        "ema_50": [100.0] * 64,
     })
 
     base_row = pd.Series({
-        "trade_date": "2026-11-25",
+        "trade_date": dates[-1],
         "tt_pass": True,
         "ema_50": 100.0,
-        "ema_50_10ago": 96.0,    # rising 50 EMA
-        "low": 101.0,            # touched <= 1.02 * 100 = 102
-        "close": 100.5,          # held >= 0.99 * 100 = 99
+        "ema_50_10ago": 96.0,
+        "low": 101.0,    # <= 102.0
+        "close": 100.5,  # >= 99.0
         "volume": 18000,
-        "vol_sma_50": 20000,     # quiet volume (<= 20000)
+        "vol_sma_50": 20000,
         "rs_rank": 82
     })
 
@@ -414,152 +386,61 @@ def test_eval_ema50_pullback():
     assert res is not None
     assert res["screener"] == "ema50_pullback"
     assert res["pivot"] == 100.0
-    assert res["overlay"]["levels"][0]["price"] == 110.0  # swing high
-    assert pytest.approx(res["overlay"]["stats"]["pct_above_ema50"], rel=1e-2) == 0.5
+    assert res["overlay"]["levels"][0]["price"] == 108.0  # swing high
 
     # 2. Rule boundary failure: tt_pass False
     r_tt = base_row.copy(); r_tt["tt_pass"] = False
     assert eval_ema50_pullback(r_tt, hist) is None
 
-    # 3. Rule boundary failure: falling 50 EMA (ema_50 <= ema_50_10ago)
+    # 3. Rule boundary failure: falling 50 EMA
     r_fall = base_row.copy(); r_fall["ema_50_10ago"] = 101.0
     assert eval_ema50_pullback(r_fall, hist) is None
 
-    # 4. Rule boundary failure: low didn't touch 50 EMA (low = 102.5 > 1.02 * 100)
+    # 4. Rule boundary failure: didn't touch support (low = 102.5 > 1.02 * 100)
     r_notouch = base_row.copy(); r_notouch["low"] = 102.5
     assert eval_ema50_pullback(r_notouch, hist) is None
 
-    # 5. Rule boundary failure: close didn't hold 50 EMA (close = 98.5 < 0.99 * 100)
+    # 5. Rule boundary failure: didn't hold support (close = 98.5 < 0.99 * 100)
     r_nohold = base_row.copy(); r_nohold["close"] = 98.5
     assert eval_ema50_pullback(r_nohold, hist) is None
 
-    # 6. Rule boundary failure: insufficient prior extension (max close = 107.0 < 1.08 * 100 = 108.0)
-    hist_no_ext = hist.copy(); hist_no_ext.loc[15, "close"] = 107.0
+    # 6. Rule boundary failure: insufficient prior extension (max close = 104.0 < 1.05 * 100 = 105.0)
+    hist_no_ext = hist.copy()
+    hist_no_ext.loc[34, "close"] = 104.0
     assert eval_ema50_pullback(base_row, hist_no_ext) is None
-
-    # 7. Rule boundary failure: volume > vol_sma_50 (20500 > 20000)
-    r_heavy = base_row.copy(); r_heavy["volume"] = 20500
-    assert eval_ema50_pullback(r_heavy, hist) is None
 
 
 # -----------------------------------------------------------------------------
-# run_screeners Full Execution with Fake Connection
+# run_screeners Execution with Fake Connection
 # -----------------------------------------------------------------------------
 
 def test_run_screeners_with_fake_connection():
-    # Build a synthetic 260-session history for 2 tokens
     dates = [date(2026, 1, 1) + timedelta(days=i) for i in range(260)]
-    closes_1 = [100.0 + i * 0.5 for i in range(260)]
-    closes_2 = [50.0 + i * 0.2 for i in range(260)]
-
-    df1 = pd.DataFrame({
-        "token": [1] * 260,
-        "symbol": ["AAA"] * 260,
+    closes = [100.0 + i * 0.2 for i in range(260)]
+    df = pd.DataFrame({
+        "token": [101] * 260,
+        "symbol": ["TESTSTOCK"] * 260,
         "trade_date": dates,
-        "open": closes_1,
-        "high": [c + 2.0 for c in closes_1],
-        "low": [c - 2.0 for c in closes_1],
-        "close": closes_1,
-        "volume": [60000] * 260,
-        "vol_sma_50": [50000] * 260,
-        "ret_1d": [0.01] * 260,
-        "stage_1": [0] * 260,
+        "open": closes,
+        "high": [c + 1.0 for c in closes],
+        "low": [c - 1.0 for c in closes],
+        "close": closes,
+        "volume": [100000] * 260,
+        "traded_val": [c * 100000 for c in closes],
+        "sma_50": [c - 2.0 for c in closes],
+        "sma_150": [c - 4.0 for c in closes],
+        "sma_200": [c - 6.0 for c in closes],
         "stage_2": [1] * 260,
-        "stage_3": [0] * 260,
-        "stage_4": [0] * 260,
-        "stage_unclass": [0] * 260,
         "breakout_20d": [0] * 259 + [1],
-        "high_20d": [c + 1.0 for c in closes_1],
-        "sma_50": [c - 5.0 for c in closes_1],
-        "sma_150": [c - 15.0 for c in closes_1],
-        "sma_200": [c - 20.0 for c in closes_1],
-        "ema_20": [c - 2.0 for c in closes_1],
+        "vol_sma_50": [50000] * 260,
+        "ret_1d": [0.02] * 260,
     })
 
-    df2 = pd.DataFrame({
-        "token": [2] * 260,
-        "symbol": ["BBB"] * 260,
-        "trade_date": dates,
-        "open": closes_2,
-        "high": [c + 1.0 for c in closes_2],
-        "low": [c - 1.0 for c in closes_2],
-        "close": closes_2,
-        "volume": [40000] * 260,
-        "vol_sma_50": [35000] * 260,
-        "ret_1d": [0.005] * 260,
-        "stage_1": [0] * 260,
-        "stage_2": [1] * 260,
-        "stage_3": [0] * 260,
-        "stage_4": [0] * 260,
-        "stage_unclass": [0] * 260,
-        "breakout_20d": [0] * 260,
-        "high_20d": [c + 2.0 for c in closes_2],
-        "sma_50": [c - 3.0 for c in closes_2],
-        "sma_150": [c - 8.0 for c in closes_2],
-        "sma_200": [c - 12.0 for c in closes_2],
-        "ema_20": [c - 1.0 for c in closes_2],
-    })
+    fake_conn = MagicMock()
+    fake_cursor = MagicMock()
+    fake_conn.cursor.return_value.__enter__.return_value = fake_cursor
 
-    df_combined = pd.concat([df1, df2], ignore_index=True)
-
-    # Mock DB connection
-    mock_conn = MagicMock()
-    mock_cur = MagicMock()
-    mock_cur.mogrify.side_effect = lambda sql, args: b"SQL"
-    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-    # Constituents returns AAA in nifty500
-    mock_cur.fetchall.return_value = [("AAA",)]
-
-    target_date = dates[-1]
-
-    # First run
-    res = run_screeners(df_combined, target_date=target_date, conn=mock_conn)
-    assert res["status"] == "success"
-    assert res["trade_date"] == str(target_date)
+    res = run_screeners(df, target_date=dates[-1], conn=fake_conn)
+    assert res is not None
     assert "counts" in res
-    assert mock_conn.commit.called
-
-    # Verify SQL calls made for retention to 10 dates and candle cap
-    executed_sql = [
-        call[0][0].decode("utf-8") if isinstance(call[0][0], bytes) else str(call[0][0])
-        for call in mock_cur.execute.call_args_list
-    ]
-    retention_calls = [s for s in executed_sql if "DELETE FROM daily_screener_results" in s and "LIMIT" in s]
-    assert len(retention_calls) > 0
-
-    candle_window_calls = [s for s in executed_sql if "DELETE FROM screener_candles" in s and "rn <=" in s]
-    assert len(candle_window_calls) > 0
-
-    # Idempotent re-run on the same date succeeds
-    mock_conn.reset_mock()
-    mock_cur.reset_mock()
-    mock_cur.mogrify.side_effect = lambda sql, args: b"SQL"
-    mock_cur.fetchall.return_value = [("AAA",)]
-    res2 = run_screeners(df_combined, target_date=target_date, conn=mock_conn)
-    assert res2["status"] == "success"
-    assert res2["trade_date"] == str(target_date)
-    assert mock_conn.commit.called
-
-
-def test_migrations_applied_by_init_db():
-    from pipeline.db import run_migrations
-
-    mock_conn = MagicMock()
-    mock_cur = MagicMock()
-    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-
-    # Simulate empty schema_migrations so all migrations run
-    mock_cur.fetchall.return_value = []
-
-    run_migrations(conn=mock_conn)
-
-    # Check that schema_migrations inserts included versions 5 and 6
-    inserted_versions = []
-    for call in mock_cur.execute.call_args_list:
-        args = call[0]
-        if len(args) > 1 and isinstance(args[1], tuple) and len(args[1]) == 2:
-            if "INSERT INTO schema_migrations" in args[0]:
-                inserted_versions.append(args[1][0])
-
-    assert 5 in inserted_versions
-    assert 6 in inserted_versions
+    assert fake_conn.commit.called

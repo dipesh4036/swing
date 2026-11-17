@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 
 const VALID_UNIVERSES = [
   "nifty500",
@@ -21,6 +22,12 @@ const PERIOD_SESSIONS = {
 };
 
 export async function GET(request) {
+  // Defence in depth: Verify session token
+  const user = await requireAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const universe = (searchParams.get("universe") || "all").toLowerCase();

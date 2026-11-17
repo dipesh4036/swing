@@ -155,6 +155,12 @@ export default function ScreenerPage() {
       setChartData(null);
       return;
     }
+
+    // Guard against race conditions when switching screener tabs or universes
+    if (screenerData?.rows && !screenerData.rows.some((r) => r.token === selectedStock.token)) {
+      return;
+    }
+
     let isMounted = true;
     setLoadingChart(true);
     setChartError(null);
@@ -276,7 +282,13 @@ export default function ScreenerPage() {
             <div className="flex items-center rounded-[6px] border border-[#CBD5E1] p-0.5 bg-[#F8FAFC] text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setUniverse("all")}
+                onClick={() => {
+                  if (universe !== "all") {
+                    setSelectedStock(null);
+                    setChartData(null);
+                    setUniverse("all");
+                  }
+                }}
                 className={`px-2.5 py-1 rounded-[4px] transition-colors ${
                   universe === "all"
                     ? "bg-[#2563EB] text-white shadow-2xs"
@@ -287,7 +299,13 @@ export default function ScreenerPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setUniverse("nifty500")}
+                onClick={() => {
+                  if (universe !== "nifty500") {
+                    setSelectedStock(null);
+                    setChartData(null);
+                    setUniverse("nifty500");
+                  }
+                }}
                 className={`px-2.5 py-1 rounded-[4px] transition-colors ${
                   universe === "nifty500"
                     ? "bg-[#2563EB] text-white shadow-2xs"
@@ -333,8 +351,12 @@ export default function ScreenerPage() {
                 key={id}
                 type="button"
                 onClick={() => {
-                  setActiveScreener(id);
-                  setMobileView("list");
+                  if (activeScreener !== id) {
+                    setSelectedStock(null);
+                    setChartData(null);
+                    setActiveScreener(id);
+                    setMobileView("list");
+                  }
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-semibold transition-all border whitespace-nowrap ${
                   isActive

@@ -10,6 +10,7 @@ import {
   LineStyle,
 } from "lightweight-charts";
 import { ExternalLink } from "lucide-react";
+import { attachEMAs, aggregateWeekly } from "@/lib/indicators";
 
 /**
  * Format volume into readable units: K, M, Cr
@@ -20,78 +21,6 @@ function formatVolume(val) {
   if (val >= 1000000) return (val / 1000000).toFixed(1) + "M";
   if (val >= 1000) return (val / 1000).toFixed(1) + "K";
   return Math.round(val).toString();
-}
-
-/**
- * Computes standard EMAs (10, 20, 50, 200) for a candle array.
- */
-function computeEMAs(candles) {
-  const periods = [10, 20, 50, 200];
-  const multipliers = {
-    10: 2 / (10 + 1),
-    20: 2 / (20 + 1),
-    50: 2 / (50 + 1),
-    200: 2 / (200 + 1),
-  };
-  const currentEMA = { 10: null, 20: null, 50: null, 200: null };
-
-  return candles.map((c, i) => {
-    const res = { ...c };
-    for (const p of periods) {
-      if (i < p - 1) {
-        res[`ema_${p}`] = null;
-      } else if (i === p - 1) {
-        let sum = 0;
-        for (let j = 0; j < p; j++) sum += candles[j].close;
-        currentEMA[p] = sum / p;
-        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
-      } else {
-        currentEMA[p] = (c.close - currentEMA[p]) * multipliers[p] + currentEMA[p];
-        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
-      }
-    }
-    return res;
-  });
-}
-
-/**
- * Aggregates daily candles into weekly candles (Monday-start).
- */
-function aggregateWeekly(dailyCandles) {
-  if (!dailyCandles || dailyCandles.length === 0) return [];
-  const weeks = [];
-  let currWeek = null;
-
-  for (const c of dailyCandles) {
-    const d = new Date(c.date);
-    const day = d.getUTCDay();
-    const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), diff));
-    const weekKey = monday.toISOString().split("T")[0];
-
-    if (!currWeek || currWeek.weekKey !== weekKey) {
-      if (currWeek) {
-        weeks.push(currWeek);
-      }
-      currWeek = {
-        weekKey,
-        date: c.date,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-        volume: c.volume || 0,
-      };
-    } else {
-      currWeek.date = c.date;
-      currWeek.high = Math.max(currWeek.high, c.high !== null && c.high !== undefined ? c.high : c.close);
-      currWeek.low = Math.min(currWeek.low, c.low !== null && c.low !== undefined ? c.low : c.close);
-      currWeek.close = c.close;
-      currWeek.volume += (c.volume || 0);
-    }
-  }
-  if (currWeek) weeks.push(currWeek);
-  return weeks;
 }
 
 export default function ScreenerChart({
@@ -124,12 +53,10 @@ export default function ScreenerChart({
   const candles = useMemo(() => {
     if (!stockData?.candles || stockData.candles.length === 0) return [];
     const baseCandles = timeframe === "W"
-      ? aggregateWeekly(stockData.candles)
+      ? attachEMAs(aggregateWeekly(stockData.candles), [10, 20, 50, 200])
       : stockData.candles;
 
-    const withEMAs = computeEMAs(baseCandles);
-
-    return withEMAs.map((c, i, arr) => {
+    return baseCandles.map((c, i, arr) => {
       let volSum = 0;
       const count = Math.min(20, i + 1);
       for (let j = i - count + 1; j <= i; j++) {
@@ -285,16 +212,11 @@ export default function ScreenerChart({
     }
 
     // 4. Moving Average Lines (Pane 0 - EMAs only: 10, 20, 50, 200)
-    const highlightLines = stockData?.overlay?.highlight_lines || [];
     for (const ma of maConfigs) {
       if (!visibleMAs[ma.key]) continue;
-      const isHighlighted =
-        highlightLines.includes(ma.key) ||
-        (ma.key === "ema_50" && highlightLines.includes("sma_50")) ||
-        (ma.key === "ema_200" && highlightLines.includes("sma_200"));
       const s = chart.addSeries(LineSeries, {
         color: ma.color,
-        lineWidth: isHighlighted ? 2 : 1,
+        lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
@@ -683,6 +605,11 @@ export default function ScreenerChart({
       <div className="px-3 py-1.5 border-t border-[#E5EAF2] flex items-center justify-between text-[10px] text-[#94A3B8] bg-[#FAFAFA] shrink-0">
         <div className="flex items-center gap-3">
           <span>{candles.length} bars</span>
+          {stockData.source === "db" && (
+            <span className="text-[#D97706] font-medium bg-[#FEF3C7] px-1.5 py-0.5 rounded-[3px] border border-[#FDE68A]">
+              Showing stored data (260 sessions)
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
             HVQ: 63D high

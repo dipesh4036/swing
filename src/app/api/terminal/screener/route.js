@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 
 const VALID_SCREENERS = [
   "stage2_breakout",
@@ -12,6 +13,12 @@ const VALID_SCREENERS = [
 const VALID_UNIVERSES = ["all", "nifty500"];
 
 export async function GET(request) {
+  // Defence in depth: Verify session token
+  const user = await requireAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const screener = searchParams.get("screener") || "stage2_breakout";

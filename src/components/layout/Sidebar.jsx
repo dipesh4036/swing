@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Radio,
+  LogOut,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -44,6 +45,16 @@ const NAV_ITEMS = [
 export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore
+    } finally {
+      window.location.href = "/login";
+    }
+  };
 
   return (
     <>
@@ -156,6 +167,19 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
               </div>
             </div>
           )}
+
+          {/* Logout Button */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[6px] text-xs font-medium text-[#64748B] hover:text-[#BE185D] hover:bg-[#FEF0F4] transition-colors ${
+              collapsed ? "justify-center" : ""
+            }`}
+            title="Log out"
+          >
+            <LogOut size={16} className="shrink-0" />
+            {!collapsed && <span>Log out</span>}
+          </button>
 
           {/* Desktop Collapse Toggle */}
           <button

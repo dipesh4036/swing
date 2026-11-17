@@ -103,6 +103,29 @@ If the Neon PostgreSQL database is ever wiped, corrupted, or deleted, **no marke
 
 ---
 
+## 🔐 Authentication & Owner Account Setup
+
+The entire application (pages and APIs) is private and accessible only to a single pre-created owner account. There is no signup route and no password-reset route.
+
+### 1. Configure Secrets
+1. Generate a secure random auth secret (at least 32 bytes):
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+2. Set `AUTH_SECRET` in your local `.env` and in your **Vercel Project Settings -> Environment Variables**.
+3. In local `.env`, set `ADMIN_DATABASE_URL` pointing to your Neon database owner connection string (used only for local account creation and migrations; never deploy `ADMIN_DATABASE_URL` to Vercel).
+
+### 2. Create the Owner Account
+Run the one-time interactive script locally:
+```bash
+node scripts/create-user.mjs owner@example.com
+```
+- The password is read from a hidden interactive prompt (never from CLI args, env, or files).
+- Pass `--replace` if you ever need to re-create or overwrite the existing owner account.
+- **Never commit passwords, tokens, or credentials to Git.**
+
+---
+
 ## ⚡ CLI Commands
 
 The pipeline CLI (`pipeline/cli.py`) provides commands for maintenance and automated cron execution:

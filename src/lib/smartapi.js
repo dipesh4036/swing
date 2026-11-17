@@ -1,7 +1,17 @@
 import crypto from "crypto";
 
 /**
- * Base32 decode for TOTP secrets
+ * Constants & Configuration
+ */
+export const CHART_HISTORY_YEARS = 5;
+export const MAX_DAYS_PER_REQUEST_ONE_DAY = 400; // SmartAPI ONE_DAY chunk size
+const CANDLE_CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours in-memory cache
+const MAX_CONCURRENT_CALLS = 2; // Max 2 concurrent SmartAPI calls per instance
+const MIN_REQUEST_INTERVAL_MS = 400; // Rate <= 2.5 requests/second (1000ms / 2.5 = 400ms)
+const REQUEST_TIMEOUT_MS = 8000; // 8 seconds per request
+
+/**
+ * RFC 6238 Base32 decode for TOTP secrets
  */
 function base32Decode(base32) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -41,18 +51,81 @@ function generateTOTP(secret) {
   return code.toString().padStart(6, "0");
 }
 
-// In-memory session cache for Angel One SmartAPI JWT
+/**
+ * Global instance rate limiter & concurrency semaphore
+ */
+let activeCalls = 0;
+const callQueue = [];
+let lastCallTimestamp = 0;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquireSlot() {
+  while (activeCalls >= MAX_CONCURRENT_CALLS) {
+    await new Promise((resolve) => callQueue.push(resolve));
+  }
+  activeCalls++;
+
+  const now = Date.now();
+  const elapsed = now - lastCallTimestamp;
+  if (elapsed < MIN_REQUEST_INTERVAL_MS) {
+    await sleep(MIN_REQUEST_INTERVAL_MS - elapsed);
+  }
+  lastCallTimestamp = Date.now();
+}
+
+function releaseSlot() {
+  activeCalls--;
+  if (callQueue.length > 0) {
+    const next = callQueue.shift();
+    next();
+  }
+}
+
+/**
+ * Common SmartAPI Headers
+ */
+function getSmartApiHeaders(jwtToken = null) {
+  const apiKey = process.env.API_KEY || "";
+  const clientPublicIp = process.env.ANGEL_CLIENT_PUBLIC_IP || "127.0.0.1";
+  const macAddress = process.env.ANGEL_MAC || "00:00:00:00:00:00";
+
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "X-UserType": "USER",
+    "X-SourceID": "WEB",
+    "X-ClientLocalIP": "127.0.0.1",
+    "X-ClientPublicIP": clientPublicIp,
+    "X-MACAddress": macAddress,
+    "X-PrivateKey": apiKey,
+  };
+
+  if (jwtToken) {
+    headers.Authorization = `Bearer ${jwtToken}`;
+  }
+
+  return headers;
+}
+
+/**
+ * Single-flight in-memory session cache
+ */
 let sessionCache = {
   jwtToken: null,
   expiresAt: 0,
 };
+let loginPromise = null;
 
-// In-memory candle cache: token -> { candles, cachedAt }
-const candleCache = new Map();
-const CANDLE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour in-memory cache
+export function invalidateSmartApiSession() {
+  sessionCache = { jwtToken: null, expiresAt: 0 };
+}
 
 /**
  * Authenticates with Angel One SmartAPI and returns a valid jwtToken
+ * Concurrent requests share one in-flight login promise.
  */
 async function getSmartApiToken() {
   const apiKey = process.env.API_KEY;
@@ -64,130 +137,226 @@ async function getSmartApiToken() {
     return null;
   }
 
-  // Reuse active token if still valid (valid for 12 hours)
+  // Reuse active token if valid (cache up to 12 hours)
   if (sessionCache.jwtToken && Date.now() < sessionCache.expiresAt) {
     return sessionCache.jwtToken;
   }
 
-  try {
-    const totp = generateTOTP(totpSecret);
-    const headers = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "X-UserType": "USER",
-      "X-SourceID": "WEB",
-      "X-ClientLocalIP": "127.0.0.1",
-      "X-ClientPublicIP": "106.193.147.98",
-      "X-MACAddress": "fe80::216:3eff:fe12:3456",
-      "X-PrivateKey": apiKey,
-    };
-
-    const res = await fetch(
-      "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          clientcode: clientId,
-          password: pin,
-          totp,
-        }),
-      }
-    );
-
-    const data = await res.json();
-    if (data && data.status && data.data?.jwtToken) {
-      sessionCache = {
-        jwtToken: data.data.jwtToken,
-        expiresAt: Date.now() + 12 * 3600 * 1000, // 12 hours validity
-      };
-      return sessionCache.jwtToken;
-    }
-    console.warn("SmartAPI login response:", data?.message || "Unknown error");
-    return null;
-  } catch (err) {
-    console.error("SmartAPI login error:", err.message);
-    return null;
+  // Return shared login promise if login is already in-flight
+  if (loginPromise) {
+    return loginPromise;
   }
+
+  loginPromise = (async () => {
+    await acquireSlot();
+    try {
+      const totp = generateTOTP(totpSecret);
+      const headers = getSmartApiHeaders();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      const res = await fetch(
+        "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            clientcode: clientId,
+            password: pin,
+            totp,
+          }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+
+      const data = await res.json().catch(() => null);
+      if (data && data.status && data.data?.jwtToken) {
+        sessionCache = {
+          jwtToken: data.data.jwtToken,
+          expiresAt: Date.now() + 12 * 3600 * 1000,
+        };
+        return sessionCache.jwtToken;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      releaseSlot();
+      loginPromise = null;
+    }
+  })();
+
+  return loginPromise;
 }
 
 /**
- * Fetch all historical candles for a token from Angel One SmartAPI with caching.
- * Returns array of { date, open, high, low, close, volume } or null on failure.
+ * In-memory candle cache: token -> { candles, cachedAt }
+ */
+const candleCache = new Map();
+
+/**
+ * Fetch a single candle chunk from SmartAPI with timeout and exponential backoff
+ */
+async function fetchCandleChunk(tokenStr, fromDateStr, toDateStr, allowReauth = true) {
+  const jwtToken = await getSmartApiToken();
+  if (!jwtToken) return null;
+
+  const EXPIRY_CODES = new Set(["AG8001", "AG8002", "AG8003"]);
+  let backoffMs = 1000;
+  const maxRetries = 3;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    await acquireSlot();
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      const res = await fetch(
+        "https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData",
+        {
+          method: "POST",
+          headers: getSmartApiHeaders(jwtToken),
+          body: JSON.stringify({
+            exchange: "NSE",
+            symboltoken: tokenStr,
+            interval: "ONE_DAY",
+            fromdate: fromDateStr,
+            todate: toDateStr,
+          }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+
+      const json = await res.json().catch(() => null);
+      if (json && json.status && Array.isArray(json.data)) {
+        return json.data;
+      }
+
+      const errCode = String(json?.errorcode || "");
+      const msg = String(json?.message || "").toLowerCase();
+
+      // Rate limit backoff
+      if (msg.includes("exceeding access rate") || msg.includes("too many requests") || res.status === 429) {
+        await sleep(backoffMs);
+        backoffMs = Math.min(backoffMs * 2, 8000);
+        continue;
+      }
+
+      // Session expiry handling (re-login at most once)
+      const isExpired =
+        EXPIRY_CODES.has(errCode) ||
+        msg.includes("invalid token") ||
+        msg.includes("token expired") ||
+        msg.includes("session expired");
+
+      if (isExpired && allowReauth) {
+        invalidateSmartApiSession();
+        return fetchCandleChunk(tokenStr, fromDateStr, toDateStr, false);
+      }
+
+      return null;
+    } catch {
+      if (attempt === maxRetries - 1) return null;
+      await sleep(backoffMs);
+      backoffMs = Math.min(backoffMs * 2, 8000);
+    } finally {
+      releaseSlot();
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Fetch all historical candles for a token for the last 5 years in 400-day chunks.
+ * Merges, de-duplicates, and sorts chronologically.
+ *
+ * @param {string|number} token - NSE Symbol Token.
+ * @returns {Promise<Array<{date: string, open: number, high: number, low: number, close: number, volume: number}>|null>}
  */
 export async function fetchAllCandlesFromSmartAPI(token) {
   const tokenStr = String(token);
 
-  // 1. Check in-memory cache
+  // 1. Check in-memory 3-hour cache
   const cached = candleCache.get(tokenStr);
   if (cached && Date.now() - cached.cachedAt < CANDLE_CACHE_TTL_MS) {
     return cached.candles;
   }
 
-  // 2. Obtain SmartAPI JWT token
-  const jwtToken = await getSmartApiToken();
-  if (!jwtToken) {
+  // Check if credentials exist
+  if (!process.env.API_KEY || !process.env.CLIENT_ID || !process.env.PIN || !process.env.TOTP_SECRET) {
     return null;
   }
 
-  const apiKey = process.env.API_KEY;
   const now = new Date();
-  const toDateStr = `${now.toISOString().split("T")[0]} 15:30`;
+  const toDateTotal = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const fromDateTotal = new Date(toDateTotal.getTime() - CHART_HISTORY_YEARS * 365 * 24 * 60 * 60 * 1000);
 
-  try {
-    const headers = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "X-UserType": "USER",
-      "X-SourceID": "WEB",
-      "X-ClientLocalIP": "127.0.0.1",
-      "X-ClientPublicIP": "106.193.147.98",
-      "X-MACAddress": "fe80::216:3eff:fe12:3456",
-      "X-PrivateKey": apiKey,
-      Authorization: `Bearer ${jwtToken}`,
-    };
+  // Split [fromDateTotal, toDateTotal] into chunks of MAX_DAYS_PER_REQUEST_ONE_DAY
+  const chunkRanges = [];
+  let chunkStart = new Date(fromDateTotal);
 
-    // Request all historical data from 2010 to current date
-    const res = await fetch(
-      "https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          exchange: "NSE",
-          symboltoken: tokenStr,
-          interval: "ONE_DAY",
-          fromdate: "2010-01-01 09:15",
-          todate: toDateStr,
-        }),
-      }
+  while (chunkStart < toDateTotal) {
+    const chunkEnd = new Date(
+      Math.min(
+        chunkStart.getTime() + MAX_DAYS_PER_REQUEST_ONE_DAY * 24 * 60 * 60 * 1000,
+        toDateTotal.getTime()
+      )
     );
 
-    const json = await res.json();
-    if (json && json.status && Array.isArray(json.data) && json.data.length > 0) {
-      const candles = json.data.map((c) => ({
-        date: c[0].split("T")[0],
-        open: Number(c[1]),
-        high: Number(c[2]),
-        low: Number(c[3]),
-        close: Number(c[4]),
-        volume: Number(c[5]),
-      }));
+    const fromStr = `${chunkStart.toISOString().split("T")[0]} 09:15`;
+    const toStr = `${chunkEnd.toISOString().split("T")[0]} 15:30`;
+    chunkRanges.push({ fromStr, toStr });
 
-      // Cache the candles
-      candleCache.set(tokenStr, {
-        candles,
-        cachedAt: Date.now(),
-      });
+    // Next chunk starts from current chunkEnd + 1 day
+    chunkStart = new Date(chunkEnd.getTime() + 24 * 60 * 60 * 1000);
+  }
 
-      return candles;
+  // Fetch all chunks sequentially
+  const rawCandleRows = [];
+  let anyChunkSucceeded = false;
+
+  for (const range of chunkRanges) {
+    const rows = await fetchCandleChunk(tokenStr, range.fromStr, range.toStr);
+    if (rows && Array.isArray(rows) && rows.length > 0) {
+      anyChunkSucceeded = true;
+      rawCandleRows.push(...rows);
     }
+  }
 
-    console.warn(`SmartAPI returned no candle data for token ${tokenStr}:`, json?.message);
-    return null;
-  } catch (err) {
-    console.error(`SmartAPI getCandleData error for token ${tokenStr}:`, err.message);
+  if (!anyChunkSucceeded || rawCandleRows.length === 0) {
     return null;
   }
-}
 
+  // De-duplicate and parse candles
+  const candleMap = new Map();
+  for (const c of rawCandleRows) {
+    if (!c || !c[0]) continue;
+    const dateStr = String(c[0]).split("T")[0];
+    candleMap.set(dateStr, {
+      date: dateStr,
+      open: Number(c[1]),
+      high: Number(c[2]),
+      low: Number(c[3]),
+      close: Number(c[4]),
+      volume: Number(c[5]),
+    });
+  }
+
+  const sortedCandles = Array.from(candleMap.values()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  if (sortedCandles.length === 0) {
+    return null;
+  }
+
+  // Cache in memory for 3 hours
+  candleCache.set(tokenStr, {
+    candles: sortedCandles,
+    cachedAt: Date.now(),
+  });
+
+  return sortedCandles;
+}

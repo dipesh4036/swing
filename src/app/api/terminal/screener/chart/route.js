@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
 import { fetchAllCandlesFromSmartAPI } from "@/lib/smartapi";
+import { requireAuth } from "@/lib/auth";
+import { attachEMAs } from "@/lib/indicators";
 
 const VALID_SCREENERS = [
   "stage2_breakout",
@@ -10,40 +12,13 @@ const VALID_SCREENERS = [
   "ema50_pullback",
 ];
 
-/**
- * Computes standard EMAs (10, 20, 50, 200) for a given chronological candle array.
- */
-function attachEMAs(candles) {
-  const periods = [10, 20, 50, 200];
-  const multipliers = {
-    10: 2 / (10 + 1),
-    20: 2 / (20 + 1),
-    50: 2 / (50 + 1),
-    200: 2 / (200 + 1),
-  };
-
-  const currentEMA = { 10: null, 20: null, 50: null, 200: null };
-
-  return candles.map((c, i) => {
-    const res = { ...c };
-    for (const p of periods) {
-      if (i < p - 1) {
-        res[`ema_${p}`] = null;
-      } else if (i === p - 1) {
-        let sum = 0;
-        for (let j = 0; j < p; j++) sum += candles[j].close;
-        currentEMA[p] = sum / p;
-        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
-      } else {
-        currentEMA[p] = (c.close - currentEMA[p]) * multipliers[p] + currentEMA[p];
-        res[`ema_${p}`] = Math.round(currentEMA[p] * 100) / 100;
-      }
-    }
-    return res;
-  });
-}
-
 export async function GET(request) {
+  // 1. Defence in depth: Verify session token
+  const user = await requireAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const tokenParam = searchParams.get("token");
@@ -64,7 +39,8 @@ export async function GET(request) {
       );
     }
 
-    // 1. Fetch latest screener row for this token & screener to get metadata and overlay
+    // 2. Fetch latest screener row for this token & screener to get metadata and overlay
+    // Serve only tokens that exist in the latest daily_screener_results (404 otherwise)
     const stockRes = await queryWithRetry(
       `SELECT symbol, trade_date::text as trade_date, rs_rank, vol_ratio, extra
        FROM daily_screener_results
@@ -84,11 +60,13 @@ export async function GET(request) {
     const stockRow = stockRes.rows[0];
     const asOfStr = String(stockRow.trade_date);
 
-    // 2. Fetch all historical candles from Angel One SmartAPI (with 1-hour cache)
+    // 3. Attempt to fetch all historical candles live from Angel One SmartAPI (5 years, 3h cache)
     let rawCandles = await fetchAllCandlesFromSmartAPI(token);
+    let source = "angel";
 
-    // Fallback to database screener_candles if SmartAPI is unavailable or returns empty
+    // Fallback: if Angel fails or env vars are missing, use screener_candles from Neon
     if (!rawCandles || rawCandles.length === 0) {
+      source = "db";
       const candlesRes = await queryWithRetry(
         `SELECT trade_date::text as trade_date, open, high, low, close, volume
          FROM screener_candles
@@ -107,10 +85,10 @@ export async function GET(request) {
       }));
     }
 
-    // 3. Attach EMAs (10, 20, 50, 200) to all candles
-    const candles = attachEMAs(rawCandles);
+    // 4. Attach EMAs (10, 20, 50, 200) using shared indicators helper
+    const candles = attachEMAs(rawCandles, [10, 20, 50, 200]);
 
-    // 4. Compute 1M (21 sessions) & 3M (63 sessions) return and 20-session average volume from candles
+    // 5. Compute 1M & 3M returns and 20-session average volume from candles
     const n = candles.length;
     let ret1m = null;
     let ret3m = null;
@@ -147,6 +125,7 @@ export async function GET(request) {
       {
         symbol: stockRow.symbol,
         asOf: asOfStr,
+        source,
         candles,
         overlay,
         rs_rank: stockRow.rs_rank !== null ? Number(stockRow.rs_rank) : null,
@@ -157,7 +136,7 @@ export async function GET(request) {
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Cache-Control": "private, max-age=3600",
         },
       }
     );
