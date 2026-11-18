@@ -26,6 +26,14 @@ on:
           - trim
           - test-connection
           - verify-bhavcopy
+      source:
+        description: "Equities daily source (bhavcopy or angel)"
+        required: false
+        default: "bhavcopy"
+        type: choice
+        options:
+          - bhavcopy
+          - angel
 
 permissions:
   contents: write
@@ -50,7 +58,7 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       EQUITY_PARQUET_PATH: "data/equity_ohlcv.parquet"
       RETENTION_YEARS: "3"
-      DAILY_SOURCE: ${{ vars.DAILY_SOURCE || 'angel' }}
+      DAILY_SOURCE: ${{ github.event.inputs.source || vars.DAILY_SOURCE || 'bhavcopy' }}
 
     steps:
       - name: Checkout repository

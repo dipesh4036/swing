@@ -28,11 +28,13 @@ def main():
     daily_parser = subparsers.add_parser("daily", help="Run full daily workflow with trim as final step")
     daily_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
     daily_parser.add_argument("--tokens-limit", type=int, default=None, help="Limit number of tokens for testing")
+    daily_parser.add_argument("--source", default=None, choices=["bhavcopy", "angel"], help="Equities source")
 
     # Catch-up workflow command
     catchup_parser = subparsers.add_parser("catch-up", help="Run catch-up workflow for missed or post-settlement sessions")
     catchup_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
     catchup_parser.add_argument("--tokens-limit", type=int, default=None, help="Limit number of tokens for testing")
+    catchup_parser.add_argument("--source", default=None, choices=["bhavcopy", "angel"], help="Equities source")
 
     # Weekly full re-fetch command
     weekly_parser = subparsers.add_parser("weekly", help="Run weekly full re-fetch with retention limit")
@@ -68,7 +70,9 @@ def main():
             sys.exit(1)
 
     elif args.command in ("daily", "catch-up"):
-        logger.info(f"Executing '{args.command}' workflow...")
+        if getattr(args, "source", None):
+            os.environ["DAILY_SOURCE"] = args.source
+        logger.info(f"Executing '{args.command}' workflow (source={os.environ.get('DAILY_SOURCE', 'bhavcopy')})...")
         try:
             from pipeline.db import init_db
             logger.info("Ensuring database migrations are up to date...")

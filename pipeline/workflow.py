@@ -283,7 +283,7 @@ def run_daily_workflow(
         try:
             fn6 = ingest_equities_fn
             if fn6 is None:
-                daily_source = os.environ.get("DAILY_SOURCE", "angel").strip().lower()
+                daily_source = os.environ.get("DAILY_SOURCE", "bhavcopy").strip().lower()
                 if daily_source == "bhavcopy":
                     logger.info("Using DAILY_SOURCE=bhavcopy for equities ingest.")
                     from pipeline.bhavcopy import ingest_bhavcopy
