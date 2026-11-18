@@ -300,6 +300,14 @@ def test_eval_near_pivot():
     r_above = base_row.copy(); r_above["close"] = 101.0
     assert eval_near_pivot(r_above, hist) is None
 
+    # 5. Rule failure: atr_pct missing or <= 0
+    r_no_atr = base_row.copy(); r_no_atr["atr_pct"] = np.nan
+    assert eval_near_pivot(r_no_atr, hist) is None
+    r_zero_atr = base_row.copy(); r_zero_atr["atr_pct"] = 0.0
+    assert eval_near_pivot(r_zero_atr, hist) is None
+    r_neg_atr = base_row.copy(); r_neg_atr["atr_pct"] = -0.01
+    assert eval_near_pivot(r_neg_atr, hist) is None
+
 
 def test_eval_ipo_base():
     dates = [date(2026, 8, 1) + timedelta(days=i) for i in range(50)]
@@ -342,6 +350,14 @@ def test_eval_ipo_base():
     hist_deep = hist.copy()
     hist_deep.loc[25, "low"] = 65.0
     assert eval_ipo_base(base_row, hist_deep, earliest_cutoff) is None
+
+    # 5. Rule failure: atr_pct missing or <= 0
+    r_no_atr = base_row.copy(); r_no_atr["atr_pct"] = np.nan
+    assert eval_ipo_base(r_no_atr, hist, earliest_cutoff) is None
+    r_zero_atr = base_row.copy(); r_zero_atr["atr_pct"] = 0.0
+    assert eval_ipo_base(r_zero_atr, hist, earliest_cutoff) is None
+    r_neg_atr = base_row.copy(); r_neg_atr["atr_pct"] = -0.02
+    assert eval_ipo_base(r_neg_atr, hist, earliest_cutoff) is None
 
     # 5. Rule failure: sessions since base top < 5
     hist_recent_top = hist.copy()

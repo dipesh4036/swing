@@ -4,6 +4,8 @@ import { fetchAllCandlesFromSmartAPI } from "@/lib/smartapi";
 import { requireAuth } from "@/lib/auth";
 import { attachEMAs } from "@/lib/indicators";
 
+export const maxDuration = 30;
+
 const VALID_SCREENERS = [
   "stage2_breakout",
   "vcp",

@@ -23,7 +23,7 @@ export async function middleware(request) {
   if (token && authSecret) {
     try {
       const secret = new TextEncoder().encode(authSecret);
-      await jwtVerify(token, secret);
+      await jwtVerify(token, secret, { algorithms: ["HS256"] });
       isAuthenticated = true;
     } catch {
       isAuthenticated = false;

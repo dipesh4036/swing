@@ -6,6 +6,7 @@ import crypto from "crypto";
 export const CHART_HISTORY_YEARS = 5;
 export const MAX_DAYS_PER_REQUEST_ONE_DAY = 400; // SmartAPI ONE_DAY chunk size
 const CANDLE_CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours in-memory cache
+const MAX_CANDLE_CACHE_TOKENS = 100; // Cap candle cache at 100 tokens
 const MAX_CONCURRENT_CALLS = 2; // Max 2 concurrent SmartAPI calls per instance
 const MIN_REQUEST_INTERVAL_MS = 400; // Rate <= 2.5 requests/second (1000ms / 2.5 = 400ms)
 const REQUEST_TIMEOUT_MS = 8000; // 8 seconds per request
@@ -317,17 +318,19 @@ export async function fetchAllCandlesFromSmartAPI(token) {
 
   // Fetch all chunks sequentially
   const rawCandleRows = [];
-  let anyChunkSucceeded = false;
 
   for (const range of chunkRanges) {
     const rows = await fetchCandleChunk(tokenStr, range.fromStr, range.toStr);
-    if (rows && Array.isArray(rows) && rows.length > 0) {
-      anyChunkSucceeded = true;
+    // If ANY history chunk fails, return null so the route falls back to the DB
+    if (rows === null) {
+      return null;
+    }
+    if (Array.isArray(rows) && rows.length > 0) {
       rawCandleRows.push(...rows);
     }
   }
 
-  if (!anyChunkSucceeded || rawCandleRows.length === 0) {
+  if (rawCandleRows.length === 0) {
     return null;
   }
 
@@ -352,7 +355,16 @@ export async function fetchAllCandlesFromSmartAPI(token) {
     return null;
   }
 
-  // Cache in memory for 3 hours
+  // Cache in memory for 3 hours (capped at MAX_CANDLE_CACHE_TOKENS with oldest eviction)
+  if (candleCache.has(tokenStr)) {
+    candleCache.delete(tokenStr);
+  } else if (candleCache.size >= MAX_CANDLE_CACHE_TOKENS) {
+    const oldestKey = candleCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      candleCache.delete(oldestKey);
+    }
+  }
+
   candleCache.set(tokenStr, {
     candles: sortedCandles,
     cachedAt: Date.now(),

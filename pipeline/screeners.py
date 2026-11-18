@@ -496,7 +496,10 @@ def eval_near_pivot(row: pd.Series, hist: pd.DataFrame, params: dict = SCREENER_
     if not (pivot_20 and pivot_20 > 0 and close > 0):
         return None
 
-    atr_pct = float(row["atr_pct"]) if pd.notna(row.get("atr_pct")) and float(row.get("atr_pct")) > 0 else 0.03
+    atr_val = row.get("atr_pct")
+    if pd.isna(atr_val) or float(atr_val) <= 0:
+        return None
+    atr_pct = float(atr_val)
     max_dist = p_np.get("k_atr", 1.0) * atr_pct
 
     # Closeness: 0 <= (pivot - close) / close <= near_pivot.k_atr * atr_pct
@@ -581,7 +584,10 @@ def eval_ipo_base(
         return None
 
     # Just under: (base_top - close) / close <= ipo_base.k_atr * atr_pct (default k_atr = 2.0)
-    atr_pct = float(row["atr_pct"]) if pd.notna(row.get("atr_pct")) and float(row.get("atr_pct")) > 0 else 0.03
+    atr_val = row.get("atr_pct")
+    if pd.isna(atr_val) or float(atr_val) <= 0:
+        return None
+    atr_pct = float(atr_val)
     dist_top = (base_top - close) / close
     max_dist = p_ipo.get("k_atr", 2.0) * atr_pct
     if not (0.0 <= dist_top <= max_dist):

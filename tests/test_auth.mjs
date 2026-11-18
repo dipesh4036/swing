@@ -138,6 +138,16 @@ async function runTests() {
     },
     { message: /AUTH_SECRET must be/ }
   );
+
+  assert.throws(
+    () => {
+      process.env.AUTH_SECRET = "";
+      delete process.env.JWT_SECRET;
+      hashIp("1.2.3.4");
+    },
+    { message: /AUTH_SECRET must be/ }
+  );
+
   process.env.AUTH_SECRET = TEST_SECRET;
 
   console.log("--- All Auth Tests Passed Successfully! ---");

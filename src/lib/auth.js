@@ -45,7 +45,7 @@ export async function verifySessionToken(token) {
   if (!token) return null;
   try {
     const secret = getAuthSecret();
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
     return payload;
   } catch {
     return null;
@@ -53,7 +53,7 @@ export async function verifySessionToken(token) {
 }
 
 export function hashIp(ip) {
-  const secret = process.env.AUTH_SECRET || "fallback_auth_secret_32_chars_minimum";
+  const secret = getAuthSecret();
   const clientIp = ip || "127.0.0.1";
   return crypto.createHmac("sha256", secret).update(clientIp).digest("hex");
 }

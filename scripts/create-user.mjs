@@ -43,27 +43,13 @@ function loadEnv() {
 
 loadEnv();
 
-let pipedLines = null;
-let pipedIndex = 0;
-
-async function getPipedLine() {
-  if (pipedLines === null) {
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const fullText = Buffer.concat(chunks).toString("utf-8");
-    pipedLines = fullText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
-  }
-  return pipedLines[pipedIndex++];
-}
-
 function promptHidden(query) {
   if (!process.stdin.isTTY) {
-    return getPipedLine();
+    console.error("Error: Standard input is not a TTY. Interactive hidden prompt required.");
+    process.exit(1);
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let muted = false;
     const mutableStdout = new Writable({
       write(chunk, encoding, callback) {
@@ -116,7 +102,7 @@ async function main() {
 
   const client = new pg.Client({
     connectionString: dbUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: true,
   });
 
   try {
@@ -133,8 +119,8 @@ async function main() {
 
     // Read password securely from hidden interactive prompt
     const password = await promptHidden("Enter password: ");
-    if (!password || password.length < 8) {
-      console.error("Error: Password must be at least 8 characters long.");
+    if (!password || password.length < 12) {
+      console.error("Error: Password must be at least 12 characters long.");
       process.exit(1);
     }
 

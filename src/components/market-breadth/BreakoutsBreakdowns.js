@@ -23,17 +23,27 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
       ? liveHeld - liveFailed
       : null;
 
-  // Chart data adapted to period
+  // Filter history to skip null or missing breakout/breakdown days
+  const validHistory = useMemo(() => {
+    return (history || []).filter(
+      (d) =>
+        d &&
+        typeof d.breakouts20d === "number" &&
+        typeof d.breakdowns20d === "number"
+    );
+  }, [history]);
+
+  // Chart data adapted to period (skips null days)
   const chartData = useMemo(() => {
     let cumulative = 0;
-    return history.map((d, idx) => {
-      const net = (d.breakouts20d ?? 0) - (d.breakdowns20d ?? 0);
+    return validHistory.map((d, idx) => {
+      const net = d.breakouts20d - d.breakdowns20d;
       cumulative += net;
 
       let val = net;
       if (period === "5D") {
-        const slice5 = history.slice(Math.max(0, idx - 4), idx + 1);
-        val = slice5.reduce((sum, item) => sum + ((item.breakouts20d ?? 0) - (item.breakdowns20d ?? 0)), 0);
+        const slice5 = validHistory.slice(Math.max(0, idx - 4), idx + 1);
+        val = slice5.reduce((sum, item) => sum + (item.breakouts20d - item.breakdowns20d), 0);
       } else if (period === "Cumulative") {
         val = cumulative;
       }
@@ -43,19 +53,21 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
         val,
       };
     });
-  }, [history, period]);
+  }, [validHistory, period]);
 
   const displayValue = useMemo(() => {
     if (liveNet === null) return "—";
     if (period === "Daily") return `${liveNet >= 0 ? "+" : ""}${liveNet}`;
+    if (validHistory.length === 0) return "—";
     if (period === "5D") {
-      const last5 = history.slice(-5);
-      const net5 = last5.reduce((sum, item) => sum + ((item.breakouts20d ?? 0) - (item.breakdowns20d ?? 0)), 0);
+      const last5 = validHistory.slice(-5);
+      if (last5.length === 0) return "—";
+      const net5 = last5.reduce((sum, item) => sum + (item.breakouts20d - item.breakdowns20d), 0);
       return `${net5 >= 0 ? "+" : ""}${net5}`;
     }
-    const cum = history.reduce((sum, item) => sum + ((item.breakouts20d ?? 0) - (item.breakdowns20d ?? 0)), 0);
+    const cum = validHistory.reduce((sum, item) => sum + (item.breakouts20d - item.breakdowns20d), 0);
     return `${cum >= 0 ? "+" : ""}${cum}`;
-  }, [period, liveNet, history]);
+  }, [period, liveNet, validHistory]);
 
   const displayStatus = useMemo(() => {
     if (liveNet === null) return "—";

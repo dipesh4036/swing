@@ -26,18 +26,34 @@ export async function POST(request) {
       );
     }
 
-    // 1. Lockout check: > 5 failed attempts for same email OR same ip_hash in 15 minutes
+    // 1. Lockout check:
+    // Block when failures from same ip_hash >= 5 in 15 minutes, or failures for same email from same ip_hash >= 5.
+    // Per-email failures from other IPs: after 20 in 15 minutes return 429 only for requests from IPs not seen with a successful login for that email.
     const lockoutRes = await queryWithRetry(
-      `SELECT COUNT(*) as failed_count
+      `SELECT
+         COUNT(*) FILTER (WHERE ip_hash = $2 AND success = false AND attempted_at >= NOW() - INTERVAL '15 minutes') as ip_failed_count,
+         COUNT(*) FILTER (WHERE email = $1 AND ip_hash = $2 AND success = false AND attempted_at >= NOW() - INTERVAL '15 minutes') as email_ip_failed_count,
+         COUNT(*) FILTER (WHERE email = $1 AND success = false AND attempted_at >= NOW() - INTERVAL '15 minutes') as email_failed_count,
+         COUNT(*) FILTER (WHERE email = $1 AND ip_hash = $2 AND success = true) as known_ip_success_count
        FROM login_attempts
-       WHERE (email = $1 OR ip_hash = $2)
-         AND success = false
-         AND attempted_at >= NOW() - INTERVAL '15 minutes';`,
+       WHERE (email = $1 OR ip_hash = $2);`,
       [cleanEmail, ipHash]
     );
 
-    const failedCount = parseInt(lockoutRes.rows[0]?.failed_count || "0", 10);
-    if (failedCount >= 5) {
+    const lockoutRow = lockoutRes.rows[0];
+    const ipFailed = parseInt(lockoutRow?.ip_failed_count || "0", 10);
+    const emailIpFailed = parseInt(lockoutRow?.email_ip_failed_count || "0", 10);
+    const emailFailed = parseInt(lockoutRow?.email_failed_count || "0", 10);
+    const hasKnownSuccess = parseInt(lockoutRow?.known_ip_success_count || "0", 10) > 0;
+
+    if (ipFailed >= 5 || emailIpFailed >= 5) {
+      return NextResponse.json(
+        { error: "Too many failed login attempts. Please try again later." },
+        { status: 429 }
+      );
+    }
+
+    if (emailFailed >= 20 && !hasKnownSuccess) {
       return NextResponse.json(
         { error: "Too many failed login attempts. Please try again later." },
         { status: 429 }

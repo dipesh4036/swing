@@ -13,9 +13,7 @@ export function getDbPool() {
     }
     pool = new Pool({
       connectionString,
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      ssl: true,
       max: 2, // Max 2 pooled connections for Neon serverless free tier
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
