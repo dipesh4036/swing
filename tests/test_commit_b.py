@@ -285,3 +285,37 @@ def test_fallback_on_validation_failure():
             mock_alert.assert_called()
             mock_angel_fallback.assert_called_once()
             assert res["source"] == "angel_fallback"
+
+
+def test_verify_bhavcopy_command_with_list_candles():
+    """Verify verify_bhavcopy_command handles SmartAPI raw list candle format without TypeError."""
+    from pipeline.bhavcopy import verify_bhavcopy_command
+
+    rows = [
+        {"token": i, "symbol": f"S{i}", "open": 100.0, "high": 105.0, "low": 98.0, "close": 100.0, "volume": 1000}
+        for i in range(1, 35)
+    ]
+    zb = make_synthetic_bhavcopy_zip(rows, target_date_str="2026-11-18")
+
+    mock_client = MagicMock()
+    # SmartAPI returns list of lists: [time, open, high, low, close, volume]
+    mock_client.get_candle_data.return_value = [
+        ["2026-11-18T00:00:00+05:30", 100.0, 105.0, 98.0, 100.0, 1000]
+    ]
+
+    with patch("pipeline.bhavcopy.get_ist_today", return_value=date(2026, 11, 18)), \
+         patch("pipeline.bhavcopy.download_bhavcopy_raw", return_value=(zb, {
+             "status_code": 200, "host": "nsearchives", "bytes": len(zb), "last_modified": "Wed, 18 Nov 2026 11:00:00 GMT"
+         })), \
+         patch("pipeline.bhavcopy.SmartAPIClient.login_from_env", return_value=mock_client), \
+         patch("pipeline.bhavcopy.parse_and_validate_bhavcopy") as mock_parse:
+
+        sample_df = pd.DataFrame([
+            {"token": i, "symbol": f"S{i}", "open": 100.0, "high": 105.0, "low": 98.0, "close": 100.0, "volume": 1000, "traded_val": 100000.0, "prev_close": 100.0}
+            for i in range(1, 35)
+        ])
+        mock_parse.return_value = sample_df
+
+        code = verify_bhavcopy_command(parquet_path="/nonexistent.parquet")
+        assert code == 0
+

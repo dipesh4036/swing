@@ -585,11 +585,18 @@ def verify_bhavcopy_command(parquet_path: Optional[str] = None) -> int:
             continue
 
         c = candles[-1]
-        a_open = float(c["open"])
-        a_high = float(c["high"])
-        a_low = float(c["low"])
-        a_close = float(c["close"])
-        a_vol = int(c["volume"])
+        if isinstance(c, dict):
+            a_open = float(c["open"])
+            a_high = float(c["high"])
+            a_low = float(c["low"])
+            a_close = float(c["close"])
+            a_vol = int(c.get("volume", 0))
+        else:
+            a_open = float(c[1])
+            a_high = float(c[2])
+            a_low = float(c[3])
+            a_close = float(c[4])
+            a_vol = int(c[5]) if len(c) > 5 and c[5] is not None else 0
 
         b_open = float(row["open"])
         b_high = float(row["high"])
