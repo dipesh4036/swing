@@ -1,4 +1,6 @@
 import logging
+import os
+import time
 from datetime import datetime
 from typing import Dict, Any, Callable, Optional
 from pipeline.config import RETENTION_YEARS, EQUITY_PARQUET_PATH
@@ -72,6 +74,7 @@ def run_daily_workflow(
     If any step fails, stop and do NOT trim.
     """
     logger.info("Starting daily market breadth workflow...")
+    workflow_start_time = time.time()
     pq_path = parquet_path or EQUITY_PARQUET_PATH
 
     # Check Neon storage guard (threshold 700 MB) and prune ingest_runs if needed
@@ -79,13 +82,14 @@ def run_daily_workflow(
 
     # 1. sync_instruments
     logger.info("Step 1/9: sync_instruments")
+    t0 = time.time()
     try:
         fn1 = sync_instruments_fn
         if fn1 is None:
             from pipeline.instruments import sync_instruments
             fn1 = sync_instruments
         res1 = fn1()
-        logger.info(f"Step 1 complete: {res1} instruments synced.")
+        logger.info(f"Step 1 complete: {res1} instruments synced. Step 1/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 1 (sync_instruments) failed: {e}"
         logger.error(msg)
@@ -94,13 +98,14 @@ def run_daily_workflow(
 
     # 2. sync_constituents
     logger.info("Step 2/9: sync_constituents")
+    t0 = time.time()
     try:
         fn2 = sync_constituents_fn
         if fn2 is None:
             from pipeline.instruments import sync_constituents
             fn2 = sync_constituents
         res2 = fn2()
-        logger.info(f"Step 2 complete: constituents synced ({res2}).")
+        logger.info(f"Step 2 complete: constituents synced ({res2}). Step 2/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 2 (sync_constituents) failed: {e}"
         logger.error(msg)
@@ -109,13 +114,14 @@ def run_daily_workflow(
 
     # 3. sync_indices
     logger.info("Step 3/9: sync_indices")
+    t0 = time.time()
     try:
         fn3 = sync_indices_fn
         if fn3 is None:
             from pipeline.indices_macro import sync_indices
             fn3 = sync_indices
         res3 = fn3()
-        logger.info(f"Step 3 complete: indices synced ({res3}).")
+        logger.info(f"Step 3 complete: indices synced ({res3}). Step 3/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 3 (sync_indices) failed: {e}"
         logger.error(msg)
@@ -124,13 +130,14 @@ def run_daily_workflow(
 
     # 4. sync_macro
     logger.info("Step 4/9: sync_macro")
+    t0 = time.time()
     try:
         fn4 = sync_macro_fn
         if fn4 is None:
             from pipeline.indices_macro import sync_macro
             fn4 = sync_macro
         res4 = fn4()
-        logger.info(f"Step 4 complete: macro synced ({res4}).")
+        logger.info(f"Step 4 complete: macro synced ({res4}). Step 4/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 4 (sync_macro) failed: {e}"
         logger.error(msg)
@@ -139,13 +146,14 @@ def run_daily_workflow(
 
     # 5. sync_fii_dii
     logger.info("Step 5/9: sync_fii_dii")
+    t0 = time.time()
     try:
         fn5 = sync_fii_dii_fn
         if fn5 is None:
             from pipeline.indices_macro import sync_fii_dii
             fn5 = sync_fii_dii
         res5 = fn5()
-        logger.info(f"Step 5 complete: FII/DII synced ({res5}).")
+        logger.info(f"Step 5 complete: FII/DII synced ({res5}). Step 5/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 5 (sync_fii_dii) failed: {e}"
         logger.error(msg)
@@ -154,6 +162,7 @@ def run_daily_workflow(
 
     # 6. ingest_equities
     logger.info("Step 6/9: ingest_equities")
+    t0 = time.time()
     try:
         fn6 = ingest_equities_fn
         if fn6 is None:
@@ -162,7 +171,23 @@ def run_daily_workflow(
         res6 = fn6(parquet_path=pq_path, tokens_limit=tokens_limit)
         if isinstance(res6, dict) and res6.get("status") == "failed":
             raise RuntimeError(f"Ingest reported failure: {res6}")
-        logger.info(f"Step 6 complete: equities ingested ({res6}).")
+        logger.info(f"Step 6 complete: equities ingested ({res6}). Step 6/9 done in {time.time() - t0:.1f}s")
+
+        # A4. Early save: upload immediately if step 6 succeeded and latest date has >= 1,500 tokens
+        if os.path.exists(pq_path):
+            try:
+                import pandas as _pd
+                _df = _pd.read_parquet(pq_path, columns=["token", "trade_date"])
+                if not _df.empty:
+                    _latest = _df["trade_date"].max()
+                    _active_count = _df[_df["trade_date"] == _latest]["token"].nunique()
+                    min_floor = 1500 if tokens_limit is None else min(tokens_limit, 1500)
+                    if _active_count >= min_floor:
+                        logger.info(f"Step 6 early upload: latest date {_latest} has {_active_count} tokens >= {min_floor}. Uploading store...")
+                        from pipeline.store import upload_parquet_store
+                        upload_parquet_store(pq_path, job_succeeded=True)
+            except Exception as _ue:
+                logger.warning(f"Early upload notice after step 6: {_ue}")
     except Exception as e:
         msg = f"Step 6 (ingest_equities) failed: {e}"
         logger.error(msg)
@@ -170,7 +195,8 @@ def run_daily_workflow(
         return {"status": "failed", "step": "ingest_equities", "error": str(e), "trimmed": False}
 
     # 7. adjust
-    logger.info("Step 7/9: adjust (Case A corporate actions)")
+    logger.info("Step 7/9: adjust (no Angel calls)")
+    t0 = time.time()
     try:
         fn7 = adjust_fn
         if fn7 is None:
@@ -179,7 +205,7 @@ def run_daily_workflow(
         res7 = fn7(parquet_path=pq_path, tokens_limit=tokens_limit)
         if res7 is False:
             raise RuntimeError("Adjustments returned False")
-        logger.info(f"Step 7 complete: adjustments verified.")
+        logger.info(f"Step 7 complete: adjustments verified. Step 7/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 7 (adjust) failed: {e}"
         logger.error(msg)
@@ -188,13 +214,14 @@ def run_daily_workflow(
 
     # Quality Gate Verification (Before compute, publish or trim)
     logger.info("Verifying Quality Gate prior to compute and publish...")
+    t0 = time.time()
     try:
         fn_qg = quality_gate_fn
         if fn_qg is None:
             from pipeline.quality_gate import verify_quality_gate
             fn_qg = verify_quality_gate
         fn_qg(parquet_path=pq_path, tokens_limit=tokens_limit, ingest_result=res6 if 'res6' in locals() else None)
-        logger.info("Quality gate verified successfully.")
+        logger.info(f"Quality gate verified successfully in {time.time() - t0:.1f}s.")
     except Exception as e:
         msg = f"Quality Gate failed: {e}. Aborting publish and trim."
         logger.error(msg)
@@ -209,6 +236,7 @@ def run_daily_workflow(
 
     # 8. compute_and_publish_all
     logger.info("Step 8/9: compute_and_publish_all")
+    t0 = time.time()
     try:
         fn8 = compute_fn
         if fn8 is None:
@@ -217,7 +245,7 @@ def run_daily_workflow(
         res8 = fn8(parquet_path=pq_path)
         if res8 is False:
             raise RuntimeError("Compute and publish failed")
-        logger.info(f"Step 8 complete: breadth computed and published.")
+        logger.info(f"Step 8 complete: breadth computed and published. Step 8/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 8 (compute_and_publish_all) failed: {e}"
         logger.error(msg)
@@ -226,18 +254,29 @@ def run_daily_workflow(
 
     # 9. trim (LAST step, executed only after all prior steps succeed)
     logger.info(f"Step 9/9: trim (retention={RETENTION_YEARS}y)")
+    t0 = time.time()
     try:
         fn9 = trim_fn
         if fn9 is None:
             from pipeline.trim import trim_equity_parquet
             fn9 = trim_equity_parquet
         trim_res = fn9(parquet_path=pq_path, retention_years=RETENTION_YEARS)
-        logger.info(f"Step 9 complete: trim succeeded: {trim_res}")
+        logger.info(f"Step 9 complete: trim succeeded: {trim_res}. Step 9/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 9 (trim) failed: {e}"
         logger.error(msg)
         send_telegram_alert(msg)
         return {"status": "failed", "step": "trim", "error": str(e), "trimmed": False}
+
+    workflow_total_time = time.time() - workflow_start_time
+    from pipeline.smartapi_client import _client_instance
+    angel_calls = getattr(_client_instance, "total_calls", 0) if _client_instance else 0
+    throttle_count = getattr(_client_instance, "throttle_count", 0) if _client_instance else 0
+    rate_at_end = getattr(_client_instance, "current_req_per_sec", 0.0) if _client_instance else 0.0
+    logger.info(
+        f"Workflow Summary: Total time: {workflow_total_time:.1f}s | "
+        f"Angel calls: {angel_calls} | Throttles: {throttle_count} | End rate: {rate_at_end:.2f} req/s"
+    )
 
     return {
         "status": "success",

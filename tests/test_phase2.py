@@ -73,16 +73,18 @@ def test_adjustments_detects_split_and_replaces_rows():
         ]
         mock_client.get_candle_data.side_effect = [overlap_data, full_data]
 
-        mock_conn = MagicMock()
-        res = run_adjustments(client=mock_client, parquet_path=pq_path, conn=mock_conn)
-        assert res is True
+        from pipeline.ingest import ingest_equities, SCHEMA_COLUMNS
+        with patch("pipeline.ingest.load_target_instruments", return_value=[{"token": 555, "symbol": "SPLITCORP"}]), \
+             patch("pipeline.ingest.log_price_adjustments") as mock_log_adj:
+            res = ingest_equities(client=mock_client, parquet_path=pq_path)
+            assert res["status"] in ("success", "partial")
+            assert mock_log_adj.called
 
         # Check updated parquet
         updated_df = pd.read_parquet(pq_path)
         # All rows should now have close=100.0
         assert (updated_df["close"] == 100.0).all()
-        # Database insert called with ratio=2.0
-        assert mock_conn.cursor.called
+        assert list(updated_df.columns) == SCHEMA_COLUMNS
 
 def test_adjustments_detects_20pct_large_move():
     """Verify scan logs stock with adjusted 1-day move of 20% or more."""
@@ -128,7 +130,7 @@ def test_quality_gate_fails_high_fetch_failure_rate():
         mock_conn = MagicMock()
         # 10 failed out of 100 total = 10% > 5% allowed
         ingest_result = {"total": 100, "success": 90, "failed": 10}
-        with pytest.raises(QualityGateError, match="> 5% allowed limit"):
+        with pytest.raises(QualityGateError, match="> 2% allowed limit"):
             verify_quality_gate(parquet_path=pq_path, conn=mock_conn, ingest_result=ingest_result)
 
 def test_quality_gate_fails_missing_benchmark_index():

@@ -46,12 +46,12 @@ def verify_quality_gate(
             logger.warning(f"Quality gate could not establish DB connection: {e}")
 
     try:
-        # 1. Fetch failure rate check (<= 5%)
+        # 1. Fetch failure rate check (<= 2%)
         if ingest_result:
             total = ingest_result.get("total", 0)
             failed = ingest_result.get("failed", 0)
-            if total > 0 and (failed / total) > 0.05:
-                msg = f"Quality Gate failed: Fetch failure rate is {(failed/total)*100:.1f}% ({failed}/{total} failed > 5% allowed limit)."
+            if total > 0 and (failed / total) > 0.02:
+                msg = f"Quality Gate failed: Fetch failure rate is {(failed/total)*100:.1f}% ({failed}/{total} failed > 2% allowed limit)."
                 logger.error(msg)
                 send_telegram_alert(msg)
                 if conn:
