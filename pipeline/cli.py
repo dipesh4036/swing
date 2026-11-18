@@ -189,11 +189,13 @@ def main():
     elif args.command == "verify-bhavcopy":
         logger.info("Executing 'verify-bhavcopy' command...")
         try:
+            download_parquet_store(args.path)
             from pipeline.bhavcopy import verify_bhavcopy_command
             code = verify_bhavcopy_command(parquet_path=args.path)
             sys.exit(code)
         except Exception as e:
-            print(f"Error executing verify-bhavcopy: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
 
     else:
