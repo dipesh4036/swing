@@ -58,6 +58,11 @@ class SmartAPIClient:
         self.reauth_count = 0
         self._authenticate()
 
+    @classmethod
+    def login_from_env(cls) -> "SmartAPIClient":
+        """Instantiate client and authenticate using environment variables."""
+        return cls()
+
     def set_rate(self, rate: float):
         """Manually override current request rate (e.g. for throttled retry pass)."""
         self.current_req_per_sec = max(0.1, float(rate))

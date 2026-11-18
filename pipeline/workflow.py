@@ -166,8 +166,15 @@ def run_daily_workflow(
     try:
         fn6 = ingest_equities_fn
         if fn6 is None:
-            from pipeline.ingest import ingest_equities
-            fn6 = ingest_equities
+            daily_source = os.environ.get("DAILY_SOURCE", "angel").strip().lower()
+            if daily_source == "bhavcopy":
+                logger.info("Using DAILY_SOURCE=bhavcopy for equities ingest.")
+                from pipeline.bhavcopy import ingest_bhavcopy
+                fn6 = ingest_bhavcopy
+            else:
+                logger.info("Using DAILY_SOURCE=angel for equities ingest.")
+                from pipeline.ingest import ingest_equities
+                fn6 = ingest_equities
         res6 = fn6(parquet_path=pq_path, tokens_limit=tokens_limit)
         if isinstance(res6, dict) and res6.get("status") == "failed":
             raise RuntimeError(f"Ingest reported failure: {res6}")

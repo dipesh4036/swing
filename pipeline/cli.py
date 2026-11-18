@@ -53,6 +53,10 @@ def main():
     # Test connection command
     test_parser = subparsers.add_parser("test-connection", help="Test SmartAPI login and one candle fetch")
 
+    # Verify Bhavcopy command
+    verify_bhav_parser = subparsers.add_parser("verify-bhavcopy", help="Verify latest Bhavcopy download against SmartAPI sample")
+    verify_bhav_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -180,6 +184,16 @@ def main():
             }, indent=2))
         except Exception as e:
             print(f"Error testing SmartAPI connection: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "verify-bhavcopy":
+        logger.info("Executing 'verify-bhavcopy' command...")
+        try:
+            from pipeline.bhavcopy import verify_bhavcopy_command
+            code = verify_bhavcopy_command(parquet_path=args.path)
+            sys.exit(code)
+        except Exception as e:
+            print(f"Error executing verify-bhavcopy: {e}", file=sys.stderr)
             sys.exit(1)
 
     else:

@@ -23,6 +23,7 @@ on:
           - backfill
           - trim
           - test-connection
+          - verify-bhavcopy
 
 permissions:
   contents: write
