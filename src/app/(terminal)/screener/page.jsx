@@ -9,7 +9,9 @@ import {
   RefreshCw,
   Search,
   X,
+  AlertTriangle,
 } from "lucide-react";
+import { isDataStale } from "@/lib/freshness";
 
 // Load lightweight-charts chart via dynamic import with ssr: false
 const ScreenerChart = dynamic(
@@ -339,6 +341,14 @@ export default function ScreenerPage() {
             </button>
           </div>
         </div>
+
+        {/* Stale Data Banner */}
+        {screenerData?.asOf && isDataStale(screenerData.asOf) && (
+          <div className="mx-4 my-2 px-3 py-2 rounded-[6px] bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium flex items-center gap-2">
+            <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>Data is stale: last update {screenerData.asOf}</span>
+          </div>
+        )}
 
         {/* Screener Tabs Bar */}
         <div className="px-4 flex items-center gap-1 overflow-x-auto no-scrollbar pb-2">

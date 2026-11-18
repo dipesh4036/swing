@@ -2,10 +2,12 @@ name: Market Breadth Pipeline
 
 on:
   schedule:
-    # Daily post-market close: 11:30 UTC (17:00 IST) weekdays
-    - cron: "30 11 * * 1-5"
-    # Catch-up run: 15:30 UTC (21:00 IST) weekdays
-    - cron: "30 15 * * 1-5"
+    # Daily post-market close: 14:00 UTC (19:30 IST) weekdays (main)
+    - cron: "0 14 * * 1-5"
+    # Daily retry: 16:30 UTC (22:00 IST) weekdays (retry)
+    - cron: "30 16 * * 1-5"
+    # Daily safety net: 00:30 UTC (06:00 IST next day) Tue-Sat
+    - cron: "30 0 * * 2-6"
     # Weekly full re-fetch: 02:00 UTC Saturdays
     - cron: "0 2 * * 6"
   workflow_dispatch:
@@ -48,6 +50,7 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       EQUITY_PARQUET_PATH: "data/equity_ohlcv.parquet"
       RETENTION_YEARS: "3"
+      DAILY_SOURCE: ${{ vars.DAILY_SOURCE || 'angel' }}
 
     steps:
       - name: Checkout repository
@@ -71,9 +74,8 @@ jobs:
             CMD="${{ github.event.inputs.command }}"
           elif [ "${{ github.event.schedule }}" = "0 2 * * 6" ]; then
             CMD="weekly"
-          elif [ "${{ github.event.schedule }}" = "30 15 * * 1-5" ]; then
-            CMD="catch-up"
           else
+            # All three daily crons (0 14 * * 1-5, 30 16 * * 1-5, 30 0 * * 2-6) execute daily
             CMD="daily"
           fi
           echo "command=$CMD" >> $GITHUB_OUTPUT

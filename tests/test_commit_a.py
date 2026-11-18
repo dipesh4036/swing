@@ -176,6 +176,7 @@ def test_early_upload_after_step_6():
 
         mock_upload = MagicMock()
         with patch("pipeline.workflow.check_storage_guard_and_prune"), \
+             patch("pipeline.workflow.check_workflow_branch", return_value={"branch": "full_workflow"}), \
              patch("pipeline.store.upload_parquet_store", mock_upload):
             res = run_daily_workflow(
                 sync_instruments_fn=lambda: 1500,

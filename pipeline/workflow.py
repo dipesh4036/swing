@@ -1,12 +1,100 @@
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, date, timedelta, timezone
 from typing import Dict, Any, Callable, Optional
 from pipeline.config import RETENTION_YEARS, EQUITY_PARQUET_PATH
 from pipeline.alerts import send_telegram_alert
 
 logger = logging.getLogger("pipeline.workflow")
+
+def get_latest_completed_trading_day(now_ist: Optional[datetime] = None) -> date:
+    """Returns latest completed trading day in IST."""
+    if now_ist is None:
+        ist = timezone(timedelta(hours=5, minutes=30))
+        now_ist = datetime.now(ist)
+    today = now_ist.date()
+    # Market closes at 15:30 IST; by 16:00 IST trading day is completed
+    if today.weekday() < 5 and (now_ist.hour > 16 or (now_ist.hour == 16 and now_ist.minute >= 0)):
+        return today
+    # Prior weekday
+    curr = today - timedelta(days=1)
+    while curr.weekday() >= 5:
+        curr -= timedelta(days=1)
+    return curr
+
+def check_workflow_branch(
+    parquet_path: str,
+    conn=None,
+    now_ist: Optional[datetime] = None
+) -> Dict[str, Any]:
+    """
+    Evaluates Parquet date vs Neon daily_market_breadth date (C2):
+    - 'idempotent_no_op': parquet_max == breadth_max and no weekday gap up to latest completed trading day
+    - 'compute_only': parquet_max > breadth_max (previous publish failed, skip ingest)
+    - 'full_workflow': all other cases
+    """
+    if not os.path.exists(parquet_path):
+        return {"branch": "full_workflow", "reason": "parquet_missing"}
+
+    try:
+        import pandas as pd
+        df = pd.read_parquet(parquet_path, columns=["trade_date"])
+        if df.empty or "trade_date" not in df.columns:
+            return {"branch": "full_workflow", "reason": "parquet_empty"}
+        parquet_max = df["trade_date"].max()
+    except Exception as e:
+        logger.warning(f"Error reading parquet for branch check: {e}")
+        return {"branch": "full_workflow", "reason": str(e)}
+
+    breadth_max = None
+    should_close = False
+    try:
+        if conn is None:
+            from pipeline.db import get_connection
+            conn = get_connection()
+            should_close = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT MAX(trade_date)::text FROM daily_market_breadth;")
+            row = cur.fetchone()
+            if row and row[0]:
+                breadth_max = str(row[0]).split("T")[0]
+    except Exception as e:
+        logger.warning(f"Could not query max trade_date from daily_market_breadth: {e}")
+    finally:
+        if should_close and conn:
+            conn.close()
+
+    if not breadth_max:
+        return {"branch": "full_workflow", "reason": "breadth_empty", "parquet_max": parquet_max}
+
+    latest_trading_day = get_latest_completed_trading_day(now_ist=now_ist)
+    latest_day_str = latest_trading_day.strftime("%Y-%m-%d")
+
+    # If parquet is newer than breadth: previous publish failed, skip ingest and run compute only
+    if parquet_max > breadth_max:
+        return {
+            "branch": "compute_only",
+            "parquet_max": parquet_max,
+            "breadth_max": breadth_max,
+            "latest_trading_day": latest_day_str
+        }
+
+    # If parquet equals breadth and no weekday gap exists up to latest completed trading day
+    if parquet_max == breadth_max and parquet_max >= latest_day_str:
+        return {
+            "branch": "idempotent_no_op",
+            "parquet_max": parquet_max,
+            "breadth_max": breadth_max,
+            "latest_trading_day": latest_day_str
+        }
+
+    return {
+        "branch": "full_workflow",
+        "parquet_max": parquet_max,
+        "breadth_max": breadth_max,
+        "latest_trading_day": latest_day_str
+    }
 
 def check_storage_guard_and_prune() -> Dict[str, Any]:
     """
@@ -80,144 +168,173 @@ def run_daily_workflow(
     # Check Neon storage guard (threshold 700 MB) and prune ingest_runs if needed
     check_storage_guard_and_prune()
 
-    # 1. sync_instruments
-    logger.info("Step 1/9: sync_instruments")
-    t0 = time.time()
-    try:
-        fn1 = sync_instruments_fn
-        if fn1 is None:
-            from pipeline.instruments import sync_instruments
-            fn1 = sync_instruments
-        res1 = fn1()
-        logger.info(f"Step 1 complete: {res1} instruments synced. Step 1/9 done in {time.time() - t0:.1f}s")
-    except Exception as e:
-        msg = f"Step 1 (sync_instruments) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "sync_instruments", "error": str(e), "trimmed": False}
+    # C2 Idempotent no-op and compute-only branch checks
+    branch_info = check_workflow_branch(pq_path)
+    branch = branch_info.get("branch", "full_workflow")
+    logger.info(f"Daily workflow branch decision: {branch} (details: {branch_info})")
 
-    # 2. sync_constituents
-    logger.info("Step 2/9: sync_constituents")
-    t0 = time.time()
-    try:
-        fn2 = sync_constituents_fn
-        if fn2 is None:
-            from pipeline.instruments import sync_constituents
-            fn2 = sync_constituents
-        res2 = fn2()
-        logger.info(f"Step 2 complete: constituents synced ({res2}). Step 2/9 done in {time.time() - t0:.1f}s")
-    except Exception as e:
-        msg = f"Step 2 (sync_constituents) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "sync_constituents", "error": str(e), "trimmed": False}
+    if branch == "idempotent_no_op":
+        msg = (
+            f"Idempotent no-op: Parquet newest date ({branch_info.get('parquet_max')}) "
+            f"equals breadth max date ({branch_info.get('breadth_max')}) and is up to date "
+            f"with latest trading day ({branch_info.get('latest_trading_day')}). Exiting success in under 1 minute."
+        )
+        logger.info(msg)
+        return {
+            "status": "success",
+            "branch": "idempotent_no_op",
+            "parquet_max": branch_info.get("parquet_max"),
+            "breadth_max": branch_info.get("breadth_max"),
+            "elapsed_seconds": round(time.time() - workflow_start_time, 2),
+            "trimmed": False
+        }
 
-    # 3. sync_indices
-    logger.info("Step 3/9: sync_indices")
-    t0 = time.time()
-    try:
-        fn3 = sync_indices_fn
-        if fn3 is None:
-            from pipeline.indices_macro import sync_indices
-            fn3 = sync_indices
-        res3 = fn3()
-        logger.info(f"Step 3 complete: indices synced ({res3}). Step 3/9 done in {time.time() - t0:.1f}s")
-    except Exception as e:
-        msg = f"Step 3 (sync_indices) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "sync_indices", "error": str(e), "trimmed": False}
+    if branch == "compute_only":
+        logger.info(
+            f"Compute-only branch: Parquet newest date ({branch_info.get('parquet_max')}) is newer than "
+            f"breadth max date ({branch_info.get('breadth_max')}). Skipping ingest steps 1-7, running compute only."
+        )
 
-    # 4. sync_macro
-    logger.info("Step 4/9: sync_macro")
-    t0 = time.time()
-    try:
-        fn4 = sync_macro_fn
-        if fn4 is None:
-            from pipeline.indices_macro import sync_macro
-            fn4 = sync_macro
-        res4 = fn4()
-        logger.info(f"Step 4 complete: macro synced ({res4}). Step 4/9 done in {time.time() - t0:.1f}s")
-    except Exception as e:
-        msg = f"Step 4 (sync_macro) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "sync_macro", "error": str(e), "trimmed": False}
+    res6 = None
+    if branch != "compute_only":
+        # 1. sync_instruments
+        logger.info("Step 1/9: sync_instruments")
+        t0 = time.time()
+        try:
+            fn1 = sync_instruments_fn
+            if fn1 is None:
+                from pipeline.instruments import sync_instruments
+                fn1 = sync_instruments
+            res1 = fn1()
+            logger.info(f"Step 1 complete: {res1} instruments synced. Step 1/9 done in {time.time() - t0:.1f}s")
+        except Exception as e:
+            msg = f"Step 1 (sync_instruments) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "sync_instruments", "error": str(e), "trimmed": False}
 
-    # 5. sync_fii_dii
-    logger.info("Step 5/9: sync_fii_dii")
-    t0 = time.time()
-    try:
-        fn5 = sync_fii_dii_fn
-        if fn5 is None:
-            from pipeline.indices_macro import sync_fii_dii
-            fn5 = sync_fii_dii
-        res5 = fn5()
-        logger.info(f"Step 5 complete: FII/DII synced ({res5}). Step 5/9 done in {time.time() - t0:.1f}s")
-    except Exception as e:
-        msg = f"Step 5 (sync_fii_dii) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "sync_fii_dii", "error": str(e), "trimmed": False}
+        # 2. sync_constituents
+        logger.info("Step 2/9: sync_constituents")
+        t0 = time.time()
+        try:
+            fn2 = sync_constituents_fn
+            if fn2 is None:
+                from pipeline.instruments import sync_constituents
+                fn2 = sync_constituents
+            res2 = fn2()
+            logger.info(f"Step 2 complete: constituents synced ({res2}). Step 2/9 done in {time.time() - t0:.1f}s")
+        except Exception as e:
+            msg = f"Step 2 (sync_constituents) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "sync_constituents", "error": str(e), "trimmed": False}
 
-    # 6. ingest_equities
-    logger.info("Step 6/9: ingest_equities")
-    t0 = time.time()
-    try:
-        fn6 = ingest_equities_fn
-        if fn6 is None:
-            daily_source = os.environ.get("DAILY_SOURCE", "angel").strip().lower()
-            if daily_source == "bhavcopy":
-                logger.info("Using DAILY_SOURCE=bhavcopy for equities ingest.")
-                from pipeline.bhavcopy import ingest_bhavcopy
-                fn6 = ingest_bhavcopy
-            else:
-                logger.info("Using DAILY_SOURCE=angel for equities ingest.")
-                from pipeline.ingest import ingest_equities
-                fn6 = ingest_equities
-        res6 = fn6(parquet_path=pq_path, tokens_limit=tokens_limit)
-        if isinstance(res6, dict) and res6.get("status") == "failed":
-            raise RuntimeError(f"Ingest reported failure: {res6}")
-        logger.info(f"Step 6 complete: equities ingested ({res6}). Step 6/9 done in {time.time() - t0:.1f}s")
+        # 3. sync_indices
+        logger.info("Step 3/9: sync_indices")
+        t0 = time.time()
+        try:
+            fn3 = sync_indices_fn
+            if fn3 is None:
+                from pipeline.indices_macro import sync_indices
+                fn3 = sync_indices
+            res3 = fn3()
+            logger.info(f"Step 3 complete: indices synced ({res3}). Step 3/9 done in {time.time() - t0:.1f}s")
+        except Exception as e:
+            msg = f"Step 3 (sync_indices) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "sync_indices", "error": str(e), "trimmed": False}
 
-        # A4. Early save: upload immediately if step 6 succeeded and latest date has >= 1,500 tokens
-        if os.path.exists(pq_path):
-            try:
-                import pandas as _pd
-                _df = _pd.read_parquet(pq_path, columns=["token", "trade_date"])
-                if not _df.empty:
-                    _latest = _df["trade_date"].max()
-                    _active_count = _df[_df["trade_date"] == _latest]["token"].nunique()
-                    min_floor = 1500 if tokens_limit is None else min(tokens_limit, 1500)
-                    if _active_count >= min_floor:
-                        logger.info(f"Step 6 early upload: latest date {_latest} has {_active_count} tokens >= {min_floor}. Uploading store...")
-                        from pipeline.store import upload_parquet_store
-                        upload_parquet_store(pq_path, job_succeeded=True)
-            except Exception as _ue:
-                logger.warning(f"Early upload notice after step 6: {_ue}")
-    except Exception as e:
-        msg = f"Step 6 (ingest_equities) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "ingest_equities", "error": str(e), "trimmed": False}
+        # 4. sync_macro
+        logger.info("Step 4/9: sync_macro")
+        t0 = time.time()
+        try:
+            fn4 = sync_macro_fn
+            if fn4 is None:
+                from pipeline.indices_macro import sync_macro
+                fn4 = sync_macro
+            res4 = fn4()
+            logger.info(f"Step 4 complete: macro synced ({res4}). Step 4/9 done in {time.time() - t0:.1f}s")
+        except Exception as e:
+            msg = f"Step 4 (sync_macro) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "sync_macro", "error": str(e), "trimmed": False}
 
-    # 7. adjust
-    logger.info("Step 7/9: adjust (no Angel calls)")
-    t0 = time.time()
-    try:
-        fn7 = adjust_fn
-        if fn7 is None:
-            from pipeline.adjust import run_adjustments
-            fn7 = run_adjustments
-        res7 = fn7(parquet_path=pq_path, tokens_limit=tokens_limit)
-        if res7 is False:
-            raise RuntimeError("Adjustments returned False")
-        logger.info(f"Step 7 complete: adjustments verified. Step 7/9 done in {time.time() - t0:.1f}s")
-    except Exception as e:
-        msg = f"Step 7 (adjust) failed: {e}"
-        logger.error(msg)
-        send_telegram_alert(msg)
-        return {"status": "failed", "step": "adjust", "error": str(e), "trimmed": False}
+        # 5. sync_fii_dii
+        logger.info("Step 5/9: sync_fii_dii")
+        t0 = time.time()
+        try:
+            fn5 = sync_fii_dii_fn
+            if fn5 is None:
+                from pipeline.indices_macro import sync_fii_dii
+                fn5 = sync_fii_dii
+            res5 = fn5()
+            logger.info(f"Step 5 complete: FII/DII synced ({res5}). Step 5/9 done in {time.time() - t0:.1f}s")
+        except Exception as e:
+            msg = f"Step 5 (sync_fii_dii) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "sync_fii_dii", "error": str(e), "trimmed": False}
+
+        # 6. ingest_equities
+        logger.info("Step 6/9: ingest_equities")
+        t0 = time.time()
+        try:
+            fn6 = ingest_equities_fn
+            if fn6 is None:
+                daily_source = os.environ.get("DAILY_SOURCE", "angel").strip().lower()
+                if daily_source == "bhavcopy":
+                    logger.info("Using DAILY_SOURCE=bhavcopy for equities ingest.")
+                    from pipeline.bhavcopy import ingest_bhavcopy
+                    fn6 = ingest_bhavcopy
+                else:
+                    logger.info("Using DAILY_SOURCE=angel for equities ingest.")
+                    from pipeline.ingest import ingest_equities
+                    fn6 = ingest_equities
+            res6 = fn6(parquet_path=pq_path, tokens_limit=tokens_limit)
+            if isinstance(res6, dict) and res6.get("status") == "failed":
+                raise RuntimeError(f"Ingest reported failure: {res6}")
+            logger.info(f"Step 6 complete: equities ingested ({res6}). Step 6/9 done in {time.time() - t0:.1f}s")
+
+            # A4. Early save: upload immediately if step 6 succeeded and latest date has >= 1,500 tokens
+            if os.path.exists(pq_path):
+                try:
+                    import pandas as _pd
+                    _df = _pd.read_parquet(pq_path, columns=["token", "trade_date"])
+                    if not _df.empty:
+                        _latest = _df["trade_date"].max()
+                        _active_count = _df[_df["trade_date"] == _latest]["token"].nunique()
+                        min_floor = 1500 if tokens_limit is None else min(tokens_limit, 1500)
+                        if _active_count >= min_floor:
+                            logger.info(f"Step 6 early upload: latest date {_latest} has {_active_count} tokens >= {min_floor}. Uploading store...")
+                            from pipeline.store import upload_parquet_store
+                            upload_parquet_store(pq_path, job_succeeded=True)
+                except Exception as _ue:
+                    logger.warning(f"Early upload notice after step 6: {_ue}")
+        except Exception as e:
+            msg = f"Step 6 (ingest_equities) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "ingest_equities", "error": str(e), "trimmed": False}
+
+        # 7. adjust
+        logger.info("Step 7/9: adjust (no Angel calls)")
+        t0 = time.time()
+        try:
+            fn7 = adjust_fn
+            if fn7 is None:
+                from pipeline.adjust import run_adjustments
+                fn7 = run_adjustments
+            res7 = fn7(parquet_path=pq_path, tokens_limit=tokens_limit)
+            if res7 is False:
+                raise RuntimeError("Adjustments returned False")
+            logger.info(f"Step 7 complete: adjustments verified. Step 7/9 done in {time.time() - t0:.1f}s")
+        except Exception as e:
+            msg = f"Step 7 (adjust) failed: {e}"
+            logger.error(msg)
+            send_telegram_alert(msg)
+            return {"status": "failed", "step": "adjust", "error": str(e), "trimmed": False}
 
     # Quality Gate Verification (Before compute, publish or trim)
     logger.info("Verifying Quality Gate prior to compute and publish...")
@@ -287,6 +404,7 @@ def run_daily_workflow(
 
     return {
         "status": "success",
+        "branch": branch,
         "trimmed": True,
         "trim_result": trim_res,
     }
