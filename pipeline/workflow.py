@@ -8,8 +8,32 @@ from pipeline.alerts import send_telegram_alert
 
 logger = logging.getLogger("pipeline.workflow")
 
-def get_latest_completed_trading_day(now_ist: Optional[datetime] = None) -> date:
-    """Returns latest completed trading day in IST."""
+def get_latest_completed_trading_day(now_ist: Optional[datetime] = None, conn=None) -> date:
+    """Returns latest completed trading day in IST, checking Neon Nifty 50 candle first."""
+    # Check Neon daily_index_ohlcv for latest completed NIFTY 50 trading date (Fix 2)
+    should_close = False
+    try:
+        if conn is None:
+            from pipeline.db import get_connection
+            conn = get_connection()
+            should_close = True
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT MAX(trade_date)::text FROM daily_index_ohlcv
+                WHERE index_name = 'NIFTY 50';
+            """)
+            row = cur.fetchone()
+            if row and row[0]:
+                return datetime.strptime(str(row[0]).split("T")[0], "%Y-%m-%d").date()
+    except Exception as e:
+        logger.debug(f"Could not query Nifty 50 date from Neon: {e}")
+    finally:
+        if should_close and conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
     if now_ist is None:
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
@@ -63,12 +87,15 @@ def check_workflow_branch(
         logger.warning(f"Could not query max trade_date from daily_market_breadth: {e}")
     finally:
         if should_close and conn:
-            conn.close()
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     if not breadth_max:
         return {"branch": "full_workflow", "reason": "breadth_empty", "parquet_max": parquet_max}
 
-    latest_trading_day = get_latest_completed_trading_day(now_ist=now_ist)
+    latest_trading_day = get_latest_completed_trading_day(now_ist=now_ist, conn=conn)
     latest_day_str = latest_trading_day.strftime("%Y-%m-%d")
 
     # If parquet is newer than breadth: previous publish failed, skip ingest and run compute only
@@ -393,10 +420,11 @@ def run_daily_workflow(
         return {"status": "failed", "step": "trim", "error": str(e), "trimmed": False}
 
     workflow_total_time = time.time() - workflow_start_time
-    from pipeline.smartapi_client import _client_instance
-    angel_calls = getattr(_client_instance, "total_calls", 0) if _client_instance else 0
-    throttle_count = getattr(_client_instance, "throttle_count", 0) if _client_instance else 0
-    rate_at_end = getattr(_client_instance, "current_req_per_sec", 0.0) if _client_instance else 0.0
+    from pipeline.smartapi_client import get_angel_stats
+    stats = get_angel_stats()
+    angel_calls = stats["calls"]
+    throttle_count = stats["throttles"]
+    rate_at_end = stats["rate"]
     logger.info(
         f"Workflow Summary: Total time: {workflow_total_time:.1f}s | "
         f"Angel calls: {angel_calls} | Throttles: {throttle_count} | End rate: {rate_at_end:.2f} req/s"
@@ -420,6 +448,13 @@ def run_weekly_refetch(
     """
     logger.info(f"Initiating weekly full re-fetch for {retention_years} years of history...")
     pq_path = parquet_path or EQUITY_PARQUET_PATH
+
+    # Item 7b: Run dedupe automatically at start of weekly full refetch
+    try:
+        from pipeline.dedupe import dedupe_equity_parquet
+        dedupe_equity_parquet(parquet_path=pq_path)
+    except Exception as de:
+        logger.warning(f"Notice: pre-weekly refetch dedupe encountered: {de}")
 
     # Wire ingest_equities explicitly configured with years=retention_years
     from pipeline.ingest import ingest_equities

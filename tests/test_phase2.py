@@ -75,7 +75,8 @@ def test_adjustments_detects_split_and_replaces_rows():
 
         from pipeline.ingest import ingest_equities, SCHEMA_COLUMNS
         with patch("pipeline.ingest.load_target_instruments", return_value=[{"token": 555, "symbol": "SPLITCORP"}]), \
-             patch("pipeline.ingest.log_price_adjustments") as mock_log_adj:
+             patch("pipeline.ingest.log_price_adjustments") as mock_log_adj, \
+             patch("pipeline.ingest.log_ingest_run"):
             res = ingest_equities(client=mock_client, parquet_path=pq_path)
             assert res["status"] in ("success", "partial")
             assert mock_log_adj.called

@@ -10,6 +10,25 @@ load_dotenv(".env")
 
 logger = logging.getLogger("pipeline.smartapi")
 
+TOTAL_ANGEL_CALLS = 0
+TOTAL_ANGEL_THROTTLES = 0
+CURRENT_RATE = 1.0
+
+def get_angel_stats() -> Dict[str, Any]:
+    """Returns module-level shared counters across all SmartAPIClient instances."""
+    return {
+        "calls": TOTAL_ANGEL_CALLS,
+        "throttles": TOTAL_ANGEL_THROTTLES,
+        "rate": CURRENT_RATE,
+    }
+
+def reset_angel_stats():
+    """Resets module-level shared counters (e.g. at start of workflow)."""
+    global TOTAL_ANGEL_CALLS, TOTAL_ANGEL_THROTTLES, CURRENT_RATE
+    TOTAL_ANGEL_CALLS = 0
+    TOTAL_ANGEL_THROTTLES = 0
+    CURRENT_RATE = 1.0
+
 class SmartAPIThrottledError(RuntimeError):
     """Raised when SmartAPI throttles requests and retries are exhausted."""
     pass
@@ -69,25 +88,31 @@ class SmartAPIClient:
         logger.info(f"SmartAPI request rate manually set to {self.current_req_per_sec:.2f} req/s")
 
     def on_throttle(self):
-        """Reduce request rate by 25% down to floor of 0.4 req/s."""
+        """Reduce request rate by 25% down to floor of 0.4 req/s (cut once per throttled token)."""
+        global TOTAL_ANGEL_THROTTLES, CURRENT_RATE
+        TOTAL_ANGEL_THROTTLES += 1
         self.throttle_count += 1
         self.clean_calls_streak = 0
         old_rate = self.current_req_per_sec
         self.current_req_per_sec = max(0.4, round(self.current_req_per_sec * 0.75, 4))
+        CURRENT_RATE = self.current_req_per_sec
         logger.warning(
             f"SmartAPI throttle detected! Reducing rate by 25%: {old_rate:.2f} -> {self.current_req_per_sec:.2f} req/s"
         )
 
     def on_clean_call(self):
-        """Track clean calls and gradually recover rate (+5%) after 50 consecutive clean calls."""
+        """Track clean calls and gradually recover rate (+10%) after 25 consecutive clean calls."""
+        global TOTAL_ANGEL_CALLS, CURRENT_RATE
+        TOTAL_ANGEL_CALLS += 1
         self.total_calls += 1
         self.clean_calls_streak += 1
-        if self.clean_calls_streak >= 50 and self.current_req_per_sec < self.initial_req_per_sec:
+        if self.clean_calls_streak >= 25 and self.current_req_per_sec < self.initial_req_per_sec:
             old_rate = self.current_req_per_sec
-            self.current_req_per_sec = min(self.initial_req_per_sec, round(self.current_req_per_sec * 1.05, 4))
+            self.current_req_per_sec = min(self.initial_req_per_sec, round(self.current_req_per_sec * 1.10, 4))
+            CURRENT_RATE = self.current_req_per_sec
             self.clean_calls_streak = 0
             logger.info(
-                f"Recovering adaptive rate (+5% after 50 clean calls): {old_rate:.2f} -> {self.current_req_per_sec:.2f} req/s"
+                f"Recovering adaptive rate (+10% after 25 clean calls): {old_rate:.2f} -> {self.current_req_per_sec:.2f} req/s"
             )
 
     def _rate_limit(self):
@@ -155,6 +180,7 @@ class SmartAPIClient:
 
         backoff = 1.0
         throttled = False
+        throttled_this_token = False
         for attempt in range(max_retries):
             self._rate_limit()
             try:
@@ -169,7 +195,9 @@ class SmartAPIClient:
                 # Rate limiting
                 if "exceeding access rate" in msg.lower() or "too many requests" in msg.lower():
                     throttled = True
-                    self.on_throttle()
+                    if not throttled_this_token:
+                        throttled_this_token = True
+                        self.on_throttle()
                     logger.warning(f"Rate limit hit for token {symbol_token}. Backing off {backoff:.1f}s...")
                     time.sleep(backoff)
                     backoff = min(backoff * 2, 8.0)
@@ -193,7 +221,9 @@ class SmartAPIClient:
                 err_str = str(e)
                 if "exceeding access rate" in err_str.lower() or "too many requests" in err_str.lower():
                     throttled = True
-                    self.on_throttle()
+                    if not throttled_this_token:
+                        throttled_this_token = True
+                        self.on_throttle()
                     logger.warning(f"Rate limit exception for token {symbol_token}. Backing off {backoff:.1f}s...")
                     time.sleep(backoff)
                     backoff = min(backoff * 2, 8.0)

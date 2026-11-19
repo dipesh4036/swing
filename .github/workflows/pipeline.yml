@@ -26,6 +26,7 @@ on:
           - trim
           - test-connection
           - verify-bhavcopy
+          - dedupe-store
       source:
         description: "Equities daily source (bhavcopy or angel)"
         required: false

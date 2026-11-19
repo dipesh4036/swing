@@ -59,13 +59,18 @@ The daily equities ingest source is controlled via the repository variable / env
 
 ---
 
-## 3. Fallback Rules
+## 3. Fallback Rules, Holiday Detection & Timing
 
 When `DAILY_SOURCE=bhavcopy`:
-1. **Past Date 404**: Treated as a market holiday and skipped with an informational log.
-2. **Past Date Unreachable / Corrupt**: If the Bhavcopy is unreachable (non-404 error) or fails data validation (e.g., missing columns, invalid OHLC, < 1,500 rows), the pipeline immediately falls back to the Angel path for that specific date only and sends an alert to Telegram.
-3. **Today's Date Polling**: If today's Bhavcopy is not yet published at run time, the pipeline polls every 5 minutes for up to 40 minutes. If still unpublished after 40 minutes, it fails with a high-priority Telegram alert rather than silently falling back.
-4. **Gaps > 10 Days**: If more than 10 trading dates are missing, the pipeline automatically routes to the Angel path for multi-date reconstruction.
+1. **18:30 IST Candidate Rule**: Today's file is expected only when current IST time >= 18:30. Before 18:30 IST (e.g. the 06:00 IST morning cron), today is NOT a candidate date; only previous sessions are caught up.
+2. **Nifty-Based Holiday Detection**: Whether a date was an official NSE trading day is determined authoritatively from the NIFTY 50 index candle synced into Neon (`daily_index_ohlcv`):
+   - **Market Holiday**: If NIFTY 50 has NO candle for the date, it is a confirmed market holiday. The date is skipped with an informational log, returns success, sends no Telegram alert, and avoids the 40-minute poll (polls at most 3 x 5 min if Nifty for today is not yet synced).
+   - **Trading Day Missing File**: A 404 on a past date is treated as a holiday ONLY if Nifty has no candle. If Nifty has a candle for that date but the Bhavcopy is missing or unreachable, it is treated as a missing trading day and falls back to Angel with a Telegram alert.
+3. **Today's Date Polling**: If today was confirmed as a trading day (Nifty 50 candle present) and Bhavcopy is not yet published, the pipeline polls every 5 minutes for up to 40 minutes (8 attempts). If still unpublished after 40 minutes, it fails with a high-priority Telegram alert.
+4. **Partial Progress Preservation**: If earlier missing dates were merged successfully before a later date fails or times out, all merged dates are saved and uploaded to GitHub Releases, and the run logs status `partial` rather than aborting earlier progress.
+5. **Gaps > 10 Days**: If more than 10 trading dates are missing, the pipeline automatically routes to the Angel path for multi-date reconstruction.
+6. **EQ <-> BE Series Moves (Identity Key = ISIN)**: When NSE moves a stock between series (e.g. EQ to BE), it assigns a new token. The pipeline resolves token->ISIN via `instruments` and re-keys existing Parquet rows from the old token to the new token with zero Angel API calls.
+7. **Deduplication (`dedupe-store`)**: `python -m pipeline.cli dedupe-store` merges duplicate tokens per symbol/ISIN in the Parquet store, keeping the active token and latest history while writing a `.backup` file. Deduplication also runs automatically at the start of the weekly full re-fetch.
 
 ---
 

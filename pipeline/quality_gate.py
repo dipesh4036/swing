@@ -46,10 +46,10 @@ def verify_quality_gate(
             logger.warning(f"Quality gate could not establish DB connection: {e}")
 
     try:
-        # 1. Fetch failure rate check (<= 2%)
+        # 1. Fetch failure rate check (<= 2% on expected set)
         if ingest_result:
-            total = ingest_result.get("total", 0)
-            failed = ingest_result.get("failed", 0)
+            total = ingest_result.get("expected_total", ingest_result.get("total", 0))
+            failed = ingest_result.get("expected_failed", ingest_result.get("failed", 0))
             if total > 0 and (failed / total) > 0.02:
                 msg = f"Quality Gate failed: Fetch failure rate is {(failed/total)*100:.1f}% ({failed}/{total} failed > 2% allowed limit)."
                 logger.error(msg)
@@ -75,6 +75,19 @@ def verify_quality_gate(
             if conn:
                 _record_gate_result(conn, passed=False, error_msg=msg)
             raise QualityGateError(msg)
+
+        # Fix 7d: Fail if any symbol (or ISIN) has rows under two tokens on the same date
+        if "symbol" in df.columns:
+            dup_tokens = df.groupby(["symbol", "trade_date"])["token"].nunique()
+            bad_dups = dup_tokens[dup_tokens > 1]
+            if not bad_dups.empty:
+                sample_dups = bad_dups.head(5).to_dict()
+                msg = f"Quality Gate failed: Symbol has rows under two tokens (duplicate tokens) on the same date: {sample_dups}"
+                logger.error(msg)
+                send_telegram_alert(msg)
+                if conn:
+                    _record_gate_result(conn, passed=False, error_msg=msg)
+                raise QualityGateError(msg)
 
         latest_date = df["trade_date"].max()
         active_tokens_on_latest = df[df["trade_date"] == latest_date]["token"].nunique()

@@ -183,26 +183,72 @@ def parse_and_validate_bhavcopy(
         raise BhavcopyValidationError(f"Found {len(bad)} rows where close is outside [low, high].")
 
     result_cols = SCHEMA_COLUMNS + ["prev_close"]
-    return filtered[result_cols].copy()
+    filtered["isin"] = filtered["ISIN"].astype(str).str.strip()
+    return filtered[result_cols + ["isin"]].copy()
 
 def get_missing_trading_dates(
     stored_latest_date: Optional[date],
-    today_ist: date
+    now_ist: Optional[Any] = None
 ) -> List[date]:
     """
-    Returns list of missing weekdays (Mon-Fri) from (stored_latest_date + 1 day) up to today_ist.
+    Returns list of missing weekdays (Mon-Fri) from (stored_latest_date + 1 day) up to candidate date.
+    Today is only included if now_ist is at or after 18:30 IST.
     Sorted oldest to newest.
     """
+    ist = timezone(timedelta(hours=5, minutes=30))
+    if now_ist is None:
+        now_dt = datetime.now(ist)
+    elif isinstance(now_ist, datetime):
+        now_dt = now_ist
+    elif isinstance(now_ist, date):
+        now_dt = datetime(now_ist.year, now_ist.month, now_ist.day, 19, 0, tzinfo=ist)
+    else:
+        now_dt = datetime.now(ist)
+
+    # 18:30 IST rule: only include today if IST time >= 18:30
+    today_ist = now_dt.date()
+    include_today = (now_dt.hour > 18 or (now_dt.hour == 18 and now_dt.minute >= 30))
+    candidate_end = today_ist if include_today else (today_ist - timedelta(days=1))
+
     if stored_latest_date is None:
-        return [today_ist]
+        return [candidate_end] if candidate_end.weekday() < 5 else []
 
     missing = []
     curr = stored_latest_date + timedelta(days=1)
-    while curr <= today_ist:
+    while curr <= candidate_end:
         if curr.weekday() < 5:  # 0=Monday, 4=Friday
             missing.append(curr)
         curr += timedelta(days=1)
     return missing
+
+def check_nifty_candle_exists(target_date: date, conn=None) -> bool:
+    """
+    Checks if Neon DB has a NIFTY 50 candle for the given date.
+    Returns True if candle exists, False otherwise.
+    """
+    target_str = target_date.strftime("%Y-%m-%d")
+    should_close = False
+    try:
+        if conn is None:
+            from pipeline.db import get_connection
+            conn = get_connection()
+            should_close = True
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT 1 FROM daily_index_ohlcv
+                WHERE index_name = 'NIFTY 50' AND trade_date = %s
+                LIMIT 1;
+            """, (target_str,))
+            return cur.fetchone() is not None
+    except Exception as e:
+        logger.debug(f"Could not query Nifty candle for {target_str}: {e}")
+        return False
+    finally:
+        if should_close and conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def ingest_bhavcopy(
     parquet_path: Optional[str] = None,
@@ -244,7 +290,7 @@ def ingest_bhavcopy(
         msg = f"More than 10 missing dates ({len(missing_dates)}). Routing to Angel path for multi-date repair."
         logger.info(msg)
         from pipeline.ingest import ingest_equities
-        return ingest_equities(parquet_path=parquet_path, tokens_limit=tokens_limit, conn=conn)
+        return ingest_equities(parquet_path=parquet_path, tokens_limit=tokens_limit)
 
     if not missing_dates:
         logger.info("No missing trading dates. Parquet store is already up to date.")
@@ -259,6 +305,8 @@ def ingest_bhavcopy(
 
     # Fetch active instruments from Neon for new tokens check
     active_instruments: Set[int] = set()
+    stored_token_to_isin: Dict[int, str] = {}
+    isin_to_stored_token: Dict[str, int] = {}
     try:
         from pipeline.db import get_connection
         should_close = False
@@ -267,18 +315,36 @@ def ingest_bhavcopy(
             db_conn = get_connection()
             should_close = True
         with db_conn.cursor() as cur:
-            cur.execute("SELECT token FROM instruments WHERE is_active = TRUE;")
-            active_instruments = {row[0] for row in cur.fetchall()}
+            cur.execute("SELECT token, isin FROM instruments WHERE is_active = TRUE;")
+            for row in cur.fetchall():
+                t = int(row[0])
+                active_instruments.add(t)
+                if row[1]:
+                    isin_code = str(row[1]).strip()
+                    stored_token_to_isin[t] = isin_code
+                    isin_to_stored_token[isin_code] = t
+
+            # Also load any inactive instruments for ISIN resolution of series moves
+            cur.execute("SELECT token, isin FROM instruments WHERE is_active = FALSE AND isin IS NOT NULL;")
+            for row in cur.fetchall():
+                t = int(row[0])
+                if row[1]:
+                    isin_code = str(row[1]).strip()
+                    stored_token_to_isin[t] = isin_code
+                    if isin_code not in isin_to_stored_token:
+                        isin_to_stored_token[isin_code] = t
+
         if should_close:
             db_conn.close()
     except Exception as e:
-        logger.warning(f"Could not query active instruments from DB: {e}")
+        logger.warning(f"Could not query instruments from DB: {e}")
 
     dates_ingested = []
     total_new_rows = 0
     all_refetched_tokens: Set[int] = set()
     all_new_tokens_fetched: Set[int] = set()
     total_absent_count = 0
+    any_cap_hit = False
 
     client: Optional[SmartAPIClient] = None
 
@@ -293,45 +359,78 @@ def ingest_bhavcopy(
             # Past date: download once
             zip_bytes, meta = download_bhavcopy_raw(target_date)
             if zip_bytes is None:
-                if meta.get("status_code") == 404:
-                    logger.info(f"Bhavcopy for past date {target_str} returned 404; treating as market holiday.")
+                # Fix 2: Nifty-based holiday check for past date
+                nifty_exists = check_nifty_candle_exists(target_date, conn=conn)
+                if not nifty_exists:
+                    logger.info(f"Bhavcopy for past date {target_str} returned 404 and Nifty has no candle. Skipping as market holiday.")
                     continue
                 else:
-                    # B4: Fallback for unreachable past date (not 404)
-                    err_msg = f"Bhavcopy unreachable for past date {target_str} (status={meta.get('status_code')}). Falling back to Angel."
+                    # Nifty has a candle, but Bhavcopy is 404/unreachable -> confirmed trading day missing!
+                    err_msg = f"Bhavcopy unreachable for confirmed trading day {target_str} (Nifty candle exists, status={meta.get('status_code')}). Falling back to Angel."
                     logger.warning(err_msg)
                     send_telegram_alert(f"⚠️ {err_msg}")
                     from pipeline.ingest import ingest_equities
-                    res = ingest_equities(parquet_path=parquet_path, tokens_limit=tokens_limit, conn=conn)
-                    return res
+                    return ingest_equities(parquet_path=parquet_path, tokens_limit=tokens_limit)
         else:
-            # Today's date: poll every 5 min up to 40 min total (8 attempts)
-            max_attempts = 8
+            # Today's date: decide trading day from Nifty 50 candle (Fix 2)
+            nifty_exists = check_nifty_candle_exists(target_date, conn=conn)
+            max_attempts = 8 if nifty_exists else 3
+            logger.info(f"Today's date check: Nifty 50 candle exists={nifty_exists}. Max polling attempts: {max_attempts}.")
+
             for attempt in range(1, max_attempts + 1):
                 logger.info(f"Checking today's Bhavcopy ({target_str}), attempt {attempt}/{max_attempts}...")
                 zip_bytes, meta = download_bhavcopy_raw(target_date)
                 if zip_bytes is not None:
                     break
+                if not nifty_exists:
+                    nifty_exists = check_nifty_candle_exists(target_date, conn=conn)
+                    if nifty_exists:
+                        max_attempts = 8
+                        logger.info("Nifty 50 candle detected in Neon; extending Bhavcopy polling to 8 attempts (40 min).")
                 if attempt < max_attempts:
                     logger.info("File not published yet. Sleeping 5 minutes before next poll...")
                     sleep_fn(300)
 
             if zip_bytes is None:
-                fail_msg = f"Today's Bhavcopy ({target_str}) was not published after 40 minutes of polling."
-                logger.error(fail_msg)
-                send_telegram_alert(f"🚨 {fail_msg}")
-                log_ingest_run(
-                    run_type="equities",
-                    status="failed",
-                    total=len(active_instruments),
-                    success=0,
-                    failed=len(active_instruments),
-                    started_at=started_at,
-                    error_msg=fail_msg,
-                    quality_gate_passed=False,
-                    conn=conn
-                )
-                return {"status": "failed", "error": fail_msg}
+                if not nifty_exists:
+                    logger.info(f"No Bhavcopy and no Nifty candle for today ({target_str}) after polling. Market holiday detected: skipping with success.")
+                    continue
+                else:
+                    fail_msg = f"Today's Bhavcopy ({target_str}) was not published after 40 minutes of polling on a confirmed trading day."
+                    logger.error(fail_msg)
+                    send_telegram_alert(f"🚨 {fail_msg}")
+                    # Fix 2: Partial progress upload if previous dates succeeded
+                    if dates_ingested:
+                        try:
+                            from pipeline.store import upload_parquet_store
+                            upload_parquet_store(parquet_path, job_succeeded=True)
+                        except Exception as ue:
+                            logger.warning(f"Notice: partial progress upload: {ue}")
+                        log_ingest_run(
+                            run_type="equities",
+                            status="partial",
+                            total=len(active_instruments),
+                            success=len(active_instruments),
+                            failed=0,
+                            started_at=started_at,
+                            error_msg=fail_msg,
+                            quality_gate_passed=True,
+                            conn=conn
+                        )
+                        return {"status": "partial", "dates_ingested": dates_ingested, "error": fail_msg}
+                    else:
+                        log_ingest_run(
+                            run_type="equities",
+                            status="failed",
+                            total=len(active_instruments),
+                            success=0,
+                            failed=len(active_instruments),
+                            started_at=started_at,
+                            error_msg=fail_msg,
+                            quality_gate_passed=False,
+                            conn=conn
+                        )
+                        return {"status": "failed", "error": fail_msg}
 
         # Parse & Validate
         try:
@@ -342,7 +441,7 @@ def ingest_bhavcopy(
             logger.warning(err_msg)
             send_telegram_alert(f"⚠️ {err_msg}")
             from pipeline.ingest import ingest_equities
-            return ingest_equities(parquet_path=parquet_path, tokens_limit=tokens_limit, conn=conn)
+            return ingest_equities(parquet_path=parquet_path, tokens_limit=tokens_limit)
 
         # ---------------------------------------------------------------------
         # Corporate Action & Tokens Analysis BEFORE appending date
@@ -358,6 +457,30 @@ def ingest_bhavcopy(
             prev_session_date = existing_df["trade_date"].max()
             prev_df = existing_df[existing_df["trade_date"] == prev_session_date]
             stored_prev_closes = dict(zip(prev_df["token"], prev_df["close"]))
+
+        # Fix 7a: Series moves (identity key = ISIN)
+        # Re-key stored rows if token changed but ISIN is already in store
+        for _, brow in bhav_df.iterrows():
+            f_tok = int(brow["token"])
+            f_isin = str(brow.get("isin", "")).strip()
+            f_sym = str(brow["symbol"]).strip()
+
+            if f_tok not in stored_tokens_set and f_isin:
+                # Find matching stored token with this ISIN
+                old_tok = None
+                for s_tok in list(stored_tokens_set):
+                    if stored_token_to_isin.get(s_tok) == f_isin:
+                        old_tok = s_tok
+                        break
+                if old_tok is not None:
+                    logger.info(f"Series move OLD->NEW for {f_sym} ({f_isin}): re-keying stored token {old_tok} -> {f_tok}")
+                    existing_df.loc[existing_df["token"] == old_tok, "token"] = f_tok
+                    stored_tokens_set.discard(old_tok)
+                    stored_tokens_set.add(f_tok)
+                    if old_tok in stored_prev_closes:
+                        stored_prev_closes[f_tok] = stored_prev_closes.pop(old_tok)
+                    stored_token_to_isin[f_tok] = f_isin
+                    isin_to_stored_token[f_isin] = f_tok
 
         file_tokens_set = set(bhav_df["token"].unique())
 
@@ -379,18 +502,19 @@ def ingest_bhavcopy(
         corporate_actions_cap_hit = False
         if len(refetch_tokens) > 200:
             corporate_actions_cap_hit = True
+            any_cap_hit = True
             msg = f"⚠️ Corporate action cap (200 tokens) hit during Bhavcopy ingest ({len(refetch_tokens)} detected). Refetching top 200."
             logger.warning(msg)
             send_telegram_alert(msg)
-            # Sort by diff_pct descending, take top 200
             refetch_tokens.sort(key=lambda x: x[3], reverse=True)
             refetch_tokens = refetch_tokens[:200]
 
-        # New tokens: in file, active in instruments, NOT in Parquet
+        # New tokens: in file, active in instruments, NOT in Parquet (and not series-moved)
         new_tokens = [tok for tok in file_tokens_set if tok in active_instruments and tok not in stored_tokens_set]
         new_tokens_cap_hit = False
         if len(new_tokens) > 100:
             new_tokens_cap_hit = True
+            any_cap_hit = True
             msg = f"⚠️ New tokens cap (100) exceeded during Bhavcopy ingest ({len(new_tokens)} found). Refetching first 100."
             logger.warning(msg)
             send_telegram_alert(msg)
@@ -418,7 +542,7 @@ def ingest_bhavcopy(
             from_d = (datetime.now() - timedelta(days=RETENTION_YEARS * 365 + 30)).strftime("%Y-%m-%d 00:00")
             to_d = datetime.now().strftime("%Y-%m-%d 23:59")
 
-            # 1. Refetch corporate action tokens
+            # 1. Refetch corporate action tokens with Fix 7e older history check
             corp_adjustments = []
             for tok, sym, ratio, diff in refetch_tokens:
                 logger.info(f"Re-fetching full window for corporate action token {sym} ({tok})...")
@@ -426,17 +550,45 @@ def ingest_bhavcopy(
                     candles = fetch_equity_candles(client, tok, sym, from_d, to_d)
                     if candles:
                         c_df = pd.DataFrame(candles)[SCHEMA_COLUMNS]
-                        # Replace only that token's rows
+
+                        # Fix 7e: Compare re-fetched closes with stored closes for older dates (>5 sessions old)
+                        tok_stored = existing_df[existing_df["token"] == tok]
+                        is_genuine_adj = True
+                        if not tok_stored.empty and len(tok_stored) > 5:
+                            stored_dates = sorted(tok_stored["trade_date"].unique())
+                            cutoff_date = stored_dates[-5]
+                            older_stored = tok_stored[tok_stored["trade_date"] < cutoff_date]
+                            older_stored_map = dict(zip(older_stored["trade_date"], older_stored["close"]))
+
+                            older_diffs = []
+                            for c in candles:
+                                cd_date = c["trade_date"]
+                                if cd_date in older_stored_map and older_stored_map[cd_date] > 0:
+                                    st_cl = older_stored_map[cd_date]
+                                    new_cl = c["close"]
+                                    older_diffs.append(abs(new_cl - st_cl) / st_cl)
+
+                            max_older_diff = max(older_diffs) if older_diffs else 0.0
+                            if max_older_diff < 0.001:  # max relative diff < 0.1%
+                                is_genuine_adj = False
+                                logger.info(
+                                    f"Reference price change for {sym} ({tok}): older history matches (diff={max_older_diff*100:.3f}% < 0.1%). "
+                                    f"Updating data, no price adjustment recorded."
+                                )
+
+                        # Replace rows in existing_df
                         existing_df = existing_df[existing_df["token"] != tok]
                         existing_df = pd.concat([existing_df, c_df], ignore_index=True)
                         all_refetched_tokens.add(tok)
-                        corp_adjustments.append({
-                            "token": tok,
-                            "symbol": sym,
-                            "ex_date": target_str,
-                            "action_type": "SPLIT_OR_BONUS",
-                            "ratio": ratio
-                        })
+
+                        if is_genuine_adj:
+                            corp_adjustments.append({
+                                "token": tok,
+                                "symbol": sym,
+                                "ex_date": target_str,
+                                "action_type": "SPLIT_OR_BONUS",
+                                "ratio": ratio
+                            })
                 except Exception as ex:
                     logger.warning(f"Error refetching corporate action token {sym}: {ex}")
 
@@ -468,16 +620,17 @@ def ingest_bhavcopy(
         total_new_rows += len(clean_date_df)
         logger.info(f"Successfully merged Bhavcopy for {target_str} ({len(clean_date_df)} rows).")
 
-    # Record run in ingest_runs
+    # Record run in ingest_runs (Fix 6: Log partial when caps hit)
+    run_status = "partial" if any_cap_hit else "success"
     summary_msg = (
         f"Bhavcopy: dates={len(dates_ingested)}, rows={total_new_rows}, "
         f"refetched={len(all_refetched_tokens)}, new_tokens={len(all_new_tokens_fetched)}, "
-        f"absent={total_absent_count}"
+        f"absent={total_absent_count} (status={run_status})"
     )
     logger.info(f"Bhavcopy ingest completed: {summary_msg}")
     log_ingest_run(
         run_type="equities",
-        status="success",
+        status=run_status,
         total=len(active_instruments) if active_instruments else total_new_rows,
         success=len(active_instruments) if active_instruments else total_new_rows,
         failed=0,
@@ -488,7 +641,7 @@ def ingest_bhavcopy(
     )
 
     return {
-        "status": "success",
+        "status": run_status,
         "dates_ingested": dates_ingested,
         "rows": total_new_rows,
         "refetched": len(all_refetched_tokens),

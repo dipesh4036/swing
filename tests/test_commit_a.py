@@ -47,7 +47,8 @@ def test_corporate_action_detected_in_ingest_path():
         mock_client.get_candle_data.side_effect = [inc_candles, full_candles]
 
         with patch("pipeline.ingest.load_target_instruments", return_value=[{"token": 999, "symbol": "CORPACTION"}]), \
-             patch("pipeline.ingest.log_price_adjustments") as mock_adj:
+             patch("pipeline.ingest.log_price_adjustments") as mock_adj, \
+             patch("pipeline.ingest.log_ingest_run"):
             res = ingest_equities(client=mock_client, parquet_path=pq_path)
             assert res["corporate_actions_count"] == 1
             assert mock_adj.called
@@ -77,7 +78,8 @@ def test_throttled_distinct_from_no_data():
         ]
 
         with patch("pipeline.ingest.load_target_instruments", return_value=instruments), \
-             patch("pipeline.ingest.send_telegram_alert"):
+             patch("pipeline.ingest.send_telegram_alert"), \
+             patch("pipeline.ingest.log_ingest_run"):
             res = ingest_equities(client=mock_client, parquet_path=pq_path)
             assert res["throttled"] == 1
             assert res["no_data"] == 1
@@ -92,7 +94,8 @@ def test_status_rules_at_thresholds():
     with tempfile.TemporaryDirectory() as tmpdir:
         pq_path = os.path.join(tmpdir, "test_equity.parquet")
 
-        def run_with_missing(total, missing):
+        def run_with_missing(total, missing, name="test"):
+            pq_file = os.path.join(tmpdir, f"{name}.parquet")
             mock_client = MagicMock()
             instruments = [{"token": i, "symbol": f"SYM{i}"} for i in range(total)]
             target_date = "2026-11-18"
@@ -107,21 +110,22 @@ def test_status_rules_at_thresholds():
             mock_client.current_req_per_sec = 1.0
 
             with patch("pipeline.ingest.load_target_instruments", return_value=instruments), \
-                 patch("pipeline.ingest.send_telegram_alert"):
-                return ingest_equities(client=mock_client, parquet_path=pq_path, target_trade_date=target_date)
+                 patch("pipeline.ingest.send_telegram_alert"), \
+                 patch("pipeline.ingest.log_ingest_run"):
+                return ingest_equities(client=mock_client, parquet_path=pq_file, target_trade_date=target_date)
 
         # 0.4% missing (4/1000) -> success
-        res_04 = run_with_missing(1000, 4)
+        res_04 = run_with_missing(1000, 4, "run_04")
         assert res_04["status"] == "success"
         assert res_04["missing_pct"] == pytest.approx(0.4, rel=1e-2)
 
         # 1.0% missing (10/1000) -> partial
-        res_10 = run_with_missing(1000, 10)
+        res_10 = run_with_missing(1000, 10, "run_10")
         assert res_10["status"] == "partial"
         assert res_10["missing_pct"] == pytest.approx(1.0, rel=1e-2)
 
         # 3.0% missing (30/1000) -> failed
-        res_30 = run_with_missing(1000, 30)
+        res_30 = run_with_missing(1000, 30, "run_30")
         assert res_30["status"] == "failed"
         assert res_30["missing_pct"] == pytest.approx(3.0, rel=1e-2)
 
@@ -140,7 +144,8 @@ def test_ingest_success_requires_target_date():
             {"token": 2, "symbol": "OLD_ONLY"}
         ]
         with patch("pipeline.ingest.load_target_instruments", return_value=instruments), \
-             patch("pipeline.ingest.send_telegram_alert"):
+             patch("pipeline.ingest.send_telegram_alert"), \
+             patch("pipeline.ingest.log_ingest_run"):
             res = ingest_equities(client=mock_client, parquet_path=pq_path, target_trade_date="2026-11-17")
             assert res["success"] == 1  # Only token 1 has target date
             assert res["no_data"] == 1   # Token 2 lacks target date

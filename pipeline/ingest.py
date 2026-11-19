@@ -337,7 +337,40 @@ def ingest_equities(
                     c = fetch_equity_candles(client, tok, sym, fetch_from, to_date_str)
                     throttled_tokens.remove(tok)
                     if c:
-                        new_records.extend(c)
+                        # Corporate action check in retry pass (Fix 6)
+                        if is_incremental and tok in stored_closes_by_token:
+                            stored_map = stored_closes_by_token[tok]
+                            diff_detected = False
+                            discrepancy_date = None
+                            ratio = 1.0
+                            for cd in c:
+                                t_date = cd["trade_date"]
+                                new_cl = cd["close"]
+                                if t_date in stored_map and stored_map[t_date] > 0:
+                                    stored_cl = stored_map[t_date]
+                                    diff_pct = abs(new_cl - stored_cl) / stored_cl
+                                    if diff_pct > 0.01:
+                                        diff_detected = True
+                                        discrepancy_date = t_date
+                                        ratio = round(stored_cl / new_cl, 4)
+                                        break
+                            if diff_detected and len(corporate_actions) < 200:
+                                try:
+                                    full_c = fetch_equity_candles(client, tok, sym, from_date_str, to_date_str)
+                                    if full_c:
+                                        tokens_to_replace[tok] = full_c
+                                        corporate_actions.append({
+                                            "token": tok,
+                                            "symbol": sym,
+                                            "ex_date": discrepancy_date,
+                                            "action_type": "SPLIT_OR_BONUS",
+                                            "ratio": ratio
+                                        })
+                                except Exception as re_err:
+                                    logger.warning(f"Failed full re-fetch for adjusted token {sym} in retry pass: {re_err}")
+
+                        if tok not in tokens_to_replace:
+                            new_records.extend(c)
                         if latest_seen_date is None or any(cd["trade_date"] == latest_seen_date for cd in c):
                             success_tokens.add(tok)
                         else:
@@ -385,13 +418,31 @@ def ingest_equities(
             log_price_adjustments(corporate_actions)
 
         # ---------------------------------------------------------------------
-        # Status Accounting
+        # Status Accounting (Fix 3: Expected set based on previous session + active)
         # ---------------------------------------------------------------------
+        active_tokens_set = {inst["token"] for inst in instruments}
+        expected_set = active_tokens_set
+        if existing_df is not None and not existing_df.empty and "trade_date" in existing_df.columns:
+            prev_trade_date = existing_df["trade_date"].max()
+            prev_session_tokens = set(existing_df[existing_df["trade_date"] == prev_trade_date]["token"].unique())
+            if prev_session_tokens:
+                expected_set = prev_session_tokens.intersection(active_tokens_set)
+                if not expected_set:
+                    expected_set = active_tokens_set
+
+        absent_suspended_tokens = active_tokens_set - expected_set
+        if absent_suspended_tokens:
+            logger.info(f"Notice: {len(absent_suspended_tokens)} active instruments were absent from previous session (suspended/new/illiquid).")
+
+        expected_total = len(expected_set)
+        expected_success = len(expected_set.intersection(success_tokens))
+        expected_failed = expected_total - expected_success
+        missing_pct = ((expected_total - expected_success) / expected_total * 100.0) if expected_total > 0 else 0.0
+
         success_count = len(success_tokens)
         throttled_count = len(throttled_tokens)
         no_data_count = len(no_data_tokens)
         failed_count = throttled_count + no_data_count
-        missing_pct = ((total_inst - success_count) / total_inst * 100.0) if total_inst > 0 else 0.0
 
         if missing_pct > 2.0:
             status = "failed"
@@ -401,8 +452,10 @@ def ingest_equities(
             status = "success"
 
         summary_msg = (
-            f"success={success_count}, no_data={no_data_count}, throttled={throttled_count}, "
-            f"missing_pct={missing_pct:.2f}% (status={status})"
+            f"expected_total={expected_total}, expected_success={expected_success}, "
+            f"expected_failed={expected_failed}, missing_pct={missing_pct:.2f}%, "
+            f"absent_suspended={len(absent_suspended_tokens)}, throttled={throttled_count}, "
+            f"no_data={no_data_count} (status={status})"
         )
         logger.info(f"Ingest summary: {summary_msg}")
 
@@ -411,13 +464,17 @@ def ingest_equities(
             logger.warning(alert_msg)
             send_telegram_alert(alert_msg)
 
-        log_ingest_run("equities", status, total_inst, success_count, failed_count, started_at, error_msg=summary_msg)
+        log_ingest_run("equities", status, expected_total, expected_success, expected_failed, started_at, error_msg=summary_msg)
 
         return {
             "status": status,
             "total": total_inst,
             "success": success_count,
             "failed": failed_count,
+            "expected_total": expected_total,
+            "expected_success": expected_success,
+            "expected_failed": expected_failed,
+            "absent_suspended": len(absent_suspended_tokens),
             "no_data": no_data_count,
             "throttled": throttled_count,
             "missing_pct": missing_pct,

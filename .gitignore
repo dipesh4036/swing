@@ -35,3 +35,7 @@ raw_cache/
 .vscode/*
 !.vscode/settings.json
 *.log
+
+# Antigravity prompts & reviews
+docs/ANTIGRAVITY_*
+**/ANTIGRAVITY_*.md

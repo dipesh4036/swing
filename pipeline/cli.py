@@ -59,6 +59,10 @@ def main():
     verify_bhav_parser = subparsers.add_parser("verify-bhavcopy", help="Verify latest Bhavcopy download against SmartAPI sample")
     verify_bhav_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
 
+    # Dedupe store command (Item 7b)
+    dedupe_parser = subparsers.add_parser("dedupe-store", help="Dedupe symbols across multiple tokens due to series moves (EQ<->BE)")
+    dedupe_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -197,6 +201,19 @@ def main():
             from pipeline.bhavcopy import verify_bhavcopy_command
             code = verify_bhavcopy_command(parquet_path=args.path)
             sys.exit(code)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "dedupe-store":
+        logger.info("Executing 'dedupe-store' command...")
+        try:
+            download_parquet_store(args.path)
+            from pipeline.dedupe import dedupe_equity_parquet
+            res = dedupe_equity_parquet(parquet_path=args.path)
+            upload_parquet_store(args.path, job_succeeded=True)
+            print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback
             traceback.print_exc()

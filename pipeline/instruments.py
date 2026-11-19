@@ -43,6 +43,7 @@ def sync_instruments(conn=None) -> int:
         nse_symbols = set(df_nse["SYMBOL"].str.strip())
         nse_isin_map = dict(zip(df_nse["SYMBOL"].str.strip(), df_nse["ISIN NUMBER"].str.strip()))
         nse_name_map = dict(zip(df_nse["SYMBOL"].str.strip(), df_nse["NAME OF COMPANY"].str.strip()))
+        nse_series_map = dict(zip(df_nse["SYMBOL"].str.strip(), df_nse["SERIES"].str.strip()))
         logger.info(f"Loaded {len(nse_symbols)} active NSE equity instruments from EQUITY_L.csv.")
 
         logger.info("Downloading Angel One Scrip Master...")
@@ -53,6 +54,8 @@ def sync_instruments(conn=None) -> int:
         # Scrips on NSE equity segment
         matched_records = []
         seen_tokens = set()
+        active_isin_seen = set()
+
         for s in scrips:
             if s.get("exch_seg") != "NSE":
                 continue
@@ -74,11 +77,19 @@ def sync_instruments(conn=None) -> int:
             tick_size = float(s.get("tick_size", 0.05)) if s.get("tick_size") else 0.05
             lot_size = int(s.get("lotsize", 1)) if s.get("lotsize") else 1
 
+            # Fix 7c: At most ONE active token per ISIN (prefer current series listed in EQUITY_L)
+            expected_series = nse_series_map.get(base_sym)
+            if instrument_type == expected_series and isin not in active_isin_seen:
+                is_active = True
+                active_isin_seen.add(isin)
+            else:
+                is_active = False
+
             matched_records.append((
-                token, base_sym, name, isin, "NSE", instrument_type, tick_size, lot_size, True, True
+                token, base_sym, name, isin, "NSE", instrument_type, tick_size, lot_size, is_active, True
             ))
 
-        logger.info(f"Matched {len(matched_records)} instruments between NSE and Angel One.")
+        logger.info(f"Matched {len(matched_records)} instruments between NSE and Angel One ({len(active_isin_seen)} active).")
 
         with conn.cursor() as cur:
             insert_sql = """
@@ -97,6 +108,11 @@ def sync_instruments(conn=None) -> int:
             """
             from psycopg2.extras import execute_batch
             execute_batch(cur, insert_sql, matched_records, page_size=1000)
+
+            # Ensure any other tokens for these active ISINs are deactivated
+            active_tokens = [r[0] for r in matched_records if r[8] is True]
+            if active_tokens:
+                cur.execute("UPDATE instruments SET is_active = FALSE WHERE is_active = TRUE AND token != ALL(%s);", (active_tokens,))
         conn.commit()
         logger.info(f"Successfully upserted {len(matched_records)} instruments into Neon DB.")
         return len(matched_records)
