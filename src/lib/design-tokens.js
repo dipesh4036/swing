@@ -5,58 +5,58 @@
 
 export const TOKENS = {
   colors: {
-    // Brand & Primary
-    primary: "#2563EB",
-    primaryHover: "#1D4ED8",
-    primarySubtle: "#EFF6FF",
-    primaryBorder: "#BFDBFE",
+    // Brand & Primary — Electric Indigo
+    primary: "#4F46E5",
+    primaryHover: "#4338CA",
+    primarySubtle: "#EEF2FF",
+    primaryBorder: "#C7D2FE",
 
-    // Background surfaces
-    bgMain: "#FFFFFF",
-    bgSecondary: "#F8FAFC",
+    // Background surfaces — Cool Zinc Canvas
+    bgMain: "#FAFAFA",
+    bgSecondary: "#F4F4F5",
     bgCard: "#FFFFFF",
-    bgHover: "#F1F5F9",
-    bgSelected: "#EFF6FF",
+    bgHover: "#EBEBEF",
+    bgSelected: "#EEF2FF",
 
     // Text & Typography
-    textPrimary: "#17233B",
-    textSecondary: "#64748B",
-    textMuted: "#94A3B8",
-    textDisabled: "#CBD5E1",
+    textPrimary: "#18181B",
+    textSecondary: "#71717A",
+    textMuted: "#A1A1AA",
+    textDisabled: "#D4D4D8",
     textInverse: "#FFFFFF",
 
-    // Market status (Indian Equities Financial Conventions)
-    bullish: "#16A878",
-    bullishBg: "#E8F8F3",
-    bullishBorder: "#B5ECD9",
+    // Market status (Indian Equities High-Contrast Financial Conventions)
+    bullish: "#059669",
+    bullishBg: "#ECFDF5",
+    bullishBorder: "#A7F3D0",
 
-    bearish: "#F05283",
-    bearishBg: "#FEF0F4",
-    bearishBorder: "#FCCEDB",
+    bearish: "#E11D48",
+    bearishBg: "#FFF1F2",
+    bearishBorder: "#FECDD3",
 
-    neutral: "#94A3B8",
-    neutralBg: "#F1F5F9",
-    neutralBorder: "#E2E8F0",
+    neutral: "#71717A",
+    neutralBg: "#F4F4F5",
+    neutralBorder: "#E4E4E7",
 
-    warning: "#E9A23B",
-    warningBg: "#FEF7EC",
-    warningBorder: "#FBDFA9",
+    warning: "#D97706",
+    warningBg: "#FFFBEB",
+    warningBorder: "#FDE68A",
 
-    info: "#2563EB",
-    infoBg: "#EFF6FF",
-    infoBorder: "#BFDBFE",
+    info: "#4F46E5",
+    infoBg: "#EEF2FF",
+    infoBorder: "#C7D2FE",
 
-    // Borders
-    border: "#E5EAF2",
-    borderSubtle: "#F1F5F9",
-    borderStrong: "#CBD5E1",
-    borderFocus: "#2563EB",
+    // Borders — 1px Flat Precise
+    border: "#E4E4E7",
+    borderSubtle: "#F4F4F5",
+    borderStrong: "#D4D4D8",
+    borderFocus: "#4F46E5",
 
     // Market Cap & Index Specific
-    largeCap: "#2563EB",
+    largeCap: "#4F46E5",
     midCap: "#F97316",
-    smallCap: "#16A878",
-    benchmark: "#94A3B8",
+    smallCap: "#059669",
+    benchmark: "#A1A1AA",
   },
 
   typography: {
@@ -94,7 +94,7 @@ export const TOKENS = {
         fontWeight: 700,
         lineHeight: "18px",
         letterSpacing: "-0.02em",
-        color: "#17233B",
+        color: "#18181B",
       },
       sectionTitle: {
         fontFamily: "sans",
@@ -103,7 +103,7 @@ export const TOKENS = {
         lineHeight: "16px",
         letterSpacing: "0.04em",
         textTransform: "uppercase",
-        color: "#17233B",
+        color: "#18181B",
       },
       cardHeading: {
         fontFamily: "sans",
@@ -111,7 +111,7 @@ export const TOKENS = {
         fontWeight: 700,
         lineHeight: "18px",
         letterSpacing: "-0.01em",
-        color: "#17233B",
+        color: "#18181B",
       },
       metricDisplay: {
         fontFamily: "sans",
@@ -120,14 +120,14 @@ export const TOKENS = {
         lineHeight: "26px",
         letterSpacing: "-0.025em",
         tabularNums: true,
-        color: "#17233B",
+        color: "#18181B",
       },
       body: {
         fontFamily: "sans",
         fontSize: "12px",
         fontWeight: 400,
         lineHeight: "16px",
-        color: "#64748B",
+        color: "#71717A",
       },
       labelCaps: {
         fontFamily: "sans",
@@ -136,21 +136,21 @@ export const TOKENS = {
         lineHeight: "14px",
         letterSpacing: "0.05em",
         textTransform: "uppercase",
-        color: "#64748B",
+        color: "#71717A",
       },
       footnote: {
         fontFamily: "sans",
         fontSize: "10px",
         fontWeight: 500,
         lineHeight: "14px",
-        color: "#94A3B8",
+        color: "#A1A1AA",
       },
       tableNumeral: {
         fontFamily: "sans",
         fontSize: "12px",
         fontWeight: 600,
         tabularNums: true,
-        color: "#17233B",
+        color: "#18181B",
       },
     },
   },
@@ -178,9 +178,9 @@ export const TOKENS = {
 
   shadows: {
     none: "none",
-    subtle: "0 1px 2px 0 rgba(15, 23, 42, 0.04)",
-    sm: "0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px 0 rgba(15, 23, 42, 0.04)",
-    md: "0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.04)",
+    subtle: "none",
+    sm: "none",
+    md: "none",
   },
 };
 

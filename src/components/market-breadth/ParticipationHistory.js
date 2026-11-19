@@ -33,30 +33,30 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
   const lines = useMemo(() => {
     if (period === "20D") {
       return [
-        { key: "above20", name: ">20 EMA", color: "#2563EB", strokeWidth: 2.2 },
-        { key: "above50", name: ">50 SMA", color: "#E2E8F0", strokeWidth: 1 },
-        { key: "above200", name: ">200 SMA", color: "#CBD5E1", strokeWidth: 1 },
+        { key: "above20", name: ">20 EMA", color: "var(--color-primary, #4F46E5)", strokeWidth: 2.2 },
+        { key: "above50", name: ">50 SMA", color: "var(--color-border-subtle, #E4E4E7)", strokeWidth: 1 },
+        { key: "above200", name: ">200 SMA", color: "var(--color-border-strong, #CBD5E1)", strokeWidth: 1 },
       ];
     }
     if (period === "50D") {
       return [
-        { key: "above20", name: ">20 EMA", color: "#CBD5E1", strokeWidth: 1 },
+        { key: "above20", name: ">20 EMA", color: "var(--color-border-strong, #CBD5E1)", strokeWidth: 1 },
         { key: "above50", name: ">50 SMA", color: "#F97316", strokeWidth: 2.2 },
-        { key: "above200", name: ">200 SMA", color: "#E2E8F0", strokeWidth: 1 },
+        { key: "above200", name: ">200 SMA", color: "var(--color-border-subtle, #E4E4E7)", strokeWidth: 1 },
       ];
     }
     if (period === "200D") {
       return [
-        { key: "above20", name: ">20 EMA", color: "#E2E8F0", strokeWidth: 1 },
-        { key: "above50", name: ">50 SMA", color: "#CBD5E1", strokeWidth: 1 },
-        { key: "above200", name: ">200 SMA", color: "#16A878", strokeWidth: 2.2 },
+        { key: "above20", name: ">20 EMA", color: "var(--color-border-subtle, #E4E4E7)", strokeWidth: 1 },
+        { key: "above50", name: ">50 SMA", color: "var(--color-border-strong, #CBD5E1)", strokeWidth: 1 },
+        { key: "above200", name: ">200 SMA", color: "var(--color-bullish, #059669)", strokeWidth: 2.2 },
       ];
     }
     // "All"
     return [
-      { key: "above20", name: ">20 EMA", color: "#2563EB", strokeWidth: 1.75 },
+      { key: "above20", name: ">20 EMA", color: "var(--color-primary, #4F46E5)", strokeWidth: 1.75 },
       { key: "above50", name: ">50 SMA", color: "#F97316", strokeWidth: 1.5 },
-      { key: "above200", name: ">200 SMA", color: "#16A878", strokeWidth: 1.25 },
+      { key: "above200", name: ">200 SMA", color: "var(--color-bullish, #059669)", strokeWidth: 1.25 },
     ];
   }, [period]);
 
@@ -65,8 +65,8 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
-          <div className="text-xs font-bold text-[#17233B] truncate">Participation history</div>
-          <div className="text-[10px] text-[#64748B] truncate">
+          <div className="text-xs font-bold text-text truncate">Participation history</div>
+          <div className="text-[10px] text-text-secondary truncate">
             {period === "All"
               ? "% stocks above 20 EMA, 50 SMA, 200 SMA"
               : `Focus on % stocks above ${period === "20D" ? "20 EMA" : period === "50D" ? "50 SMA" : "200 SMA"}`}
@@ -84,20 +84,20 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
 
       {/* Pill Row showing current stats */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap min-w-0">
-        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] shrink-0" />
-          <span className="text-[#64748B]">&gt;20 EMA:</span>
-          <span className="text-[#17233B]">{pct20 !== null && pct20 !== undefined ? `${pct20.toFixed(1)}%` : "—"}</span>
+        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+          <span className="text-text-secondary">&gt;20 EMA:</span>
+          <span className="text-text">{pct20 !== null && pct20 !== undefined ? `${pct20.toFixed(1)}%` : "—"}</span>
         </span>
-        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
+        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
           <span className="w-1.5 h-1.5 rounded-full bg-[#F97316] shrink-0" />
-          <span className="text-[#64748B]">&gt;50 SMA:</span>
-          <span className="text-[#17233B]">{pct50 !== null && pct50 !== undefined ? `${pct50.toFixed(1)}%` : "—"}</span>
+          <span className="text-text-secondary">&gt;50 SMA:</span>
+          <span className="text-text">{pct50 !== null && pct50 !== undefined ? `${pct50.toFixed(1)}%` : "—"}</span>
         </span>
-        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#16A878] shrink-0" />
-          <span className="text-[#64748B]">&gt;200 SMA:</span>
-          <span className="text-[#17233B]">{pct200 !== null && pct200 !== undefined ? `${pct200.toFixed(1)}%` : "—"}</span>
+        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
+          <span className="w-1.5 h-1.5 rounded-full bg-bullish shrink-0" />
+          <span className="text-text-secondary">&gt;200 SMA:</span>
+          <span className="text-text">{pct200 !== null && pct200 !== undefined ? `${pct200.toFixed(1)}%` : "—"}</span>
         </span>
       </div>
 

@@ -36,7 +36,7 @@ export function DivergingBarChart({
     return (
       <div
         style={{ width: "100%", height, minHeight: height }}
-        className="w-full bg-[#F8FAFC] rounded-[4px] animate-pulse"
+        className="w-full bg-bg-secondary border border-border rounded-md animate-pulse"
       />
     );
   }
@@ -45,7 +45,7 @@ export function DivergingBarChart({
     return (
       <div
         style={{ width: "100%", height, minHeight: height }}
-        className="w-full flex items-center justify-center text-xs text-[#94A3B8]"
+        className="w-full flex items-center justify-center text-xs text-text-muted"
       >
         No session data
       </div>
@@ -69,7 +69,7 @@ export function DivergingBarChart({
           )}
           {showAxis && <YAxis {...CHART_THEME.axis} />}
 
-          <ReferenceLine y={0} stroke="#E2E8F0" strokeWidth={1} />
+          <ReferenceLine y={0} stroke="var(--color-border, #E4E4E7)" strokeWidth={1} />
 
           <Tooltip
             content={<ChartTooltip formatter={tooltipFormatter} />}

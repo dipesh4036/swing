@@ -20,7 +20,7 @@ export function ComparisonChart({
   lines = [],
   series = [],
   height = 140,
-  referenceLines = [{ y: 0, color: "#E2E8F0" }],
+  referenceLines = [{ y: 0, color: "var(--color-border, #E4E4E7)" }],
   yUnit = "%",
   tooltipFormatter,
   className = "",
@@ -36,7 +36,7 @@ export function ComparisonChart({
     return (
       <div
         style={{ width: "100%", height, minHeight: height }}
-        className="w-full bg-[#F8FAFC] rounded-[4px] animate-pulse"
+        className="w-full bg-bg-secondary border border-border rounded-md animate-pulse"
       />
     );
   }

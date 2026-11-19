@@ -20,22 +20,22 @@ export function SectionHeader({
 }) {
   return (
     <div
-      className={`flex items-center justify-between pb-2 border-b border-[#E5EAF2] ${className}`}
+      className={`flex items-center justify-between pb-2 border-b border-border ${className}`}
     >
       <div className="flex items-center gap-2">
-        <h2 className="text-[14px] font-semibold text-[#17233B] tracking-tight">
+        <h2 className="text-[14px] font-semibold text-text tracking-tight">
           {title}
         </h2>
         {info && (
           <span
-            className="text-[#94A3B8] hover:text-[#64748B] cursor-pointer transition-colors"
+            className="text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
             title={info}
           >
             <Info size={14} />
           </span>
         )}
         {subtitle && (
-          <span className="text-[12px] text-[#64748B] ml-2 hidden sm:inline">
+          <span className="text-[12px] text-text-secondary ml-2 hidden sm:inline">
             {subtitle}
           </span>
         )}

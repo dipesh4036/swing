@@ -7,14 +7,14 @@ export function BaseCard({
   children,
   className = "",
   padding = "p-4",
-  border = "border border-[#E5EAF2]",
-  bg = "bg-white",
-  rounded = "rounded-[8px]",
+  border = "border border-border",
+  bg = "bg-surface",
+  rounded = "rounded-lg",
   ...props
 }) {
   return (
     <div
-      className={`${bg} ${border} ${rounded} ${padding} shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] ${className}`}
+      className={`${bg} ${border} ${rounded} ${padding} transition-colors duration-150 ${className}`}
       {...props}
     >
       {children}
@@ -37,23 +37,23 @@ export function SectionCard({
       {(title || action) && (
         <div
           className={`flex items-center justify-between px-4 py-3 ${
-            headerBorder ? "border-b border-[#E5EAF2]" : ""
+            headerBorder ? "border-b border-border" : ""
           }`}
         >
           <div className="flex items-center gap-1.5 min-w-0">
-            <h3 className="text-[13px] font-semibold text-[#17233B] tracking-tight truncate">
+            <h3 className="text-[13px] font-semibold text-text tracking-tight truncate">
               {title}
             </h3>
             {info && (
               <span
-                className="text-[#94A3B8] hover:text-[#64748B] cursor-pointer transition-colors"
+                className="text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
                 title={info}
               >
                 <Info size={13} />
               </span>
             )}
             {subtitle && (
-              <span className="text-[11px] text-[#64748B] ml-1.5 hidden sm:inline truncate">
+              <span className="text-[11px] text-text-secondary ml-1.5 hidden sm:inline truncate">
                 {subtitle}
               </span>
             )}
@@ -83,7 +83,7 @@ export function ChartCard({
       info={info}
       className={className}
     >
-      {legend && <div className="mb-3 flex items-center gap-4 text-xs">{legend}</div>}
+      {legend && <div className="mb-3 flex items-center gap-4 text-xs text-text-secondary">{legend}</div>}
       <div className="w-full">{children}</div>
     </SectionCard>
   );
@@ -99,20 +99,20 @@ export function MetricCard({
 }) {
   return (
     <BaseCard className={`flex flex-col justify-between ${className}`} padding="p-3.5">
-      <div className="flex items-center justify-between text-[11px] text-[#64748B] font-medium uppercase tracking-wider mb-1.5">
+      <div className="flex items-center justify-between text-[11px] text-text-secondary font-medium uppercase tracking-wider mb-1.5">
         <span>{label}</span>
         {action}
       </div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[20px] font-bold text-[#17233B] tabular-nums tracking-tight">
+        <span className="text-[20px] font-bold text-text tabular-nums tracking-tight">
           {value}
         </span>
         {trend && (
           <span
-            className={`text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-[4px] ${
+            className={`text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-[4px] border ${
               trend.isPositive
-                ? "bg-[#E8F8F3] text-[#16A878]"
-                : "bg-[#FEF0F4] text-[#F05283]"
+                ? "bg-bullish-bg text-bullish border-bullish-border"
+                : "bg-bearish-bg text-bearish border-bearish-border"
             }`}
           >
             {trend.value}
@@ -120,7 +120,7 @@ export function MetricCard({
         )}
       </div>
       {subvalue && (
-        <div className="text-[11px] text-[#94A3B8] mt-1 tabular-nums truncate">
+        <div className="text-[11px] text-text-muted mt-1 tabular-nums truncate">
           {subvalue}
         </div>
       )}
@@ -131,11 +131,11 @@ export function MetricCard({
 export function StatCard({ label, value, note, children, className = "" }) {
   return (
     <BaseCard className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[#64748B]">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">
         {label}
       </span>
-      <div className="text-[20px] font-bold text-[#17233B] tabular-nums">{value}</div>
-      {note && <div className="text-[11px] text-[#94A3B8]">{note}</div>}
+      <div className="text-[20px] font-bold text-text tabular-nums">{value}</div>
+      {note && <div className="text-[11px] text-text-muted">{note}</div>}
       {children}
     </BaseCard>
   );
@@ -143,14 +143,14 @@ export function StatCard({ label, value, note, children, className = "" }) {
 
 export function InformationCard({ title, message, tone = "info", className = "" }) {
   const tones = {
-    info: "bg-[#EFF6FF] border-[#BFDBFE] text-[#1E40AF]",
-    warning: "bg-[#FEF7EC] border-[#FBDFA9] text-[#B45309]",
-    success: "bg-[#E8F8F3] border-[#B5ECD9] text-[#0E7C58]",
-    error: "bg-[#FEF0F4] border-[#FCCEDB] text-[#BE185D]",
-  }[tone] || "bg-[#EFF6FF] border-[#BFDBFE] text-[#1E40AF]";
+    info: "bg-primary-subtle border-accent-border text-primary",
+    warning: "bg-warning-bg border-warning/30 text-warning",
+    success: "bg-bullish-bg border-bullish-border text-bullish",
+    error: "bg-bearish-bg border-bearish-border text-bearish",
+  }[tone] || "bg-primary-subtle border-accent-border text-primary";
 
   return (
-    <div className={`p-3.5 border rounded-[8px] text-xs leading-relaxed ${tones} ${className}`}>
+    <div className={`p-3.5 border rounded-lg text-xs leading-relaxed ${tones} ${className}`}>
       {title && <div className="font-semibold mb-1">{title}</div>}
       <div>{message}</div>
     </div>

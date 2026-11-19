@@ -7,28 +7,28 @@ import { TOKENS } from "./design-tokens";
 
 export const CHART_THEME = {
   colors: {
-    primary: TOKENS.colors.primary,
-    primaryFill: "rgba(52, 120, 246, 0.12)",
+    primary: "var(--color-primary, #4F46E5)",
+    primaryFill: "rgba(79, 70, 229, 0.12)",
     primaryGradient: {
-      from: "rgba(52, 120, 246, 0.25)",
-      to: "rgba(52, 120, 246, 0.01)",
+      from: "rgba(79, 70, 229, 0.25)",
+      to: "rgba(79, 70, 229, 0.01)",
     },
-    benchmark: TOKENS.colors.benchmark,
-    benchmarkFill: "rgba(148, 163, 184, 0.12)",
+    benchmark: "var(--color-text-muted, #A1A1AA)",
+    benchmarkFill: "rgba(161, 161, 170, 0.12)",
 
-    bullish: TOKENS.colors.bullish,
-    bullishFill: "rgba(22, 168, 120, 0.15)",
+    bullish: "var(--color-bullish, #059669)",
+    bullishFill: "rgba(5, 150, 105, 0.15)",
 
-    bearish: TOKENS.colors.bearish,
-    bearishFill: "rgba(240, 82, 131, 0.15)",
+    bearish: "var(--color-bearish, #E11D48)",
+    bearishFill: "rgba(225, 29, 72, 0.15)",
 
-    largeCap: TOKENS.colors.largeCap,
-    midCap: TOKENS.colors.midCap,
-    smallCap: TOKENS.colors.smallCap,
+    largeCap: "var(--color-primary, #4F46E5)",
+    midCap: "#F97316",
+    smallCap: "var(--color-bullish, #059669)",
   },
 
   grid: {
-    stroke: "#F1F5F9",
+    stroke: "var(--color-border-subtle, #F4F4F5)",
     strokeDasharray: "3 3",
     vertical: false,
     horizontal: true,
@@ -36,7 +36,7 @@ export const CHART_THEME = {
 
   axis: {
     tick: {
-      fill: "#94A3B8",
+      fill: "var(--color-text-secondary, #71717A)",
       fontSize: 10,
       fontFamily: "'Inter', sans-serif",
     },
@@ -45,7 +45,7 @@ export const CHART_THEME = {
   },
 
   referenceLine: {
-    stroke: "#E2E8F0",
+    stroke: "var(--color-border, #E4E4E7)",
     strokeDasharray: "2 2",
     strokeWidth: 1,
   },
@@ -64,14 +64,14 @@ export const CHART_THEME = {
   tooltip: {
     wrapperStyle: { outline: "none", zIndex: 100 },
     contentStyle: {
-      backgroundColor: "#FFFFFF",
-      border: "1px solid #E5EAF2",
+      backgroundColor: "var(--color-surface, #FFFFFF)",
+      border: "1px solid var(--color-border, #E4E4E7)",
       borderRadius: "6px",
       padding: "8px 12px",
-      boxShadow: "0 4px 6px -1px rgba(15, 23, 42, 0.08)",
+      boxShadow: "none",
       fontSize: "12px",
       fontFamily: "'Inter', sans-serif",
-      color: "#17233B",
+      color: "var(--color-text, #18181B)",
     },
   },
 };

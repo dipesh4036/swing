@@ -60,8 +60,8 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
-          <div className="text-xs font-bold text-[#17233B] truncate">Large · Mid · Small</div>
-          <div className="text-[10px] text-[#64748B] truncate">{referenceText}</div>
+          <div className="text-xs font-bold text-text truncate">Large · Mid · Small</div>
+          <div className="text-[10px] text-text-secondary truncate">{referenceText}</div>
         </div>
         <div className="shrink-0">
           <SegmentedControl
@@ -79,20 +79,20 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
           {segmentStats.map((seg) => (
             <span
               key={seg.id}
-              className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 tabular-nums"
+              className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums"
             >
               <span
                 className="w-1.5 h-1.5 rounded-full shrink-0"
                 style={{ backgroundColor: seg.color }}
               />
-              <span className="text-[#64748B]">{seg.label}:</span>
+              <span className="text-text-secondary">{seg.label}:</span>
               <span
                 className={
                   seg.pct === null
-                    ? "text-[#64748B]"
+                    ? "text-text-secondary"
                     : seg.pct >= 0
-                    ? "text-[#16A878]"
-                    : "text-[#F05283]"
+                    ? "text-bullish"
+                    : "text-bearish"
                 }
               >
                 {seg.pct !== null ? `${seg.pct >= 0 ? "+" : ""}${seg.pct.toFixed(1)}%` : "—"}
@@ -100,7 +100,7 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
             </span>
           ))}
         </div>
-        <span className="text-[10px] sm:text-[11px] font-medium text-[#17233B] shrink-0 pl-1">{leaderText}</span>
+        <span className="text-[10px] sm:text-[11px] font-medium text-text shrink-0 pl-1">{leaderText}</span>
       </div>
 
       {/* Comparison Chart */}
@@ -108,9 +108,9 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
         data={chartData}
         xKey="date"
         series={[
-          { key: "large", name: "Large", color: "#2563EB", strokeWidth: 1.75 },
+          { key: "large", name: "Large", color: "var(--color-primary, #4F46E5)", strokeWidth: 1.75 },
           { key: "mid", name: "Mid", color: "#F97316", strokeWidth: 1.5 },
-          { key: "small", name: "Small", color: "#16A878", strokeWidth: 1.25 },
+          { key: "small", name: "Small", color: "var(--color-bullish, #059669)", strokeWidth: 1.25 },
         ]}
         height={145}
       />

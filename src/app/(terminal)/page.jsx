@@ -74,7 +74,7 @@ export default function MarketBreadthDashboardPage() {
 
       {/* ── Error Banner ────────────────────────────────────────── */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-xs flex items-center gap-2 mb-4">
+        <div className="bg-bearish-bg border border-bearish-border rounded-lg p-3 text-bearish text-xs flex items-center gap-2 mb-4">
           <AlertTriangle size={15} />
           <span>Error loading market breadth data: {error}</span>
         </div>
@@ -84,20 +84,20 @@ export default function MarketBreadthDashboardPage() {
       {isLoading ? (
         <div className="space-y-4 animate-pulse">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
-            <div className="lg:col-span-4 xl:col-span-3 h-80 bg-slate-100 rounded-xl" />
-            <div className="lg:col-span-8 xl:col-span-6 h-80 bg-slate-100 rounded-xl" />
-            <div className="lg:col-span-12 xl:col-span-3 h-80 bg-slate-100 rounded-xl" />
+            <div className="lg:col-span-4 xl:col-span-3 h-80 bg-bg-secondary border border-border rounded-lg" />
+            <div className="lg:col-span-8 xl:col-span-6 h-80 bg-bg-secondary border border-border rounded-lg" />
+            <div className="lg:col-span-12 xl:col-span-3 h-80 bg-bg-secondary border border-border rounded-lg" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-40 bg-slate-100 rounded-xl" />
+              <div key={i} className="h-40 bg-bg-secondary border border-border rounded-lg" />
             ))}
           </div>
         </div>
       ) : !asOfDate || history.length === 0 ? (
-        <div className="bg-white border border-[#E5EAF2] rounded-xl p-8 text-center space-y-2">
-          <div className="text-base font-semibold text-[#17233B]">No data available</div>
-          <p className="text-xs text-[#64748B]">
+        <div className="bg-surface border border-border rounded-lg p-8 text-center space-y-2">
+          <div className="text-base font-semibold text-text">No data available</div>
+          <p className="text-xs text-text-secondary">
             No market breadth records found for universe &apos;{selectedUniverse}&apos; and period &apos;{selectedPeriod}&apos;.
           </p>
         </div>
@@ -142,9 +142,9 @@ export default function MarketBreadthDashboardPage() {
 
           {/* Data Freshness Footer (Phase 5) */}
           {asOfDate && (
-            <footer className="pt-4 pb-6 text-center text-xs text-[#64748B] border-t border-[#E5EAF2] mt-6">
+            <footer className="pt-4 pb-6 text-center text-xs text-text-secondary border-t border-border mt-6">
               <span>
-                Data as of <strong className="font-semibold text-[#17233B]">{asOfDate}</strong> · Updated {updatedAgoText}
+                Data as of <strong className="font-semibold text-text">{asOfDate}</strong> · Updated {updatedAgoText}
               </span>
             </footer>
           )}

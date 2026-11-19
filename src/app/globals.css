@@ -3,11 +3,13 @@
 @tailwind utilities;
 
 /*
- * UNIFIED INSTITUTIONAL DESIGN SYSTEM
- * Centralized Design Tokens & Typography for Indian Equities Analytics
+ * MINIMALIST FLAT CANVAS DESIGN SYSTEM
+ * Cool Zinc & Electric Indigo — Dual Theme (Light & Dark)
+ * WCAG 2.1 AA Compliant, 4px Mathematical Spacing, Zero Drop Shadows
  */
+
 :root {
-  /* Layout & Geometry */
+  /* Layout Dimensions */
   --shell-rail-w: 240px;
   --shell-topbar-h: 56px;
   --canvas-max-w: 100%;
@@ -16,68 +18,139 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Surfaces */
-  --color-bg-page: #F8FAFC;
+  /* Surfaces — Light Canvas (Cool Zinc) */
+  --color-bg-page: #FAFAFA;
   --color-bg-card: #FFFFFF;
-  --color-bg-secondary: #F8FAFC;
-  --color-bg-hover: #F1F5F9;
-  --color-bg-selected: #EFF6FF;
+  --color-bg-secondary: #F4F4F5;
+  --color-bg-hover: #EBEBEF;
+  --color-bg-selected: #EEF2FF;
 
-  /* Legacy aliases for backward compatibility */
-  --color-bg: #F8FAFC;
+  /* Universal aliases */
+  --color-bg: #FAFAFA;
   --color-surface: #FFFFFF;
-  --color-surface-2: #F8FAFC;
+  --color-surface-2: #F4F4F5;
   --color-surface-3: #FFFFFF;
-  --color-surface-inset: #F1F5F9;
+  --color-surface-inset: #EBEBEF;
 
-  /* Text & Typography */
-  --color-text-primary: #172033;
-  --color-text-secondary: #64748B;
-  --color-text-muted: #94A3B8;
-  --color-text-disabled: #CBD5E1;
+  /* Typography — Light */
+  --color-text-primary: #18181B;
+  --color-text-secondary: #71717A;
+  --color-text-muted: #A1A1AA;
+  --color-text-disabled: #D4D4D8;
   --color-text-inverse: #FFFFFF;
 
-  --color-text: #172033;
-  --color-text-faint: #94A3B8;
+  --color-text: #18181B;
+  --color-text-faint: #A1A1AA;
 
-  /* Brand / Action Blue */
-  --color-primary: #2563EB;
-  --color-primary-hover: #1D4ED8;
-  --color-primary-subtle: #EFF6FF;
-  --color-accent: #2563EB;
-  --color-accent-hover: #2563EB;
-  --color-accent-tint: #EFF6FF;
-  --color-accent-border: #BFDBFE;
+  /* Primary Brand Accent — Electric Indigo */
+  --color-primary: #4F46E5;
+  --color-primary-hover: #4338CA;
+  --color-primary-subtle: #EEF2FF;
+  --color-accent: #4F46E5;
+  --color-accent-hover: #4338CA;
+  --color-accent-tint: #EEF2FF;
+  --color-accent-border: #C7D2FE;
 
-  /* Financial Market Status */
-  --color-bullish: #16A878;
-  --color-bullish-bg: #E8F8F3;
-  --color-bullish-border: #B5ECD9;
-  --color-up: #16A878;
-  --color-up-text: #0E7C58;
+  /* Financial Status — Accessible, High-Contrast */
+  --color-bullish: #059669;
+  --color-bullish-bg: #ECFDF5;
+  --color-bullish-border: #A7F3D0;
+  --color-up: #059669;
+  --color-up-text: #047857;
 
-  --color-bearish: #F05283;
-  --color-bearish-bg: #FEF0F4;
-  --color-bearish-border: #FCCEDB;
-  --color-down: #F05283;
-  --color-down-text: #BE185D;
+  --color-bearish: #E11D48;
+  --color-bearish-bg: #FFF1F2;
+  --color-bearish-border: #FECDD3;
+  --color-down: #E11D48;
+  --color-down-text: #BE123C;
 
-  --color-neutral: #94A3B8;
-  --color-neutral-bg: #F1F5F9;
-  --color-warning: #E9A23B;
-  --color-warning-bg: #FEF7EC;
+  --color-neutral: #71717A;
+  --color-neutral-bg: #F4F4F5;
+  --color-warning: #D97706;
+  --color-warning-bg: #FFFBEB;
 
-  /* Borders */
-  --color-border: #E5EAF2;
-  --color-border-subtle: #F1F5F9;
-  --color-border-strong: #CBD5E1;
+  --color-stale: #A1A1AA;
+  --color-stale-text: #71717A;
+  --color-stale-bg: #F4F4F5;
+  --color-info: #4F46E5;
+  --color-info-text: #4338CA;
 
-  /* Radius */
+  /* Strict 1px Flat Borders */
+  --color-border: #E4E4E7;
+  --color-border-subtle: #F4F4F5;
+  --color-border-strong: #D4D4D8;
+
+  /* Radii */
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+}
+
+/* Dark Theme — Deep Matte Zinc Canvas */
+.dark {
+  /* Surfaces — Dark Canvas */
+  --color-bg-page: #09090B;
+  --color-bg-card: #18181B;
+  --color-bg-secondary: #121215;
+  --color-bg-hover: #27272A;
+  --color-bg-selected: #1E1B4B;
+
+  /* Universal aliases */
+  --color-bg: #09090B;
+  --color-surface: #18181B;
+  --color-surface-2: #121215;
+  --color-surface-3: #18181B;
+  --color-surface-inset: #27272A;
+
+  /* Typography — Dark */
+  --color-text-primary: #FAFAFA;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #71717A;
+  --color-text-disabled: #3F3F46;
+  --color-text-inverse: #18181B;
+
+  --color-text: #FAFAFA;
+  --color-text-faint: #71717A;
+
+  /* Primary Brand Accent — Electric Indigo Lightened */
+  --color-primary: #6366F1;
+  --color-primary-hover: #818CF8;
+  --color-primary-subtle: #1E1B4B;
+  --color-accent: #6366F1;
+  --color-accent-hover: #818CF8;
+  --color-accent-tint: #1E1B4B;
+  --color-accent-border: #3730A3;
+
+  /* Financial Status — Luminous for Dark Backgrounds */
+  --color-bullish: #10B981;
+  --color-bullish-bg: rgba(16, 185, 129, 0.12);
+  --color-bullish-border: rgba(16, 185, 129, 0.28);
+  --color-up: #10B981;
+  --color-up-text: #34D399;
+
+  --color-bearish: #F43F5E;
+  --color-bearish-bg: rgba(244, 63, 94, 0.12);
+  --color-bearish-border: rgba(244, 63, 94, 0.28);
+  --color-down: #F43F5E;
+  --color-down-text: #FB7185;
+
+  --color-neutral: #A1A1AA;
+  --color-neutral-bg: #27272A;
+  --color-warning: #FBBF24;
+  --color-warning-bg: rgba(251, 191, 36, 0.12);
+
+  --color-stale: #71717A;
+  --color-stale-text: #A1A1AA;
+  --color-stale-bg: #27272A;
+  --color-info: #6366F1;
+  --color-info-text: #818CF8;
+
+  /* Strict 1px Flat Borders — Dark */
+  --color-border: #27272A;
+  --color-border-subtle: #1F1F23;
+  --color-border-strong: #3F3F46;
 }
 
 html,
@@ -94,6 +167,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+/* Accessible Focus Ring Utility */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-bg-page), 0 0 0 4px var(--color-primary);
 }
 
 /* Typography Utility Classes */
@@ -128,7 +208,7 @@ body {
   text-transform: uppercase;
 }
 
-/* Custom Scrollbars */
+/* Custom Flat Minimalist Scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -137,11 +217,11 @@ body {
   background: var(--color-bg-page);
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: var(--color-border-strong);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: var(--color-text-muted);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -150,4 +230,16 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Respect User Reduced Motion Preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

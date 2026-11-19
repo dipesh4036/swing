@@ -9,28 +9,28 @@ export function StatusBadge({
   className = "",
 }) {
   const styles = {
-    positive: "bg-[#E8F8F3] text-[#16A878] border-[#B5ECD9]",
-    bullish: "bg-[#E8F8F3] text-[#16A878] border-[#B5ECD9]",
-    negative: "bg-[#FEF0F4] text-[#F05283] border-[#FCCEDB]",
-    bearish: "bg-[#FEF0F4] text-[#F05283] border-[#FCCEDB]",
-    neutral: "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]",
-    warning: "bg-[#FEF7EC] text-[#E9A23B] border-[#FBDFA9]",
-    info: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
-  }[status] || "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]";
+    positive: "bg-bullish-bg text-bullish border-bullish-border",
+    bullish: "bg-bullish-bg text-bullish border-bullish-border",
+    negative: "bg-bearish-bg text-bearish border-bearish-border",
+    bearish: "bg-bearish-bg text-bearish border-bearish-border",
+    neutral: "bg-neutral-bg text-text-secondary border-border",
+    warning: "bg-warning-bg text-warning border-warning/30",
+    info: "bg-primary-subtle text-primary border-accent-border",
+  }[status] || "bg-neutral-bg text-text-secondary border-border";
 
   const dotColors = {
-    positive: "bg-[#16A878]",
-    bullish: "bg-[#16A878]",
-    negative: "bg-[#F05283]",
-    bearish: "bg-[#F05283]",
-    neutral: "bg-[#94A3B8]",
-    warning: "bg-[#E9A23B]",
-    info: "bg-[#2563EB]",
-  }[status] || "bg-[#94A3B8]";
+    positive: "bg-bullish",
+    bullish: "bg-bullish",
+    negative: "bg-bearish",
+    bearish: "bg-bearish",
+    neutral: "bg-text-muted",
+    warning: "bg-warning",
+    info: "bg-primary",
+  }[status] || "bg-text-muted";
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] border text-[11px] font-medium leading-tight ${styles} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] border text-[11px] font-medium leading-tight tabular-nums transition-colors ${styles} ${className}`}
     >
       {showDot && <span className={`w-1.5 h-1.5 rounded-full ${dotColors}`} />}
       {children}
@@ -42,10 +42,10 @@ export function PillBadge({ children, active = false, onClick, className = "" })
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+      className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer ${
         active
-          ? "bg-[#2563EB] text-white shadow-xs"
-          : "bg-[#F1F5F9] text-[#64748B] hover:text-[#17233B] hover:bg-[#E2E8F0]"
+          ? "bg-primary text-text-inverse font-semibold"
+          : "bg-neutral-bg text-text-secondary hover:text-text hover:bg-bg-hover"
       } ${className}`}
     >
       {children}

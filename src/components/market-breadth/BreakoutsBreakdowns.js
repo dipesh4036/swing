@@ -96,8 +96,8 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
-          <div className="text-xs font-bold text-[#17233B] truncate">Breakouts − breakdowns</div>
-          <div className="text-[10px] text-[#64748B] truncate">
+          <div className="text-xs font-bold text-text truncate">Breakouts − breakdowns</div>
+          <div className="text-[10px] text-text-secondary truncate">
             {period === "Daily"
               ? "20D channel breakouts vs breakdowns on volume"
               : `${period} trend of breakouts vs breakdowns`}
@@ -118,16 +118,16 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
         <div className="flex items-baseline gap-2 flex-wrap">
           <span
             className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
-              isPositive ? "text-[#2563EB]" : "text-[#F05283]"
+              isPositive ? "text-primary" : "text-bearish"
             }`}
           >
             {displayValue}
           </span>
-          <span className="text-[11px] font-medium text-[#64748B]">
+          <span className="text-[11px] font-medium text-text-secondary">
             {displayStatus}
           </span>
         </div>
-        <div className="text-[10px] text-[#64748B] shrink-0">{displaySubtext}</div>
+        <div className="text-[10px] text-text-secondary shrink-0">{displaySubtext}</div>
       </div>
 
       {/* Chart */}
@@ -138,7 +138,7 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
           {
             key: "val",
             name: period === "Daily" ? "Daily Net" : `${period} Net`,
-            color: isPositive ? "#2563EB" : "#F05283",
+            color: isPositive ? "var(--color-primary, #4F46E5)" : "var(--color-bearish, #E11D48)",
             fill: true,
             strokeWidth: 1.75,
           },
@@ -146,7 +146,7 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
         height={145}
         yDomain={["auto", "auto"]}
         yUnit=""
-        referenceLines={[{ y: 0, color: "#94A3B8", strokeDasharray: "2 2" }]}
+        referenceLines={[{ y: 0, color: "var(--color-border-strong, #CBD5E1)", strokeDasharray: "2 2" }]}
         tooltipFormatter={(val) =>
           typeof val === "number" ? `${val > 0 ? "+" : ""}${val} stocks` : val
         }

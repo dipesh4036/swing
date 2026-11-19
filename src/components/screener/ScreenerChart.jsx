@@ -108,40 +108,41 @@ export default function ScreenerChart({
     const container = chartContainerRef.current;
     const width = container.clientWidth || 600;
     const height = container.clientHeight || 480;
+    const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
     const chart = createChart(container, {
       width,
       height,
       layout: {
-        background: { color: "#FFFFFF" },
-        textColor: "#64748B",
+        background: { color: isDark ? "#18181B" : "#FFFFFF" },
+        textColor: isDark ? "#A1A1AA" : "#71717A",
         fontSize: 11,
         attributionLogo: false,
       },
       grid: {
         vertLines: { visible: false },
-        horzLines: { color: "#F1F5F9", style: LineStyle.Solid },
+        horzLines: { color: isDark ? "#27272A" : "#F4F4F5", style: LineStyle.Solid },
       },
       crosshair: {
         mode: 1, // Normal
         vertLine: {
-          color: "#94A3B8",
+          color: isDark ? "#52525B" : "#A1A1AA",
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: "#17233B",
+          labelBackgroundColor: isDark ? "#27272A" : "#18181B",
         },
         horzLine: {
-          color: "#94A3B8",
+          color: isDark ? "#52525B" : "#A1A1AA",
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: "#17233B",
+          labelBackgroundColor: isDark ? "#27272A" : "#18181B",
         },
       },
       rightPriceScale: {
-        borderColor: "#E2E8F0",
+        borderColor: isDark ? "#27272A" : "#E4E4E7",
       },
       timeScale: {
-        borderColor: "#E2E8F0",
+        borderColor: isDark ? "#27272A" : "#E4E4E7",
         timeVisible: true,
         secondsVisible: false,
         barSpacing: 7,
@@ -152,10 +153,10 @@ export default function ScreenerChart({
 
     // 1. Candlestick Series (Pane 0)
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#16A34A",
-      downColor: "#EF4444",
-      wickUpColor: "#16A34A",
-      wickDownColor: "#EF4444",
+      upColor: isDark ? "#10B981" : "#059669",
+      downColor: isDark ? "#F43F5E" : "#E11D48",
+      wickUpColor: isDark ? "#10B981" : "#059669",
+      wickDownColor: isDark ? "#F43F5E" : "#E11D48",
       borderVisible: false,
       priceLineVisible: false, // No dotted price line crossing the chart
       lastValueVisible: false, // No stacked price tag on right axis (only Pivot has axis tag)
@@ -428,8 +429,8 @@ export default function ScreenerChart({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-white text-[#64748B] text-sm">
-        <div className="w-6 h-6 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mb-3" />
+      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-surface text-text-secondary text-sm">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
         <span>Loading chart candles...</span>
       </div>
     );
@@ -437,11 +438,11 @@ export default function ScreenerChart({
 
   if (error || !stockData) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-white text-[#64748B] text-sm p-6 text-center">
-        <div className="text-sm font-semibold text-[#17233B] mb-1">
+      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-surface text-text-secondary text-sm p-6 text-center">
+        <div className="text-sm font-semibold text-text mb-1">
           {error || "Select a stock from the candidate list"}
         </div>
-        <div className="text-xs text-[#94A3B8]">
+        <div className="text-xs text-text-muted">
           Candles, moving averages, and pattern overlays will display here.
         </div>
       </div>
@@ -453,19 +454,19 @@ export default function ScreenerChart({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="flex flex-col h-full bg-surface overflow-hidden">
       {/* ── Top Header Strip (Single Compact Line) ─────────────────── */}
-      <div className="px-3 py-2 border-b border-[#E5EAF2] flex flex-wrap items-center justify-between gap-2.5 bg-white shrink-0">
+      <div className="px-3 py-2 border-b border-border flex flex-wrap items-center justify-between gap-2.5 bg-surface shrink-0">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <span className="text-base font-bold text-[#17233B] tracking-tight">
+            <span className="text-base font-bold text-text tracking-tight">
               {stockData.symbol}
             </span>
             <a
               href={`https://www.tradingview.com/chart/?symbol=NSE:${stockData.symbol}`}
               target="_blank"
               rel="noreferrer"
-              className="text-[#94A3B8] hover:text-[#2563EB] transition-colors p-0.5 rounded-[4px]"
+              className="text-text-muted hover:text-primary transition-colors p-0.5 rounded-md"
               title="Open stock on TradingView"
             >
               <ExternalLink size={13} />
@@ -473,14 +474,14 @@ export default function ScreenerChart({
           </div>
 
           {/* D / W Timeframe Toggle */}
-          <div className="flex items-center rounded-[4px] border border-[#CBD5E1] p-0.5 bg-[#F8FAFC] text-[11px] font-semibold">
+          <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-[11px] font-semibold">
             <button
               type="button"
               onClick={() => setTimeframe("D")}
               className={`px-2 py-0.5 rounded-[3px] transition-colors ${
                 timeframe === "D"
-                  ? "bg-[#2563EB] text-white shadow-2xs"
-                  : "text-[#64748B] hover:text-[#17233B]"
+                  ? "bg-primary text-text-inverse font-semibold"
+                  : "text-text-secondary hover:text-text"
               }`}
             >
               D
@@ -490,8 +491,8 @@ export default function ScreenerChart({
               onClick={() => setTimeframe("W")}
               className={`px-2 py-0.5 rounded-[3px] transition-colors ${
                 timeframe === "W"
-                  ? "bg-[#2563EB] text-white shadow-2xs"
-                  : "text-[#64748B] hover:text-[#17233B]"
+                  ? "bg-primary text-text-inverse font-semibold"
+                  : "text-text-secondary hover:text-text"
               }`}
             >
               W
@@ -500,13 +501,13 @@ export default function ScreenerChart({
 
           {/* OHLC and Day Change */}
           {activeCandle && (
-            <div className="flex items-center gap-2 text-[11px] text-[#64748B] font-mono">
-              <span>O: <strong className="text-[#17233B]">{activeCandle.open !== null && activeCandle.open !== undefined ? activeCandle.open.toFixed(2) : "—"}</strong></span>
-              <span>H: <strong className="text-[#17233B]">{activeCandle.high !== null && activeCandle.high !== undefined ? activeCandle.high.toFixed(2) : "—"}</strong></span>
-              <span>L: <strong className="text-[#17233B]">{activeCandle.low !== null && activeCandle.low !== undefined ? activeCandle.low.toFixed(2) : "—"}</strong></span>
-              <span>C: <strong className="text-[#17233B]">{activeCandle.close !== null && activeCandle.close !== undefined ? activeCandle.close.toFixed(2) : "—"}</strong></span>
+            <div className="flex items-center gap-2 text-[11px] text-text-secondary font-mono">
+              <span>O: <strong className="text-text">{activeCandle.open !== null && activeCandle.open !== undefined ? activeCandle.open.toFixed(2) : "—"}</strong></span>
+              <span>H: <strong className="text-text">{activeCandle.high !== null && activeCandle.high !== undefined ? activeCandle.high.toFixed(2) : "—"}</strong></span>
+              <span>L: <strong className="text-text">{activeCandle.low !== null && activeCandle.low !== undefined ? activeCandle.low.toFixed(2) : "—"}</strong></span>
+              <span>C: <strong className="text-text">{activeCandle.close !== null && activeCandle.close !== undefined ? activeCandle.close.toFixed(2) : "—"}</strong></span>
               {dayChangePct !== null && (
-                <span className={`font-semibold ${Number(dayChangePct) >= 0 ? "text-[#16A34A]" : "text-[#EF4444]"}`}>
+                <span className={`font-semibold ${Number(dayChangePct) >= 0 ? "text-bullish" : "text-bearish"}`}>
                   ({Number(dayChangePct) > 0 ? "+" : ""}{dayChangePct}%)
                 </span>
               )}
@@ -516,41 +517,41 @@ export default function ScreenerChart({
 
         {/* Right Side: Stat Chips & Rules Overlay Switch */}
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          <div className="px-2 py-0.5 rounded-[4px] bg-[#F8FAFC] border border-[#E2E8F0] font-mono text-[11px] flex items-center gap-1">
-            <span className="text-[#94A3B8]">1M</span>
-            <span className={`font-semibold ${stockData.ret_1m_pct !== null && stockData.ret_1m_pct !== undefined ? (stockData.ret_1m_pct >= 0 ? "text-[#16A34A]" : "text-[#EF4444]") : "text-[#94A3B8]"}`}>
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
+            <span className="text-text-muted">1M</span>
+            <span className={`font-semibold ${stockData.ret_1m_pct !== null && stockData.ret_1m_pct !== undefined ? (stockData.ret_1m_pct >= 0 ? "text-bullish" : "text-bearish") : "text-text-muted"}`}>
               {stockData.ret_1m_pct !== null && stockData.ret_1m_pct !== undefined ? `${stockData.ret_1m_pct > 0 ? "+" : ""}${stockData.ret_1m_pct}%` : "—"}
             </span>
           </div>
 
-          <div className="px-2 py-0.5 rounded-[4px] bg-[#F8FAFC] border border-[#E2E8F0] font-mono text-[11px] flex items-center gap-1">
-            <span className="text-[#94A3B8]">3M</span>
-            <span className={`font-semibold ${stockData.ret_3m_pct !== null && stockData.ret_3m_pct !== undefined ? (stockData.ret_3m_pct >= 0 ? "text-[#16A34A]" : "text-[#EF4444]") : "text-[#94A3B8]"}`}>
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
+            <span className="text-text-muted">3M</span>
+            <span className={`font-semibold ${stockData.ret_3m_pct !== null && stockData.ret_3m_pct !== undefined ? (stockData.ret_3m_pct >= 0 ? "text-bullish" : "text-bearish") : "text-text-muted"}`}>
               {stockData.ret_3m_pct !== null && stockData.ret_3m_pct !== undefined ? `${stockData.ret_3m_pct > 0 ? "+" : ""}${stockData.ret_3m_pct}%` : "—"}
             </span>
           </div>
 
-          <div className="px-2 py-0.5 rounded-[4px] bg-[#F8FAFC] border border-[#E2E8F0] font-mono text-[11px] flex items-center gap-1">
-            <span className="text-[#94A3B8]">RS</span>
-            <span className="font-semibold text-[#17233B]">
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
+            <span className="text-text-muted">RS</span>
+            <span className="font-semibold text-text">
               {stockData.rs_rank !== null && stockData.rs_rank !== undefined ? stockData.rs_rank : "—"}
             </span>
           </div>
 
-          <div className="px-2 py-0.5 rounded-[4px] bg-[#F8FAFC] border border-[#E2E8F0] font-mono text-[11px] flex items-center gap-1">
-            <span className="text-[#94A3B8]">Vol</span>
-            <span className="font-semibold text-[#17233B]">
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
+            <span className="text-text-muted">Vol</span>
+            <span className="font-semibold text-text">
               {stockData.vol_ratio !== null && stockData.vol_ratio !== undefined ? `${stockData.vol_ratio}x` : "—"}
             </span>
           </div>
 
           {/* Rules Overlay Toggle */}
-          <label className="flex items-center gap-1.5 text-[11px] font-medium text-[#64748B] cursor-pointer ml-1 select-none">
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-text-secondary cursor-pointer ml-1 select-none">
             <input
               type="checkbox"
               checked={showRulesOverlay}
               onChange={(e) => setShowRulesOverlay(e.target.checked)}
-              className="rounded-xs text-[#2563EB] focus:ring-0 cursor-pointer w-3.5 h-3.5"
+              className="rounded-xs text-primary focus:ring-0 cursor-pointer w-3.5 h-3.5"
             />
             <span>Rules overlay</span>
           </label>
@@ -558,9 +559,9 @@ export default function ScreenerChart({
       </div>
 
       {/* ── Chart Container with Absolute Overlays ────────────────── */}
-      <div className="flex-1 w-full min-h-0 relative overflow-hidden">
+      <div className="flex-1 w-full min-h-0 relative overflow-hidden bg-surface">
         {/* Top-Left MA Legend Inside the Chart Canvas (EMAs only) */}
-        <div className="absolute top-2 left-3 z-10 flex items-center gap-2 text-[11px] font-mono select-none bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-[4px] border border-[#E5EAF2] shadow-2xs flex-wrap">
+        <div className="absolute top-2 left-3 z-10 flex items-center gap-2 text-[11px] font-mono select-none bg-surface/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-border flex-wrap text-text">
           {maConfigs.map((ma) => {
             const val = activeCandle?.[ma.key];
             const isVisible = visibleMAs[ma.key];
@@ -587,11 +588,11 @@ export default function ScreenerChart({
         </div>
 
         {/* Volume Pane Info Header (Positioned at 75% height) */}
-        <div className="absolute top-[75%] left-3 pt-1 z-10 pointer-events-none text-[11px] font-mono text-[#64748B] flex items-center gap-2.5 bg-white/70 backdrop-blur-2xs px-1.5 rounded-xs">
-          <span>Vol <strong className="text-[#17233B]">{formatVolume(activeCandle?.volume)}</strong></span>
-          <span>Avg 20D <strong className="text-[#17233B]">{formatVolume(activeCandle?.vol_sma_20)}</strong></span>
+        <div className="absolute top-[75%] left-3 pt-1 z-10 pointer-events-none text-[11px] font-mono text-text-secondary flex items-center gap-2.5 bg-surface/80 backdrop-blur-2xs px-1.5 rounded-sm">
+          <span>Vol <strong className="text-text">{formatVolume(activeCandle?.volume)}</strong></span>
+          <span>Avg 20D <strong className="text-text">{formatVolume(activeCandle?.vol_sma_20)}</strong></span>
           <span>
-            RVol <strong className={rVolPct !== null ? (rVolPct >= 150 ? "text-[#16A34A]" : rVolPct <= 70 ? "text-[#64748B]" : "text-[#17233B]") : "text-[#94A3B8]"}>
+            RVol <strong className={rVolPct !== null ? (rVolPct >= 150 ? "text-bullish" : rVolPct <= 70 ? "text-text-secondary" : "text-text") : "text-text-muted"}>
               {rVolPct !== null ? `${rVolPct}%` : "—"}
             </strong>
           </span>
@@ -602,16 +603,16 @@ export default function ScreenerChart({
       </div>
 
       {/* ── Clean Attribution Footer ───────────────────────────────── */}
-      <div className="px-3 py-1.5 border-t border-[#E5EAF2] flex items-center justify-between text-[10px] text-[#94A3B8] bg-[#FAFAFA] shrink-0">
+      <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-text-muted bg-bg-secondary shrink-0">
         <div className="flex items-center gap-3">
           <span>{candles.length} bars</span>
           {stockData.source === "db" && (
-            <span className="text-[#D97706] font-medium bg-[#FEF3C7] px-1.5 py-0.5 rounded-[3px] border border-[#FDE68A]">
+            <span className="text-warning font-medium bg-warning-bg px-1.5 py-0.5 rounded-sm border border-warning/30">
               Showing stored data (260 sessions)
             </span>
           )}
           <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
             HVQ: 63D high
           </span>
           <span className="flex items-center gap-1">
@@ -625,7 +626,7 @@ export default function ScreenerChart({
             href="https://www.tradingview.com/lightweight-charts/"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-[#17233B] underline transition-colors"
+            className="hover:text-text underline transition-colors"
           >
             TradingView Lightweight Charts™
           </a>

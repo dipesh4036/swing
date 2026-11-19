@@ -15,13 +15,13 @@ export function MarketCondition({
   return (
     <BaseCard className="flex flex-col justify-between h-full space-y-4" padding="p-4">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#E5EAF2]">
+      <div className="flex items-center justify-between pb-2 border-b border-border">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-bold text-[#17233B] uppercase tracking-wider">
+          <span className="text-xs font-bold text-text uppercase tracking-wider">
             Market condition
           </span>
           <span title="Comprehensive gauge of overall stock market breadth and participation">
-            <Info size={13} className="text-[#94A3B8] cursor-pointer" />
+            <Info size={13} className="text-text-muted cursor-pointer" />
           </span>
         </div>
       </div>

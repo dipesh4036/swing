@@ -19,18 +19,18 @@ export function IndexCard({ item }) {
   } = item;
 
   const isPos = changePct >= 0;
-  const sparkColor = isPos ? "#16A878" : "#F05283";
+  const sparkColor = isPos ? "var(--color-bullish, #059669)" : "var(--color-bearish, #E11D48)";
 
   return (
     <BaseCard padding="p-3" className="flex flex-col justify-between space-y-2 w-full min-w-0">
       {/* Top: Name & % Change */}
       <div className="flex items-center justify-between text-xs">
-        <span className="font-semibold text-[#17233B] truncate">{name}</span>
+        <span className="font-semibold text-text truncate">{name}</span>
         <PercentageChange value={changePct} showBg={false} />
       </div>
 
       {/* Main numerical value */}
-      <div className="text-[17px] font-bold text-[#17233B] tabular-nums tracking-tight">
+      <div className="text-[17px] font-bold text-text tabular-nums tracking-tight">
         {value === null || value === undefined
           ? "—"
           : isDollar
@@ -49,26 +49,26 @@ export function IndexCard({ item }) {
       </div>
 
       {/* Bottom Subtext */}
-      <div className="flex items-center justify-between text-[10px] text-[#64748B] pt-1 border-t border-[#F1F5F9] gap-1">
+      <div className="flex items-center justify-between text-[10px] text-text-secondary pt-1 border-t border-border gap-1">
         {distFromHighPct !== null && distFromHighPct !== undefined ? (
           <>
             <span
               className={
                 distFromHighPct >= -3
-                  ? "text-[#16A878] font-semibold shrink-0"
+                  ? "text-bullish font-semibold shrink-0"
                   : distFromHighPct <= -15
-                  ? "text-[#F05283] font-medium shrink-0"
-                  : "text-[#64748B] font-medium shrink-0"
+                  ? "text-bearish font-medium shrink-0"
+                  : "text-text-secondary font-medium shrink-0"
               }
             >
               {distFromHighPct === 0
                 ? "At 52W High"
                 : `${distFromHighPct.toFixed(1)}% from 52W high`}
             </span>
-            <span className="text-[#94A3B8] truncate text-right">{subtext}</span>
+            <span className="text-text-muted truncate text-right">{subtext}</span>
           </>
         ) : (
-          <span className="text-[#94A3B8] truncate">{subtext}</span>
+          <span className="text-text-muted truncate">{subtext}</span>
         )}
       </div>
     </BaseCard>

@@ -20,6 +20,8 @@ import {
   LogOut,
 } from "lucide-react";
 
+import ThemeToggle from "@/components/shared/ThemeToggle";
+
 const NAV_ITEMS = [
   {
     group: "ANALYTICS",
@@ -68,7 +70,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
 
       {/* ── Sidebar Element ─────────────────────────────────────────── */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-40 bg-white border-r border-[#E5EAF2] flex flex-col transition-all duration-200 select-none ${
+        className={`fixed top-0 bottom-0 left-0 z-40 bg-surface border-r border-border flex flex-col transition-all duration-150 select-none ${
           collapsed ? "w-16" : "w-60"
         } ${
           isMobileOpen
@@ -77,18 +79,18 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
         }`}
       >
         {/* Brand / Logo Top Bar */}
-        <div className="h-14 border-b border-[#E5EAF2] flex items-center justify-between px-3.5 shrink-0">
+        <div className="h-14 border-b border-border flex items-center justify-between px-3.5 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-[8px] bg-[#2563EB] text-white flex items-center justify-center font-bold text-sm tracking-wider shadow-xs shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-sm tracking-wider shrink-0">
               SW
             </div>
             {!collapsed && (
               <div className="min-w-0 leading-tight">
-                <div className="text-[13px] font-bold text-[#17233B] tracking-tight truncate flex items-center gap-1.5">
-                  SWING TERMINAL
+                <div className="text-[13px] font-bold text-text tracking-tight truncate flex items-center gap-1.5 uppercase">
+                  Swing Terminal
                 </div>
-                <div className="text-[10px] text-[#94A3B8] font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#16A878] inline-block animate-pulse" />
+                <div className="text-[10px] text-text-muted font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-bullish inline-block animate-pulse" />
                   <span>SmartAPI Active</span>
                 </div>
               </div>
@@ -99,8 +101,8 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
           <button
             type="button"
             onClick={onMobileClose}
-            className="lg:hidden p-1.5 rounded-[6px] text-[#64748B] hover:text-[#17233B] hover:bg-[#F1F5F9]"
-            title="Close sidebar"
+            className="lg:hidden min-w-[36px] min-h-[36px] p-1.5 rounded-md text-text-secondary hover:text-text hover:bg-hover flex items-center justify-center transition-colors"
+            aria-label="Close sidebar"
           >
             <X size={18} />
           </button>
@@ -111,7 +113,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
           {NAV_ITEMS.map((section) => (
             <div key={section.group} className="space-y-1">
               {!collapsed && (
-                <div className="px-2 text-[10px] font-bold text-[#94A3B8] tracking-wider uppercase mb-1">
+                <div className="px-2 text-[10px] font-bold text-text-muted tracking-wider uppercase mb-1">
                   {section.group}
                 </div>
               )}
@@ -127,10 +129,10 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                       if (onMobileClose) onMobileClose();
                     }}
                     title={collapsed ? item.name : undefined}
-                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-[6px] text-xs font-medium transition-all group relative ${
+                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-colors duration-150 group relative ${
                       isCurrent
-                        ? "bg-[#EFF6FF] text-[#2563EB] font-semibold"
-                        : "text-[#64748B] hover:text-[#17233B] hover:bg-[#F8FAFC]"
+                        ? "bg-primary-subtle text-primary font-semibold"
+                        : "text-text-secondary hover:text-text hover:bg-hover"
                     }`}
                   >
                     <Icon
@@ -138,8 +140,8 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                       strokeWidth={isCurrent ? 2.25 : 1.75}
                       className={`shrink-0 ${
                         isCurrent
-                          ? "text-[#2563EB]"
-                          : "text-[#64748B] group-hover:text-[#17233B]"
+                          ? "text-primary"
+                          : "text-text-secondary group-hover:text-text"
                       }`}
                     />
                     {!collapsed && (
@@ -154,25 +156,33 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
           ))}
         </div>
 
-        {/* Bottom Collapse Toggle & System Health Footer */}
-        <div className="p-2 border-t border-[#E5EAF2] shrink-0 bg-[#F8FAFC]/50 space-y-2">
+        {/* Bottom Theme Toggle, Collapse & Footer */}
+        <div className="p-2 border-t border-border shrink-0 bg-bg/50 space-y-2">
           {!collapsed && (
-            <div className="px-2 py-1.5 bg-white border border-[#E5EAF2] rounded-[6px] text-[10px] space-y-0.5">
-              <div className="flex items-center justify-between text-[#64748B]">
+            <div className="px-2.5 py-2 bg-surface border border-border rounded-md text-[10px] space-y-0.5">
+              <div className="flex items-center justify-between text-text-secondary">
                 <span>Data Feed</span>
-                <span className="text-[#16A878] font-semibold">Synced</span>
+                <span className="text-bullish font-semibold">Synced</span>
               </div>
-              <div className="text-[9px] text-[#94A3B8] truncate">
+              <div className="text-[9px] text-text-muted truncate">
                 Angel One SmartAPI · NSE Cash
               </div>
             </div>
           )}
 
+          {/* Theme Toggle Button */}
+          <div className="flex items-center justify-between px-1">
+            {!collapsed && (
+              <span className="text-xs text-text-secondary font-medium">Appearance</span>
+            )}
+            <ThemeToggle compact className="w-full justify-center" />
+          </div>
+
           {/* Logout Button */}
           <button
             type="button"
             onClick={handleLogout}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[6px] text-xs font-medium text-[#64748B] hover:text-[#BE185D] hover:bg-[#FEF0F4] transition-colors ${
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium text-text-secondary hover:text-bearish hover:bg-bearish-bg transition-colors ${
               collapsed ? "justify-center" : ""
             }`}
             title="Log out"
@@ -185,7 +195,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex w-full items-center justify-center p-2 rounded-[6px] text-[#64748B] hover:text-[#17233B] hover:bg-[#F1F5F9] transition-colors"
+            className="hidden lg:flex w-full items-center justify-center p-2 rounded-md text-text-secondary hover:text-text hover:bg-hover transition-colors"
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight size={16} /> : (

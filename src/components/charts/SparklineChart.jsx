@@ -31,7 +31,7 @@ export function SparklineChart({
     return (
       <div
         style={{ height, width }}
-        className="w-full bg-[#F8FAFC] rounded-[2px] animate-pulse"
+        className="w-full bg-bg-secondary border border-border rounded-sm animate-pulse"
       />
     );
   }

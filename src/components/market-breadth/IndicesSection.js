@@ -13,11 +13,11 @@ export function IndicesSection({ indices = [] }) {
     <div className="space-y-2.5 pt-2">
       {/* Header */}
       <div className="flex items-center gap-1.5 pb-1">
-        <span className="text-xs font-bold text-[#17233B] uppercase tracking-wider">
+        <span className="text-xs font-bold text-text uppercase tracking-wider">
           Indices &amp; Macro
         </span>
         <span title="Benchmark indices and key macroeconomic rates">
-          <Info size={13} className="text-[#94A3B8] cursor-pointer" />
+          <Info size={13} className="text-text-muted cursor-pointer" />
         </span>
       </div>
 

@@ -10,26 +10,26 @@ export function MarketRead({ data }) {
   const getToneDot = (tone) => {
     switch (tone) {
       case "positive":
-        return "bg-[#16A878]";
+        return "bg-bullish";
       case "negative":
-        return "bg-[#F05283]";
+        return "bg-bearish";
       case "warning":
-        return "bg-[#E9A23B]";
+        return "bg-warning";
       default:
-        return "bg-[#94A3B8]";
+        return "bg-text-muted";
     }
   };
 
   const getToneText = (tone) => {
     switch (tone) {
       case "positive":
-        return "text-[#16A878]";
+        return "text-bullish";
       case "negative":
-        return "text-[#F05283]";
+        return "text-bearish";
       case "warning":
-        return "text-[#E9A23B]";
+        return "text-warning";
       default:
-        return "text-[#64748B]";
+        return "text-text-secondary";
     }
   };
 
@@ -37,8 +37,8 @@ export function MarketRead({ data }) {
     <BaseCard className="flex flex-col justify-between h-full space-y-4" padding="p-4">
       <div>
         {/* Header */}
-        <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#E5EAF2]">
-          <span className="text-xs font-bold text-[#17233B] uppercase tracking-wider">
+        <div className="flex items-center justify-between pb-2 mb-3 border-b border-border">
+          <span className="text-xs font-bold text-text uppercase tracking-wider">
             Market Read
           </span>
         </div>
@@ -48,7 +48,7 @@ export function MarketRead({ data }) {
           {indicators.map((item) => (
             <div key={item.id} className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 font-medium text-[#17233B]">
+                <div className="flex items-center gap-2 font-medium text-text">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${getToneDot(item.tone)}`} />
                   <span>{item.name}</span>
                 </div>
@@ -56,7 +56,7 @@ export function MarketRead({ data }) {
                   {item.status}
                 </span>
               </div>
-              <p className="text-[11px] text-[#64748B] pl-4 leading-relaxed">
+              <p className="text-[11px] text-text-secondary pl-4 leading-relaxed">
                 {item.description}
               </p>
             </div>
@@ -65,8 +65,8 @@ export function MarketRead({ data }) {
 
         {/* Divergence Explainer (Daily momentum vs short-term participation) */}
         {divergenceNote && (
-          <div className="mt-3.5 p-2.5 rounded-[6px] bg-[#EFF6FF] border border-[#BFDBFE] text-[11px] leading-relaxed text-[#1E40AF]">
-            <span className="font-semibold block mb-0.5 text-[#1E3A8A]">
+          <div className="mt-3.5 p-2.5 rounded-md bg-primary-subtle border border-accent-border text-[11px] leading-relaxed text-text">
+            <span className="font-semibold block mb-0.5 text-primary">
               Daily Momentum vs Participation:
             </span>
             <span>{divergenceNote}</span>

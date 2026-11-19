@@ -75,8 +75,8 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
-          <div className="text-xs font-bold text-[#17233B] truncate">Advance / Decline</div>
-          <div className="text-[10px] text-[#64748B] truncate">
+          <div className="text-xs font-bold text-text truncate">Advance / Decline</div>
+          <div className="text-[10px] text-text-secondary truncate">
             {period === "AD" ? "Cumulative Advance minus Decline line" : `Stocks that rose vs fell, ${period} rolling ratio`}
           </div>
         </div>
@@ -96,27 +96,27 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
           <div className="flex items-baseline gap-1.5">
             <span
               className={`text-[17px] sm:text-[18px] font-bold tabular-nums ${
-                isPositive ? "text-[#2563EB]" : "text-[#F05283]"
+                isPositive ? "text-primary" : "text-bearish"
               }`}
             >
               {displayVal}
             </span>
-            <span className="text-[10px] uppercase font-semibold text-[#64748B] tracking-wider">
+            <span className="text-[10px] uppercase font-semibold text-text-secondary tracking-wider">
               {period === "AD" ? "Cumulative Net" : `${period} Ratio`}
             </span>
           </div>
-          <span className="text-[11px] font-medium text-[#64748B]">{statusText}</span>
+          <span className="text-[11px] font-medium text-text-secondary">{statusText}</span>
           {weeklyChangeText && (
-            <span className={`text-[10px] font-semibold ${isPositive ? "text-[#16A878]" : "text-[#F05283]"}`}>
+            <span className={`text-[10px] font-semibold ${isPositive ? "text-bullish" : "text-bearish"}`}>
               {weeklyChangeText}
             </span>
           )}
         </div>
-        <div className="text-[10px] text-[#64748B] shrink-0 bg-[#F8FAFC] border border-[#E5EAF2] rounded-[4px] px-2 py-0.5">
-          <span className="text-[#94A3B8]">Today: </span>
-          <span className="font-semibold text-[#16A878]">{advances !== null && advances !== undefined ? `${advances.toLocaleString("en-IN")} up` : "—"}</span>
-          <span className="text-[#94A3B8]"> / </span>
-          <span className="font-semibold text-[#F05283]">{declines !== null && declines !== undefined ? `${declines.toLocaleString("en-IN")} down` : "—"}</span>
+        <div className="text-[10px] text-text-secondary shrink-0 bg-bg-secondary border border-border rounded-md px-2 py-0.5">
+          <span className="text-text-muted">Today: </span>
+          <span className="font-semibold text-bullish">{advances !== null && advances !== undefined ? `${advances.toLocaleString("en-IN")} up` : "—"}</span>
+          <span className="text-text-muted"> / </span>
+          <span className="font-semibold text-bearish">{declines !== null && declines !== undefined ? `${declines.toLocaleString("en-IN")} down` : "—"}</span>
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
           {
             key: "val",
             name: period === "AD" ? "A-D Line" : `${period} Ratio`,
-            color: isPositive ? "#2563EB" : "#F05283",
+            color: isPositive ? "var(--color-primary, #4F46E5)" : "var(--color-bearish, #E11D48)",
             fill: true,
             strokeWidth: 1.75,
           },
@@ -137,7 +137,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
                 {
                   key: "benchmark",
                   name: "Neutral (1.0x)",
-                  color: "#94A3B8",
+                  color: "var(--color-border-strong, #CBD5E1)",
                   fill: false,
                   strokeWidth: 1,
                   strokeDasharray: "2 2",
@@ -151,7 +151,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
         referenceLines={[
           {
             y: period === "AD" ? 0 : 1.0,
-            color: "#94A3B8",
+            color: "var(--color-border-strong, #CBD5E1)",
             strokeDasharray: "2 2",
           },
         ]}

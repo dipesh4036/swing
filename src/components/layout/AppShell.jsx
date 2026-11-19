@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import Sidebar from "./Sidebar";
-import { Menu, Activity } from "lucide-react";
+import { Menu } from "lucide-react";
+import ThemeToggle from "@/components/shared/ThemeToggle";
 
 export function AppShell({ children }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#17233B] antialiased flex w-full">
+    <div className="min-h-screen bg-bg text-text antialiased flex w-full transition-colors duration-150">
       {/* ── Navigation Sidebar ───────────────────────────────────── */}
       <Sidebar
         isMobileOpen={isMobileOpen}
@@ -18,30 +19,33 @@ export function AppShell({ children }) {
 
       {/* ── Main Content Area ────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 transition-all duration-200 lg:pl-60">
-        {/* Mobile Top Header with Hamburger Button */}
-        <header className="lg:hidden h-12 bg-white border-b border-[#E5EAF2] px-3.5 flex items-center justify-between sticky top-0 z-30 shrink-0">
-          <div className="flex items-center gap-2.5">
+        {/* Mobile Top Header with Hamburger Button & Theme Toggle */}
+        <header className="lg:hidden h-14 bg-surface border-b border-border px-4 flex items-center justify-between sticky top-0 z-30 shrink-0">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setIsMobileOpen(true)}
-              className="p-1.5 -ml-1 text-[#64748B] hover:text-[#17233B] hover:bg-[#F1F5F9] rounded-[6px]"
-              title="Open menu"
+              className="min-w-[40px] min-h-[40px] p-2 -ml-2 text-text-secondary hover:text-text hover:bg-hover rounded-md flex items-center justify-center cursor-pointer transition-colors"
+              aria-label="Open navigation menu"
             >
-              <Menu size={19} />
+              <Menu size={20} />
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-[4px] bg-[#2563EB] text-white flex items-center justify-center font-bold text-[10px]">
+              <div className="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 SW
               </div>
-              <span className="text-xs font-bold text-[#17233B] tracking-tight">
-                SWING TERMINAL
+              <span className="text-xs font-bold text-text tracking-tight uppercase">
+                Swing Terminal
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-[10px] text-[#16A878] font-semibold bg-[#ECFDF5] px-2 py-0.5 rounded-[4px] border border-[#A7F3D0]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#16A878] animate-pulse" />
-            <span>SmartAPI</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] text-bullish font-medium bg-bullish-bg px-2.5 py-1 rounded-md border border-bullish-border">
+              <span className="w-1.5 h-1.5 rounded-full bg-bullish animate-pulse" />
+              <span>SmartAPI</span>
+            </div>
+            <ThemeToggle compact />
           </div>
         </header>
 

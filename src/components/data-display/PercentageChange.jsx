@@ -11,7 +11,7 @@ export function PercentageChange({
   className = "",
 }) {
   if (value === null || value === undefined || isNaN(value)) {
-    return <span className="text-[#94A3B8]">—</span>;
+    return <span className="text-text-muted">—</span>;
   }
 
   const isPositive = value > 0;
@@ -19,17 +19,17 @@ export function PercentageChange({
   const isZero = value === 0;
 
   const colorStyles = isPositive
-    ? "text-[#16A878]"
+    ? "text-bullish"
     : isNegative
-    ? "text-[#F05283]"
-    : "text-[#94A3B8]";
+    ? "text-bearish"
+    : "text-text-muted";
 
   const bgStyles = showBg
     ? isPositive
-      ? "bg-[#E8F8F3] px-1.5 py-0.5 rounded-[4px]"
+      ? "bg-bullish-bg border border-bullish-border px-1.5 py-0.5 rounded-[4px]"
       : isNegative
-      ? "bg-[#FEF0F4] px-1.5 py-0.5 rounded-[4px]"
-      : "bg-[#F1F5F9] px-1.5 py-0.5 rounded-[4px]"
+      ? "bg-bearish-bg border border-bearish-border px-1.5 py-0.5 rounded-[4px]"
+      : "bg-neutral-bg border border-border px-1.5 py-0.5 rounded-[4px]"
     : "";
 
   return (

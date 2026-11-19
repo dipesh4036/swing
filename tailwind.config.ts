@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,52 +10,79 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        /* V1 light theme tokens — mirrors CSS custom properties in globals.css */
+        /* Minimalist Flat Canvas Tokens — maps directly to CSS variables */
         bg: "var(--color-bg)",
+        "bg-page": "var(--color-bg-page)",
+        "bg-card": "var(--color-bg-card)",
+        "bg-secondary": "var(--color-bg-secondary)",
+        "bg-hover": "var(--color-bg-hover)",
+        "bg-selected": "var(--color-bg-selected)",
+
         surface: "var(--color-surface)",
         "surface-2": "var(--color-surface-2)",
         "surface-3": "var(--color-surface-3)",
         "surface-inset": "var(--color-surface-inset)",
+
         border: "var(--color-border)",
+        "border-subtle": "var(--color-border-subtle)",
         "border-strong": "var(--color-border-strong)",
+
+        primary: "var(--color-primary)",
+        "primary-hover": "var(--color-primary-hover)",
+        "primary-subtle": "var(--color-primary-subtle)",
+
         accent: "var(--color-accent)",
         "accent-hover": "var(--color-accent-hover)",
         "accent-tint": "var(--color-accent-tint)",
+        "accent-border": "var(--color-accent-border)",
+
         text: "var(--color-text)",
+        "text-primary": "var(--color-text-primary)",
         "text-secondary": "var(--color-text-secondary)",
         "text-muted": "var(--color-text-muted)",
         "text-faint": "var(--color-text-faint)",
+        "text-inverse": "var(--color-text-inverse)",
+
+        bullish: "var(--color-bullish)",
+        "bullish-bg": "var(--color-bullish-bg)",
+        "bullish-border": "var(--color-bullish-border)",
         up: "var(--color-up)",
         "up-text": "var(--color-up-text)",
+
+        bearish: "var(--color-bearish)",
+        "bearish-bg": "var(--color-bearish-bg)",
+        "bearish-border": "var(--color-bearish-border)",
         down: "var(--color-down)",
         "down-text": "var(--color-down-text)",
+
+        neutral: "var(--color-neutral)",
+        "neutral-bg": "var(--color-neutral-bg)",
+        warning: "var(--color-warning)",
+        "warning-bg": "var(--color-warning-bg)",
+
         stale: "var(--color-stale)",
         "stale-text": "var(--color-stale-text)",
         "stale-bg": "var(--color-stale-bg)",
         info: "var(--color-info)",
         "info-text": "var(--color-info-text)",
 
-        /*
-         * V2 terminal-* compatibility aliases — remapped to V1 light equivalents so
-         * existing page components continue to compile without full rewrites.
-         * Semantic intent is preserved: bg→page bg, card→surface, bull→up, etc.
-         */
+        /* Dynamic terminal-* aliases for full dual-theme support */
         terminal: {
-          bg: "#f5f5f6",          // was #090d16  → light page bg
-          card: "#ffffff",        // was #0f1624  → white card
-          cardHover: "#efeff1",   // was #151f33  → surface-2 hover
-          border: "rgba(9,9,11,0.10)", // was #1c2638 → light border
-          subtle: "rgba(9,9,11,0.06)", // was #24324a → faint subtle
-          text: "#18181b",        // was #e1e7f0  → dark text on light bg
-          muted: "#8b8b93",       // was #7d8b9f  → muted stays similar
-          bull: "#15803d",        // was #00d084  → green (darker for light bg)
-          bear: "#b91c1c",        // was #ff4d6a  → red (darker for light bg)
-          accent: "#7c3aed",      // was #38bdf8  → violet accent
-          gold: "#b45309",        // was #fbbf24  → amber (darker for light bg)
+          bg: "var(--color-bg)",
+          card: "var(--color-surface)",
+          cardHover: "var(--color-bg-hover)",
+          border: "var(--color-border)",
+          subtle: "var(--color-border-subtle)",
+          text: "var(--color-text-primary)",
+          muted: "var(--color-text-secondary)",
+          bull: "var(--color-bullish)",
+          bear: "var(--color-bearish)",
+          accent: "var(--color-accent)",
+          gold: "var(--color-warning)",
         },
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
       },
       height: {

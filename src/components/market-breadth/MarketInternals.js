@@ -13,13 +13,13 @@ export function MarketInternals({ keyMetrics, history = [], performance = {} }) 
   return (
     <div className="space-y-3">
       {/* Section Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#E5EAF2]">
+      <div className="flex items-center justify-between pb-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-[#17233B] uppercase tracking-wider">
+          <span className="text-xs font-bold text-text uppercase tracking-wider">
             Market internals
           </span>
           <span title="Granular underlying market health indicators">
-            <Info size={13} className="text-[#94A3B8] cursor-pointer" />
+            <Info size={13} className="text-text-muted cursor-pointer" />
           </span>
         </div>
       </div>

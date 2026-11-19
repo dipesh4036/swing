@@ -38,7 +38,7 @@ export function BaseAreaChart({
     return (
       <div
         style={{ width: "100%", height, minHeight: height }}
-        className="w-full bg-[#F8FAFC] rounded-[6px] animate-pulse"
+        className="w-full bg-bg-secondary border border-border rounded-md animate-pulse"
       />
     );
   }
@@ -47,7 +47,7 @@ export function BaseAreaChart({
     return (
       <div
         style={{ width: "100%", height, minHeight: height }}
-        className="w-full flex items-center justify-center text-xs text-[#94A3B8]"
+        className="w-full flex items-center justify-center text-xs text-text-muted"
       >
         No chart data available
       </div>

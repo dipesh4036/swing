@@ -7,25 +7,25 @@ export function StageAnalysis({ data }) {
   const { totalStocks = 0, timeframe = "150-day SMA", stages = [], coverage = null } = data || {};
 
   return (
-    <div className="pt-4 border-t border-[#E5EAF2]">
+    <div className="pt-4 border-t border-border">
       {/* Header */}
       <div className="flex items-center justify-between text-[11px] mb-2 flex-wrap gap-1">
-        <div className="flex items-center gap-1 font-semibold uppercase tracking-wider text-[#64748B]">
+        <div className="flex items-center gap-1 font-semibold uppercase tracking-wider text-text-secondary">
           <span>Stage Analysis</span>
           <span title="Stage analysis classifies stocks into Wyckoff 4 market stages: 1-Base, 2-Uptrend, 3-Top, 4-Downtrend">
-            <Info size={12} className="text-[#94A3B8] cursor-pointer" />
+            <Info size={12} className="text-text-muted cursor-pointer" />
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-[#64748B]">
+        <div className="flex items-center gap-1.5 text-[11px] text-text-secondary">
           <span>
             Coverage:{" "}
-            <strong className="text-[#17233B] font-semibold">
+            <strong className="text-text font-semibold">
               {coverage ? `${coverage.valid}/${coverage.total} (${coverage.pct}%)` : `${totalStocks} stocks`}
             </strong>
           </span>
           {coverage?.excludedReason && (
             <span
-              className="text-[#94A3B8] hover:text-[#64748B] cursor-pointer inline-flex items-center"
+              className="text-text-muted hover:text-text-secondary cursor-pointer inline-flex items-center"
               title={coverage.excludedReason}
             >
               <Info size={12} />
@@ -35,7 +35,7 @@ export function StageAnalysis({ data }) {
       </div>
 
       {/* Stacked Progress Bar */}
-      <div className="w-full h-2 rounded-full overflow-hidden flex bg-[#F1F5F9] mb-3">
+      <div className="w-full h-2 rounded-full overflow-hidden flex bg-bg-secondary border border-border mb-3">
         {stages.map((stg) => (
           <div
             key={stg.id}
@@ -53,27 +53,27 @@ export function StageAnalysis({ data }) {
           const isNeg = stg.change1D < 0;
           return (
             <div key={stg.id} className="flex flex-col items-center">
-              <div className="flex items-center gap-1 text-[11px] text-[#64748B] font-medium">
+              <div className="flex items-center gap-1 text-[11px] text-text-secondary font-medium">
                 <span
                   className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: stg.color }}
                 />
                 <span>{stg.name}</span>
               </div>
-              <div className="text-[13px] font-bold text-[#17233B] tabular-nums mt-0.5">
+              <div className="text-[13px] font-bold text-text tabular-nums mt-0.5">
                 {stg.pct !== null && stg.pct !== undefined ? `${stg.pct.toFixed(1)}%` : "—"}
               </div>
               <div
                 className={`text-[10px] font-semibold tabular-nums mt-0.5 ${
                   stg.id === "uptrend"
                     ? isPos
-                      ? "text-[#16A878]"
-                      : "text-[#F05283]"
+                      ? "text-bullish"
+                      : "text-bearish"
                     : stg.id === "downtrend"
                     ? isPos
-                      ? "text-[#F05283]"
-                      : "text-[#16A878]"
-                    : "text-[#64748B]"
+                      ? "text-bearish"
+                      : "text-bullish"
+                    : "text-text-secondary"
                 }`}
               >
                 {stg.change1D !== null && stg.change1D !== undefined ? `${isPos ? "+" : ""}${stg.change1D} 1D` : "—"}

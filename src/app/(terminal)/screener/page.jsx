@@ -19,8 +19,8 @@ const ScreenerChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-white text-[#64748B] text-sm">
-        <div className="w-6 h-6 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mb-3" />
+      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-surface text-text-secondary text-sm">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
         <span>Loading chart module...</span>
       </div>
     ),
@@ -258,21 +258,21 @@ export default function ScreenerPage() {
     );
 
   return (
-    <div className="flex flex-col h-full lg:h-screen lg:max-h-screen bg-[#F8FAFC] overflow-hidden">
+    <div className="flex flex-col h-full lg:h-screen lg:max-h-screen bg-bg overflow-hidden transition-colors duration-150">
       {/* ── Top Header Section (Fixed Height) ───────────────────────── */}
-      <div className="bg-white border-b border-[#E5EAF2] shrink-0">
+      <div className="bg-surface border-b border-border shrink-0">
         {/* Top Bar: Title & Controls */}
         <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-[6px] bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center font-bold">
+            <div className="w-7 h-7 rounded-md bg-primary-subtle text-primary flex items-center justify-center font-bold">
               <Layers size={16} />
             </div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-[#17233B] tracking-tight">
+              <h1 className="text-base font-bold text-text tracking-tight">
                 Stock Screener
               </h1>
               {screenerData?.asOf && (
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-[4px] bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0]">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-[4px] bg-bg-secondary text-text-secondary border border-border">
                   As of {screenerData.asOf}
                 </span>
               )}
@@ -281,7 +281,7 @@ export default function ScreenerPage() {
 
           {/* Right Controls: All / 500 toggle, Refresh, Rules & Details */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center rounded-[6px] border border-[#CBD5E1] p-0.5 bg-[#F8FAFC] text-xs font-semibold">
+            <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => {
@@ -293,8 +293,8 @@ export default function ScreenerPage() {
                 }}
                 className={`px-2.5 py-1 rounded-[4px] transition-colors ${
                   universe === "all"
-                    ? "bg-[#2563EB] text-white shadow-2xs"
-                    : "text-[#64748B] hover:text-[#17233B]"
+                    ? "bg-primary text-text-inverse font-semibold"
+                    : "text-text-secondary hover:text-text"
                 }`}
               >
                 All Stocks
@@ -310,8 +310,8 @@ export default function ScreenerPage() {
                 }}
                 className={`px-2.5 py-1 rounded-[4px] transition-colors ${
                   universe === "nifty500"
-                    ? "bg-[#2563EB] text-white shadow-2xs"
-                    : "text-[#64748B] hover:text-[#17233B]"
+                    ? "bg-primary text-text-inverse font-semibold"
+                    : "text-text-secondary hover:text-text"
                 }`}
               >
                 Nifty 500
@@ -321,7 +321,7 @@ export default function ScreenerPage() {
             <button
               type="button"
               onClick={fetchScreenerList}
-              className="p-1.5 rounded-[6px] border border-[#E2E8F0] text-[#64748B] hover:text-[#17233B] hover:bg-[#F1F5F9] transition-colors"
+              className="p-1.5 rounded-md border border-border text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
               title="Refresh screener data"
             >
               <RefreshCw size={14} className={loadingList ? "animate-spin" : ""} />
@@ -330,10 +330,10 @@ export default function ScreenerPage() {
             <button
               type="button"
               onClick={() => setShowRuleInfo(!showRuleInfo)}
-              className={`text-xs flex items-center gap-1 px-2.5 py-1 rounded-[6px] border transition-colors ${
+              className={`text-xs flex items-center gap-1 px-2.5 py-1 rounded-md border transition-colors ${
                 showRuleInfo
-                  ? "bg-[#EFF6FF] border-[#BFDBFE] text-[#2563EB]"
-                  : "bg-white border-[#E2E8F0] text-[#64748B] hover:text-[#17233B]"
+                  ? "bg-primary-subtle border-accent-border text-primary"
+                  : "bg-surface border-border text-text-secondary hover:text-text hover:bg-bg-hover"
               }`}
             >
               <Info size={13} />
@@ -344,7 +344,7 @@ export default function ScreenerPage() {
 
         {/* Stale Data Banner */}
         {screenerData?.asOf && isDataStale(screenerData.asOf) && (
-          <div className="mx-4 my-2 px-3 py-2 rounded-[6px] bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium flex items-center gap-2">
+          <div className="mx-4 my-2 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium flex items-center gap-2">
             <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
             <span>Data is stale: last update {screenerData.asOf}</span>
           </div>
@@ -368,18 +368,18 @@ export default function ScreenerPage() {
                     setMobileView("list");
                   }
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-semibold transition-all border whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors border whitespace-nowrap ${
                   isActive
-                    ? "bg-[#EFF6FF] border-[#BFDBFE] text-[#2563EB] shadow-2xs"
-                    : "bg-white border-[#E2E8F0] text-[#64748B] hover:border-[#CBD5E1] hover:text-[#17233B]"
+                    ? "bg-primary-subtle border-accent-border text-primary"
+                    : "bg-surface border-border text-text-secondary hover:border-border-strong hover:text-text"
                 }`}
               >
                 <span>{info.short}</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                     isActive
-                      ? "bg-[#2563EB] text-white"
-                      : "bg-[#F1F5F9] text-[#64748B]"
+                      ? "bg-primary text-text-inverse"
+                      : "bg-bg-secondary text-text-secondary"
                   }`}
                 >
                   {count}
@@ -391,21 +391,21 @@ export default function ScreenerPage() {
 
         {/* Slim Single-Line Market Regime Banner */}
         {screenerData?.regime && (
-          <div className="px-4 py-1.5 border-t border-[#F1F5F9] bg-[#FAFAFA] flex items-center justify-between text-xs text-[#64748B]">
+          <div className="px-4 py-1.5 border-t border-border bg-bg-secondary flex items-center justify-between text-xs text-text-secondary">
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full shrink-0 inline-block ${
-                  isMarketCautious ? "bg-[#F59E0B]" : "bg-[#16A34A]"
+                  isMarketCautious ? "bg-warning" : "bg-bullish"
                 }`}
               />
               <span className="truncate">
-                Market regime: <strong className="text-[#17233B]">{screenerData.regime}</strong>
+                Market regime: <strong className="text-text">{screenerData.regime}</strong>
                 {isMarketCautious
                   ? " — Distribution detected; breakout setups have lower follow-through."
                   : " — Uptrend intact; momentum setups aligned with market direction."}
               </span>
             </div>
-            <span className="text-[10px] font-mono text-[#94A3B8] shrink-0 hidden md:inline">
+            <span className="text-[10px] font-mono text-text-muted shrink-0 hidden md:inline">
               Nifty 500 Breadth
             </span>
           </div>
@@ -414,31 +414,31 @@ export default function ScreenerPage() {
 
       {/* ── Rules & Details Drawer (Collapsible) ───────────────────── */}
       {showRuleInfo && currentInfo && (
-        <div className="bg-white border-b border-[#E5EAF2] p-4 text-xs shrink-0 shadow-xs relative">
+        <div className="bg-surface border-b border-border p-4 text-xs shrink-0 relative">
           <button
             type="button"
             onClick={() => setShowRuleInfo(false)}
-            className="absolute top-3 right-3 text-[#94A3B8] hover:text-[#17233B] p-1"
+            className="absolute top-3 right-3 text-text-muted hover:text-text p-1"
             title="Close rules"
           >
             <X size={15} />
           </button>
           <div className="mb-1">
-            <span className="font-bold text-sm text-[#17233B] mr-2">
+            <span className="font-bold text-sm text-text mr-2">
               {currentInfo.name} Criteria
             </span>
-            <span className="text-[10px] text-[#94A3B8] font-mono">
+            <span className="text-[10px] text-text-muted font-mono">
               Source: SCREENER_PARAMS
             </span>
           </div>
-          <p className="text-[#64748B] mb-2.5 max-w-3xl">{currentInfo.desc}</p>
+          <p className="text-text-secondary mb-2.5 max-w-3xl">{currentInfo.desc}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
             {currentInfo.rules.map((rule, idx) => (
               <div
                 key={idx}
-                className="flex items-start gap-1.5 p-2 rounded-[6px] bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569]"
+                className="flex items-start gap-1.5 p-2 rounded-md bg-bg-secondary border border-border text-text-secondary"
               >
-                <span className="text-[#2563EB] font-bold">✓</span>
+                <span className="text-primary font-bold">✓</span>
                 <span>{rule}</span>
               </div>
             ))}
@@ -450,23 +450,23 @@ export default function ScreenerPage() {
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
         {/* LEFT COLUMN: Stock Candidate List (Fixed 320px on Desktop) */}
         <div
-          className={`w-full lg:w-[320px] lg:shrink-0 flex flex-col border-r border-[#E5EAF2] bg-white h-full overflow-hidden ${
+          className={`w-full lg:w-[320px] lg:shrink-0 flex flex-col border-r border-border bg-surface h-full overflow-hidden ${
             mobileView === "chart" ? "hidden lg:flex" : "flex"
           }`}
         >
           {/* Controls: Search filter & Sort Dropdown */}
-          <div className="p-2.5 border-b border-[#E5EAF2] bg-[#FAFAFA] flex flex-col gap-2 shrink-0">
+          <div className="p-2.5 border-b border-border bg-bg-secondary flex flex-col gap-2 shrink-0">
             <div className="relative w-full">
               <Search
                 size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
               />
               <input
                 type="text"
                 placeholder="Filter symbol..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-7 pr-2 py-1 text-xs rounded-[5px] border border-[#CBD5E1] bg-white focus:outline-hidden focus:border-[#2563EB]"
+                className="w-full pl-7 pr-2 py-1 text-xs rounded-md border border-border bg-surface text-text focus:outline-hidden focus:border-primary placeholder:text-text-muted"
               />
             </div>
 
@@ -474,7 +474,7 @@ export default function ScreenerPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="text-[11px] font-medium text-[#475569] bg-white border border-[#CBD5E1] rounded-[4px] px-2 py-0.5 focus:outline-hidden focus:border-[#2563EB] cursor-pointer"
+                className="text-[11px] font-medium text-text bg-surface border border-border rounded-md px-2 py-0.5 focus:outline-hidden focus:border-primary cursor-pointer"
               >
                 <option value="default">Sort: Default</option>
                 <option value="rs_desc">Sort: RS Rank (High)</option>
@@ -485,25 +485,25 @@ export default function ScreenerPage() {
                 <option value="pivot_dist_asc">Sort: Pivot Dist (Near)</option>
               </select>
 
-              <span className="text-[11px] font-mono text-[#94A3B8]">
+              <span className="text-[11px] font-mono text-text-muted">
                 {displayedRows.length} stocks
               </span>
             </div>
           </div>
 
           {/* Scrollable Compact Stock Rows (~48px each) */}
-          <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-[#F1F5F9]">
+          <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-border">
             {loadingList ? (
-              <div className="p-8 text-center text-[#94A3B8] text-xs">
-                <div className="w-5 h-5 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <div className="p-8 text-center text-text-muted text-xs">
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 Scanning market candidates...
               </div>
             ) : listError ? (
-              <div className="p-6 text-center text-[#EF4444] text-xs">
+              <div className="p-6 text-center text-bearish text-xs">
                 {listError}
               </div>
             ) : displayedRows.length === 0 ? (
-              <div className="p-8 text-center text-[#64748B] text-xs">
+              <div className="p-8 text-center text-text-secondary text-xs">
                 No stocks match this screener today.
               </div>
             ) : (
@@ -519,33 +519,33 @@ export default function ScreenerPage() {
                     }}
                     className={`w-full text-left px-3 py-2 transition-colors flex flex-col justify-center h-[50px] ${
                       isSelected
-                        ? "bg-[#EFF6FF] border-l-3 border-[#2563EB]"
-                        : "hover:bg-[#F8FAFC]"
+                        ? "bg-primary-subtle border-l-2 border-primary"
+                        : "hover:bg-bg-hover"
                     }`}
                   >
                     {/* Line 1: Symbol + RS Badge (Left), Price (Right) */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-bold text-xs text-[#17233B] truncate">
+                        <span className="font-bold text-xs text-text truncate">
                           {row.symbol}
                         </span>
                         {row.rs_rank !== null && row.rs_rank !== undefined ? (
                           <span
                             className={`text-[9px] font-mono px-1 py-0.2 rounded-[3px] font-semibold ${
                               row.rs_rank >= 80
-                                ? "bg-[#DCFCE7] text-[#166534]"
+                                ? "bg-bullish-bg text-bullish border border-bullish-border"
                                 : row.rs_rank >= 70
-                                ? "bg-[#FEF9C3] text-[#854D0E]"
-                                : "bg-[#F1F5F9] text-[#64748B]"
+                                ? "bg-warning-bg text-warning border border-warning/30"
+                                : "bg-neutral-bg text-text-secondary border border-border"
                             }`}
                           >
                             RS {row.rs_rank}
                           </span>
                         ) : (
-                          <span className="text-[9px] text-[#94A3B8] font-mono">—</span>
+                          <span className="text-[9px] text-text-muted font-mono">—</span>
                         )}
                       </div>
-                      <span className="font-mono text-xs font-semibold text-[#17233B]">
+                      <span className="font-mono text-xs font-semibold text-text">
                         {row.close !== null && row.close !== undefined
                           ? `₹${row.close.toLocaleString("en-IN")}`
                           : "—"}
@@ -558,16 +558,16 @@ export default function ScreenerPage() {
                         className={`font-medium ${
                           row.ret_1d_pct !== null && row.ret_1d_pct !== undefined
                             ? row.ret_1d_pct >= 0
-                              ? "text-[#16A34A]"
-                              : "text-[#EF4444]"
-                            : "text-[#94A3B8]"
+                              ? "text-bullish"
+                              : "text-bearish"
+                            : "text-text-muted"
                         }`}
                       >
                         {row.ret_1d_pct !== null && row.ret_1d_pct !== undefined
                           ? `${row.ret_1d_pct > 0 ? "+" : ""}${row.ret_1d_pct}%`
                           : "—"}
                       </span>
-                      <span className="text-[#64748B]">
+                      <span className="text-text-secondary">
                         Vol {row.vol_ratio !== null && row.vol_ratio !== undefined ? `${row.vol_ratio}x` : "—"}
                       </span>
                     </div>
@@ -580,16 +580,16 @@ export default function ScreenerPage() {
 
         {/* RIGHT COLUMN: Chart Panel (Fills Remaining Width and Height) */}
         <div
-          className={`flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-white ${
+          className={`flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-surface ${
             mobileView === "list" ? "hidden lg:flex" : "flex"
           }`}
         >
           {/* Mobile Back Button */}
-          <div className="lg:hidden p-2 border-b border-[#E5EAF2] bg-[#FAFAFA] shrink-0">
+          <div className="lg:hidden p-2 border-b border-border bg-bg-secondary shrink-0">
             <button
               type="button"
               onClick={() => setMobileView("list")}
-              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-[5px] bg-white border border-[#CBD5E1] text-[#2563EB]"
+              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md bg-surface border border-border text-primary hover:bg-bg-hover"
             >
               <ChevronLeft size={15} />
               Back to Candidate List

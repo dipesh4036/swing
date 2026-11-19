@@ -19,26 +19,26 @@ export function InstitutionalActivity({
       {/* ── FII / DII CASH SECTION ─────────────────────────────────── */}
       <div className="space-y-3.5 w-full min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-[#E5EAF2]">
-          <span className="text-xs font-bold text-[#17233B] uppercase tracking-wider">
+        <div className="flex items-center justify-between pb-2 border-b border-border">
+          <span className="text-xs font-bold text-text uppercase tracking-wider">
             FII / DII CASH · {flows?.sessionsAvailable ? `${flows.sessionsAvailable} of 22 sessions` : "LAST 22 SESSIONS"}
           </span>
-          <span className="text-[10px] text-[#94A3B8] font-mono">₹ crore</span>
+          <span className="text-[10px] text-text-muted font-mono">₹ crore</span>
         </div>
 
         {/* FII Section */}
         <div className="space-y-1.5 w-full min-w-0">
           <div className="flex items-center justify-between text-xs font-semibold">
-            <span className="text-[#17233B]">FII</span>
+            <span className="text-text">FII</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#64748B] font-normal">{dateLabel}</span>
+              <span className="text-[11px] text-text-secondary font-normal">{dateLabel}</span>
               <span
                 className={`tabular-nums font-bold ${
                   fii?.dailyNetCr !== null && fii?.dailyNetCr !== undefined
                     ? fii.dailyNetCr >= 0
-                      ? "text-[#2563EB]"
-                      : "text-[#F05283]"
-                    : "text-[#64748B]"
+                      ? "text-bullish"
+                      : "text-bearish"
+                    : "text-text-secondary"
                 }`}
               >
                 {formatCrores(fii?.dailyNetCr)}
@@ -53,21 +53,21 @@ export function InstitutionalActivity({
               xKey="session"
               dataKey="val"
               height={68}
-              posColor="#2563EB"
-              negColor="#F05283"
+              posColor="var(--color-bullish, #059669)"
+              negColor="var(--color-bearish, #E11D48)"
               tooltipFormatter={(val) => formatCrores(val)}
             />
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-[#64748B]">
+          <div className="flex items-center justify-between text-[11px] text-text-secondary">
             <span>1-month net</span>
             <span
               className={`font-semibold tabular-nums ${
                 fii?.monthNetCr !== null && fii?.monthNetCr !== undefined
                   ? fii.monthNetCr >= 0
-                    ? "text-[#2563EB]"
-                    : "text-[#F05283]"
-                  : "text-[#64748B]"
+                    ? "text-bullish"
+                    : "text-bearish"
+                  : "text-text-secondary"
               }`}
             >
               {formatCrores(fii?.monthNetCr)}
@@ -76,18 +76,18 @@ export function InstitutionalActivity({
         </div>
 
         {/* DII Section */}
-        <div className="space-y-1.5 pt-3 border-t border-[#F1F5F9] w-full min-w-0">
+        <div className="space-y-1.5 pt-3 border-t border-border w-full min-w-0">
           <div className="flex items-center justify-between text-xs font-semibold">
-            <span className="text-[#17233B]">DII</span>
+            <span className="text-text">DII</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#64748B] font-normal">{dateLabel}</span>
+              <span className="text-[11px] text-text-secondary font-normal">{dateLabel}</span>
               <span
                 className={`tabular-nums font-bold ${
                   dii?.dailyNetCr !== null && dii?.dailyNetCr !== undefined
                     ? dii.dailyNetCr >= 0
-                      ? "text-[#2563EB]"
-                      : "text-[#F05283]"
-                    : "text-[#64748B]"
+                      ? "text-bullish"
+                      : "text-bearish"
+                    : "text-text-secondary"
                 }`}
               >
                 {formatCrores(dii?.dailyNetCr)}
@@ -102,21 +102,21 @@ export function InstitutionalActivity({
               xKey="session"
               dataKey="val"
               height={68}
-              posColor="#2563EB"
-              negColor="#F05283"
+              posColor="var(--color-bullish, #059669)"
+              negColor="var(--color-bearish, #E11D48)"
               tooltipFormatter={(val) => formatCrores(val)}
             />
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-[#64748B]">
+          <div className="flex items-center justify-between text-[11px] text-text-secondary">
             <span>1-month net</span>
             <span
               className={`font-semibold tabular-nums ${
                 dii?.monthNetCr !== null && dii?.monthNetCr !== undefined
                   ? dii.monthNetCr >= 0
-                    ? "text-[#2563EB]"
-                    : "text-[#F05283]"
-                  : "text-[#64748B]"
+                    ? "text-bullish"
+                    : "text-bearish"
+                  : "text-text-secondary"
               }`}
             >
               {formatCrores(dii?.monthNetCr)}
@@ -126,12 +126,12 @@ export function InstitutionalActivity({
       </div>
 
       {/* ── 20-DAY HIGHS & LOWS SECTION ────────────────────────────── */}
-      <div className="space-y-2 pt-3 border-t border-[#E5EAF2] w-full min-w-0">
+      <div className="space-y-2 pt-3 border-t border-border w-full min-w-0">
         <div className="flex items-center justify-between pb-1">
-          <span className="text-[11px] font-bold text-[#17233B] uppercase tracking-wider">
+          <span className="text-[11px] font-bold text-text uppercase tracking-wider">
             20-DAY HIGHS · LOWS · LAST 22 SESSIONS
           </span>
-          <span className="text-[10px] text-[#94A3B8]">Stocks</span>
+          <span className="text-[10px] text-text-muted">Stocks</span>
         </div>
 
         <div className="flex items-center justify-between text-xs">
@@ -140,16 +140,16 @@ export function InstitutionalActivity({
               className={`text-[17px] font-bold tabular-nums ${
                 highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
                   ? highsLows.latestNet >= 0
-                    ? "text-[#2563EB]"
-                    : "text-[#F05283]"
-                  : "text-[#64748B]"
+                    ? "text-primary"
+                    : "text-bearish"
+                  : "text-text-secondary"
               }`}
             >
               {highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
                 ? `${highsLows.latestNet > 0 ? "+" : ""}${highsLows.latestNet}`
                 : "—"}
             </span>
-            <span className="text-[11px] text-[#64748B]">
+            <span className="text-[11px] text-text-secondary">
               {highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
                 ? highsLows.latestNet >= 0
                   ? "Net positive"
@@ -157,7 +157,7 @@ export function InstitutionalActivity({
                 : "—"}
             </span>
           </div>
-          <span className="text-[11px] text-[#64748B]">
+          <span className="text-[11px] text-text-secondary">
             {highsLows?.highsCount ?? "—"} highs / {highsLows?.lowsCount ?? "—"} lows
           </span>
         </div>
@@ -169,8 +169,8 @@ export function InstitutionalActivity({
             xKey="session"
             dataKey="net"
             height={62}
-            posColor="#2563EB"
-            negColor="#F05283"
+            posColor="var(--color-primary, #4F46E5)"
+            negColor="var(--color-bearish, #E11D48)"
             tooltipFormatter={(val) => `${val > 0 ? "+" : ""}${val} net`}
           />
         </div>
