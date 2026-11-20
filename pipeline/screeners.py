@@ -24,7 +24,7 @@ SCREENER_PARAMS = {
     },
     "stage2_breakout": {
         "pivot_window": 20,
-        "recency_sessions": 3,         # 0, 1, or 2 sessions ago
+        "recency_sessions": 5,         # 0, 1, 2, 3, or 4 sessions ago (S2: 3 -> 5)
         "max_extension_factor": 1.05,  # close <= 1.05 * pivot
         "min_close_range_ratio": 0.6,  # (close - low) / (high - low) >= 0.6
         "min_volume_ratio": 1.5,       # volume >= 1.5 * vol_sma_50
@@ -39,14 +39,14 @@ SCREENER_PARAMS = {
         "max_last_depth": 0.10,        # 10%
         "min_base_length": 15,
         "max_base_length": 120,
-        "min_dist_pivot_pct": -0.03,   # Up to 3% below pivot (close >= 0.97 * pivot)
-        "max_dist_pivot_pct": 0.02,    # Up to 2% above pivot (close <= 1.02 * pivot)
+        "min_dist_pivot_pct": -0.05,   # S2: -0.03 -> -0.05 (Up to 5% below pivot)
+        "max_dist_pivot_pct": 0.03,    # S2: 0.02 -> 0.03 (Up to 3% above pivot)
         "require_tt": True,
         "require_volume_dryup": False,
     },
     "near_pivot": {
         "pivot_window": 20,
-        "k_atr": 1.0,                  # 0 <= (pivot - close) / close <= k_atr * atr_pct
+        "k_atr": 0.6,                  # S2: 1.0 -> 0.6: 0 <= (pivot - close) / close <= k_atr * atr_pct
         "require_tt": True,
     },
     "ipo_base": {
@@ -56,16 +56,18 @@ SCREENER_PARAMS = {
         "avg_vol_window": 50,
         "min_avg_volume": 25000,
         "min_traded_value": 1e7,          # 1 crore
-        "k_atr": 2.0,                     # 0 <= (base_top - close) / close <= k_atr * atr_pct
-        "max_base_depth": 0.35,           # 35%
-        "min_sessions_since_base_top": 5,
+        "k_atr": 3.0,                     # S2: 2.0 -> 3.0 applied to atr_med_pct
+        "max_dist_pct": 0.15,             # S2: NEW hard cap on distance to base top
+        "max_base_depth": 0.40,           # S2: 0.35 -> 0.40
+        "min_sessions_since_base_top": 2, # S2: 5 -> 2
+        "max_results": 40,                # S2: NEW cap on ipo_base candidates
     },
     "ema50_pullback": {
         "slope_sessions": 10,             # ema_50 rising over 10 sessions
-        "max_touch_factor": 1.02,         # low <= 1.02 * ema_50
+        "max_touch_factor": 1.03,         # S2: 1.02 -> 1.03: low <= 1.03 * ema_50
         "min_close_factor": 0.99,         # close >= 0.99 * ema_50
         "quiet_month_vol_ratio": 1.0,     # avg volume last 21 <= 1.0 * vol_sma_50
-        "quiet_month_range_ratio": 1.0,   # mean range last 21 <= 1.0 * mean range last 63
+        "quiet_month_range_ratio": 1.15,  # S2: 1.0 -> 1.15
         "prior_extension_factor": 1.05,   # max close last 30 sessions >= 1.05 * ema_50
         "prior_window": 30,
         "require_tt": True,
@@ -109,6 +111,23 @@ def compute_wilder_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, per
     for i in range(period, n):
         atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
     return atr
+
+def compute_median_atr_pct(high: np.ndarray, low: np.ndarray, close: np.ndarray, max_window: int = 20) -> np.ndarray:
+    """
+    S2: Computes median over the last min(20, n-1) sessions of max(H-L, |H-prevC|, |L-prevC|) / close.
+    Median, not Wilder: robust to one-off spikes.
+    """
+    n = len(close)
+    out = np.full(n, np.nan, dtype=np.float64)
+    if n < 2:
+        return out
+    prev_close = np.roll(close, 1)
+    tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))
+    tr_pct = tr / np.maximum(1e-6, close)
+    for i in range(1, n):
+        k = min(max_window, i)
+        out[i] = float(np.median(tr_pct[i - k + 1 : i + 1]))
+    return out
 
 def find_zigzag_swings(highs: np.ndarray, lows: np.ndarray, dates: List[str], min_pct: float = 0.04) -> List[tuple]:
     """
@@ -206,15 +225,18 @@ def compute_screener_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     df["rs_raw"] = 0.4 * r63 + 0.2 * r126 + 0.2 * r189 + 0.2 * r252
 
-    # 8. Wilder ATR(14) and atr_pct
+    # 8. Wilder ATR(14) and atr_pct, plus Median ATR(20) atr_med_pct
     atr_pct_series = pd.Series(index=df.index, dtype=float)
+    atr_med_pct_series = pd.Series(index=df.index, dtype=float)
     for _, g in grouped:
         h = g["high"].values.astype(np.float64)
         l = g["low"].values.astype(np.float64)
         c = g["close"].values.astype(np.float64)
         atr = compute_wilder_atr(h, l, c, 14)
         atr_pct_series.loc[g.index] = atr / np.maximum(1e-6, c)
+        atr_med_pct_series.loc[g.index] = compute_median_atr_pct(h, l, c, 20)
     df["atr_pct"] = atr_pct_series
+    df["atr_med_pct"] = atr_med_pct_series
 
     return df
 
@@ -585,26 +607,26 @@ def eval_ipo_base(
     if close > base_top:
         return None
 
-    # Just under: (base_top - close) / close <= ipo_base.k_atr * atr_pct (default k_atr = 2.0)
-    atr_val = row.get("atr_pct")
-    if pd.isna(atr_val) or float(atr_val) <= 0:
+    # Just under: (base_top - close) / close <= min(k_atr * atr_med_pct, max_dist_pct)
+    atr_med_val = row.get("atr_med_pct")
+    if pd.isna(atr_med_val) or float(atr_med_val) <= 0:
         return None
-    atr_pct = float(atr_val)
+    atr_med_pct = float(atr_med_val)
     dist_top = (base_top - close) / close
-    max_dist = p_ipo.get("k_atr", 2.0) * atr_pct
+    max_dist = min(p_ipo.get("k_atr", 3.0) * atr_med_pct, p_ipo.get("max_dist_pct", 0.15))
     if not (0.0 <= dist_top <= max_dist):
         return None
 
-    # Base depth (base_top - lowest low since base_top date) / base_top <= 35%
+    # Base depth (base_top - lowest low since base_top date) / base_top <= max_base_depth (0.40)
     post_top_slice = hist.loc[base_top_idx:]
     lowest_low = float(post_top_slice["low"].min())
     base_depth = (base_top - lowest_low) / base_top if base_top > 0 else 1.0
-    if base_depth > p_ipo["max_base_depth"]:
+    if base_depth > p_ipo.get("max_base_depth", 0.40):
         return None
 
-    # At least 5 sessions since base_top date
+    # At least min_sessions_since_base_top (2) sessions since base_top date
     sessions_since_base_top = len(post_top_slice) - 1
-    if sessions_since_base_top < p_ipo.get("min_sessions_since_base_top", 5):
+    if sessions_since_base_top < p_ipo.get("min_sessions_since_base_top", 2):
         return None
 
     overlay = {
@@ -621,7 +643,7 @@ def eval_ipo_base(
             "sessions_since_listing": hist_len,
             "sessions_since_base_top": sessions_since_base_top,
             "pct_from_base_top": round(dist_top * 100, 2),
-            "atr_pct": round(atr_pct * 100, 2)
+            "atr_med_pct": round(atr_med_pct * 100, 2)
         }
     }
 
@@ -866,8 +888,11 @@ def run_screeners(
         screener_candidates["vcp"].sort(key=lambda x: x["extra"]["sort_key"], reverse=False)
         # near_pivot: dist_to_pivot asc
         screener_candidates["near_pivot"].sort(key=lambda x: x["extra"]["sort_key"], reverse=False)
-        # ipo_base: dist_from_top asc
+        # ipo_base: dist_from_top asc, cap at max_results
         screener_candidates["ipo_base"].sort(key=lambda x: x["extra"]["sort_key"], reverse=False)
+        max_ipo = SCREENER_PARAMS.get("ipo_base", {}).get("max_results", 40)
+        if len(screener_candidates["ipo_base"]) > max_ipo:
+            screener_candidates["ipo_base"] = screener_candidates["ipo_base"][:max_ipo]
         # ema50_pullback: rs_rank desc
         screener_candidates["ema50_pullback"].sort(key=lambda x: x["extra"]["sort_key"], reverse=False)
 

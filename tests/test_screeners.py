@@ -27,11 +27,19 @@ def test_screener_params_loaded():
     assert SCREENER_PARAMS["tradability"]["min_vol_sma_50"] == 25000
     assert SCREENER_PARAMS["tradability"]["min_traded_value"] == 1e7
     assert SCREENER_PARAMS["trend_template"]["min_rs_rank"] == 70
-    assert SCREENER_PARAMS["stage2_breakout"]["recency_sessions"] == 3
+    assert SCREENER_PARAMS["stage2_breakout"]["recency_sessions"] == 5
     assert SCREENER_PARAMS["vcp"]["min_contractions"] == 2
     assert SCREENER_PARAMS["vcp"]["max_last_depth"] == 0.10
-    assert SCREENER_PARAMS["near_pivot"]["k_atr"] == 1.0
-    assert SCREENER_PARAMS["ipo_base"]["k_atr"] == 2.0
+    assert SCREENER_PARAMS["vcp"]["min_dist_pivot_pct"] == -0.05
+    assert SCREENER_PARAMS["vcp"]["max_dist_pivot_pct"] == 0.03
+    assert SCREENER_PARAMS["near_pivot"]["k_atr"] == 0.6
+    assert SCREENER_PARAMS["ipo_base"]["k_atr"] == 3.0
+    assert SCREENER_PARAMS["ipo_base"]["max_dist_pct"] == 0.15
+    assert SCREENER_PARAMS["ipo_base"]["max_base_depth"] == 0.40
+    assert SCREENER_PARAMS["ipo_base"]["min_sessions_since_base_top"] == 2
+    assert SCREENER_PARAMS["ipo_base"]["max_results"] == 40
+    assert SCREENER_PARAMS["ema50_pullback"]["max_touch_factor"] == 1.03
+    assert SCREENER_PARAMS["ema50_pullback"]["quiet_month_range_ratio"] == 1.15
     assert SCREENER_PARAMS["candle_stock_cap"] == 300
     assert SCREENER_PARAMS["candle_window_sessions"] == 260
 
@@ -249,15 +257,21 @@ def test_eval_vcp():
     r_tt = base_row.copy(); r_tt["tt_pass"] = False
     assert eval_vcp(r_tt, hist) is None
 
-    # 3. Rule boundary failure: price too far below pivot (< -3%)
-    # 95 * 0.96 = 91.2 (< -3%)
-    r_low = base_row.copy(); r_low["close"] = 91.0
-    assert eval_vcp(r_low, hist) is None
+    # 3. Rule boundary: price too far below pivot (< -5%)
+    # 95 * 0.94 = 89.3 (< -5% fails)
+    r_low_fail = base_row.copy(); r_low_fail["close"] = 89.0
+    assert eval_vcp(r_low_fail, hist) is None
+    # 95 * 0.96 = 91.2 (-4% passes)
+    r_low_pass = base_row.copy(); r_low_pass["close"] = 91.2
+    assert eval_vcp(r_low_pass, hist) is not None
 
-    # 4. Rule boundary failure: price extended above pivot (> +2%)
-    # 95 * 1.025 = 97.375 (> +2%)
-    r_high = base_row.copy(); r_high["close"] = 97.5
-    assert eval_vcp(r_high, hist) is None
+    # 4. Rule boundary: price extended above pivot (> +3%)
+    # 95 * 1.035 = 98.325 (> +3% fails)
+    r_high_fail = base_row.copy(); r_high_fail["close"] = 98.5
+    assert eval_vcp(r_high_fail, hist) is None
+    # 95 * 1.025 = 97.375 (+2.5% passes)
+    r_high_pass = base_row.copy(); r_high_pass["close"] = 97.0
+    assert eval_vcp(r_high_pass, hist) is not None
 
     # 5. Rule boundary failure: last contraction depth > 10%
     hist_deep = hist.copy()
@@ -271,29 +285,29 @@ def test_eval_near_pivot():
         "high": [98.0] * 19 + [100.0],
     })
 
-    # pivot = 100.0, close = 98.0 -> dist = (100 - 98)/98 = 2.04%
-    # atr_pct = 0.03, k_atr = 1.0 -> max_dist = 3.0%
+    # pivot = 100.0, close = 98.5 -> dist = (100 - 98.5)/98.5 = 1.52%
+    # atr_pct = 0.03, k_atr = 0.6 -> max_dist = 1.8%
     base_row = pd.Series({
         "tt_pass": True,
         "pivot_20": 100.0,
-        "close": 98.0,
+        "close": 98.5,
         "atr_pct": 0.03,
     })
 
-    # 1. Passing case
+    # 1. Passing case (dist 1.52% <= 1.8%)
     res = eval_near_pivot(base_row, hist)
     assert res is not None
     assert res["screener"] == "near_pivot"
     assert res["pivot"] == 100.0
-    assert pytest.approx(res["dist_to_pivot_pct"], rel=1e-1) == 2.04
+    assert pytest.approx(res["dist_to_pivot_pct"], rel=1e-1) == 1.52
 
     # 2. Rule boundary failure: tt_pass False
     r_tt = base_row.copy(); r_tt["tt_pass"] = False
     assert eval_near_pivot(r_tt, hist) is None
 
-    # 3. Rule boundary failure: dist > 1.0 * ATR
-    # close = 96.0 -> dist = 4.0/96 = 4.16% > 3.0%
-    r_dist = base_row.copy(); r_dist["close"] = 96.0
+    # 3. Rule boundary failure: dist > 0.6 * ATR
+    # close = 98.0 -> dist = 2.0/98.0 = 2.04% > 1.8%
+    r_dist = base_row.copy(); r_dist["close"] = 98.0
     assert eval_near_pivot(r_dist, hist) is None
 
     # 4. Rule boundary failure: close > pivot (already broke out)
@@ -313,8 +327,8 @@ def test_eval_ipo_base():
     dates = [date(2026, 8, 1) + timedelta(days=i) for i in range(50)]
     hist = pd.DataFrame({
         "trade_date": dates,
-        "high": [100.0] * 20 + [110.0] + [105.0] * 29,  # base top at index 20 (price 110.0, 29 sessions ago >= 5)
-        "low": [90.0] * 50,  # lowest low = 90 -> base_depth = (110 - 90)/110 = 18.1% <= 35%
+        "high": [100.0] * 20 + [110.0] + [105.0] * 29,  # base top at index 20 (price 110.0, 29 sessions ago >= 2)
+        "low": [90.0] * 50,  # lowest low = 90 -> base_depth = (110 - 90)/110 = 18.1% <= 40%
         "volume": [100000] * 50,
     })
 
@@ -322,12 +336,12 @@ def test_eval_ipo_base():
     first_d = dates[0]
     earliest_cutoff = date(2026, 1, 10)  # first_d strictly after cutoff
 
-    # close = 108.0 -> dist = (110 - 108)/108 = 1.85% <= 2.0 * atr_pct (0.02 * 2 = 4%)
+    # close = 105.0 -> dist = (110 - 105)/105 = 4.76% <= min(3.0 * 0.03, 0.15) = 9.0%
     base_row = pd.Series({
         "trade_date": target_d,
         "first_candle_date": first_d,
-        "close": 108.0,
-        "atr_pct": 0.02,
+        "close": 105.0,
+        "atr_med_pct": 0.03,
     })
 
     # 1. Passing case
@@ -336,43 +350,76 @@ def test_eval_ipo_base():
     assert res["screener"] == "ipo_base"
     assert res["pivot"] == 110.0
     assert res["overlay"]["stats"]["sessions_since_base_top"] == 29
+    assert res["overlay"]["stats"]["atr_med_pct"] == 3.0
 
     # 2. Rule failure: already broken out (close > base_top)
     r_bo = base_row.copy(); r_bo["close"] = 112.0
     assert eval_ipo_base(r_bo, hist, earliest_cutoff) is None
 
-    # 3. Rule failure: dist > 2.0 * atr_pct
-    # close = 100.0 -> dist = 10/100 = 10% > 4%
-    r_far = base_row.copy(); r_far["close"] = 100.0
-    assert eval_ipo_base(r_far, hist, earliest_cutoff) is None
+    # 3. Rule boundary: k=3 passes where k=2 fails
+    # close = 102.5 -> dist = (110 - 102.5)/102.5 = 7.32%
+    # Under k=2 (2 * 3% = 6%): fails. Under k=3 (3 * 3% = 9%): passes!
+    r_k3 = base_row.copy(); r_k3["close"] = 102.5
+    assert eval_ipo_base(r_k3, hist, earliest_cutoff) is not None
+    # If k_atr is manually overridden to 2.0 -> fails
+    params_k2 = {"ipo_base": {**SCREENER_PARAMS["ipo_base"], "k_atr": 2.0}, "tradability": SCREENER_PARAMS["tradability"]}
+    assert eval_ipo_base(r_k3, hist, earliest_cutoff, params_k2) is None
 
-    # 4. Rule failure: base depth > 35% (low = 65 -> depth = 45/110 = 40.9%)
-    hist_deep = hist.copy()
-    hist_deep.loc[25, "low"] = 65.0
-    assert eval_ipo_base(base_row, hist_deep, earliest_cutoff) is None
+    # 4. Hard cap max_dist_pct = 0.15
+    # If atr_med_pct is huge (0.08, 3*ATR=0.24), distance 0.18 fails because max_dist_pct=0.15
+    r_capped = base_row.copy(); r_capped["atr_med_pct"] = 0.08; r_capped["close"] = 92.0  # dist = 18/92 = 19.5% > 15%
+    assert eval_ipo_base(r_capped, hist, earliest_cutoff) is None
 
-    # 5. Rule failure: atr_pct missing or <= 0
-    r_no_atr = base_row.copy(); r_no_atr["atr_pct"] = np.nan
+    # 5. Base depth boundary: 40%
+    # low = 68.0 -> depth = (110 - 68)/110 = 38.18% <= 40% (passes)
+    hist_40 = hist.copy(); hist_40.loc[25, "low"] = 68.0
+    assert eval_ipo_base(base_row, hist_40, earliest_cutoff) is not None
+    # low = 64.0 -> depth = (110 - 64)/110 = 41.8% > 40% (fails)
+    hist_41 = hist.copy(); hist_41.loc[25, "low"] = 64.0
+    assert eval_ipo_base(base_row, hist_41, earliest_cutoff) is None
+
+    # 6. Base maturity boundary: min_sessions_since_base_top = 2
+    # top 2 sessions ago (index 47) -> passes
+    hist_top2 = hist.copy()
+    hist_top2.loc[20, "high"] = 100.0
+    hist_top2.loc[47, "high"] = 110.0
+    assert eval_ipo_base(base_row, hist_top2, earliest_cutoff) is not None
+    # top 1 session ago (index 48) -> fails (< 2)
+    hist_top1 = hist.copy()
+    hist_top1.loc[20, "high"] = 100.0
+    hist_top1.loc[48, "high"] = 110.0
+    assert eval_ipo_base(base_row, hist_top1, earliest_cutoff) is None
+
+    # 7. Rule failure: atr_med_pct missing or <= 0
+    r_no_atr = base_row.copy(); r_no_atr["atr_med_pct"] = np.nan
     assert eval_ipo_base(r_no_atr, hist, earliest_cutoff) is None
-    r_zero_atr = base_row.copy(); r_zero_atr["atr_pct"] = 0.0
-    assert eval_ipo_base(r_zero_atr, hist, earliest_cutoff) is None
-    r_neg_atr = base_row.copy(); r_neg_atr["atr_pct"] = -0.02
-    assert eval_ipo_base(r_neg_atr, hist, earliest_cutoff) is None
 
-    # 5. Rule failure: sessions since base top < 5
-    hist_recent_top = hist.copy()
-    hist_recent_top.loc[48, "high"] = 120.0  # top was yesterday (1 session ago < 5)
-    assert eval_ipo_base(base_row, hist_recent_top, earliest_cutoff) is None
 
-    # 6. Rule failure: not real listing (first date <= cutoff)
-    assert eval_ipo_base(base_row, hist, earliest_cutoff_date=first_d) is None
+def test_median_atr_robust_to_listing_day_spike():
+    """S2: compute_median_atr_pct ignores listing-day spike and remains stable."""
+    from pipeline.screeners import compute_median_atr_pct, compute_wilder_atr
+
+    n = 20
+    # Day 0: massive spike (high=200, low=50, close=100 -> TR=150)
+    # Days 1-19: calm trading (high=103, low=97, close=100 -> TR=6)
+    highs = np.array([200.0] + [103.0] * 19)
+    lows = np.array([50.0] + [97.0] * 19)
+    closes = np.array([100.0] * 20)
+
+    med_atr = compute_median_atr_pct(highs, lows, closes, max_window=20)
+    wilder_atr = compute_wilder_atr(highs, lows, closes, 14) / closes
+
+    # Median ATR on session 19 is exactly 6% (0.06), unaffected by day 0 spike!
+    assert pytest.approx(med_atr[-1], rel=1e-2) == 0.06
+    # Wilder ATR on session 19 is inflated by the Day 0/1 calculation
+    assert wilder_atr[-1] > med_atr[-1]
 
 
 def test_eval_ema50_pullback():
     dates = [f"2026-01-{i:02d}" for i in range(1, 65)]
     # 64 sessions:
     # 50 EMA is 100.0, rising (ema_50_10ago = 96.0)
-    # low touched <= 1.02 * 100 = 102.0
+    # low touched <= 1.03 * 100 = 103.0
     # close held >= 0.99 * 100 = 99.0
     # max close in last 30 >= 1.05 * 100 = 105.0 (has 108.0)
     # quiet month: avg vol 21 <= vol_sma_50
@@ -390,7 +437,7 @@ def test_eval_ema50_pullback():
         "tt_pass": True,
         "ema_50": 100.0,
         "ema_50_10ago": 96.0,
-        "low": 101.0,    # <= 102.0
+        "low": 102.5,    # <= 103.0 (passes with 1.03 threshold)
         "close": 100.5,  # >= 99.0
         "volume": 18000,
         "vol_sma_50": 20000,
@@ -408,12 +455,8 @@ def test_eval_ema50_pullback():
     r_tt = base_row.copy(); r_tt["tt_pass"] = False
     assert eval_ema50_pullback(r_tt, hist) is None
 
-    # 3. Rule boundary failure: falling 50 EMA
-    r_fall = base_row.copy(); r_fall["ema_50_10ago"] = 101.0
-    assert eval_ema50_pullback(r_fall, hist) is None
-
-    # 4. Rule boundary failure: didn't touch support (low = 102.5 > 1.02 * 100)
-    r_notouch = base_row.copy(); r_notouch["low"] = 102.5
+    # 3. Rule boundary failure: didn't touch support (low = 103.5 > 1.03 * 100)
+    r_notouch = base_row.copy(); r_notouch["low"] = 103.5
     assert eval_ema50_pullback(r_notouch, hist) is None
 
     # 5. Rule boundary failure: didn't hold support (close = 98.5 < 0.99 * 100)
@@ -528,6 +571,7 @@ def test_ipo_base_sane_vol_ratio_and_none_fallbacks():
         "high_52w_incl": [np.nan] * 20,    # NaN
         "ret_1d": [np.nan] + [0.01] * 18 + [np.nan],  # today ret_1d is NaN
         "atr_pct": [0.03] * 20,
+        "atr_med_pct": [0.03] * 20,
         "stage_2": [1] * 20,
     })
 

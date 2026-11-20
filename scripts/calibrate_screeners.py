@@ -37,10 +37,15 @@ from pipeline.screeners import (
     find_zigzag_swings,
 )
 
+REFERENCE_IPOS = [
+    "KPL", "FREDUN", "AONESTEELS", "SYMBIOTEC", "BONFIG", "MEESHO", "SHUKRAPHAR",
+    "TIMEX", "SUNSHINE", "KHAZANCHI", "SMT", "KNACK", "VEEGALAND", "AEROPLANE",
+    "MOMSBELIEF", "TGVSL", "DHOOTTRANS", "MOLBIO", "MILKYMIST", "ZETWERK",
+    "KSHINTL", "FUSIONCX", "RENTOMOJO", "PARASHLTH", "MONEYVIEW", "MMWL", "SINGERIND"
+]
+
 TARGET_SYMBOLS = {
-    "IPO Base": [
-        "FUSIONCX", "AONESTEELS", "SMT", "BLSPOLY", "JPL", "KNACK", "VEEGALAND"
-    ],
+    "IPO Base": REFERENCE_IPOS,
     "VCP": [
         "VSSL", "KROSS", "GOODLUCK", "GNA", "SANATHAN", "SKYGOLD", "BHAGERIA",
         "MGEL", "IOLCP", "JSWINFRA", "BHEL", "ENGINERSIN", "DOLPHIN", "DELTACORP", "AETHER"
@@ -95,20 +100,25 @@ def explain_ipo_base_failure(row, hist, cutoff_date, params):
     if close > base_top:
         return f"broken out (close {close:.2f} > base_top {base_top:.2f})"
 
-    atr_pct = float(row["atr_pct"]) if pd.notna(row.get("atr_pct")) and float(row.get("atr_pct")) > 0 else 0.03
+    atr_med_val = row.get("atr_med_pct")
+    if pd.isna(atr_med_val) or float(atr_med_val) <= 0:
+        return "atr_med_pct missing or <= 0"
+    atr_med_pct = float(atr_med_val)
     dist_top = (base_top - close) / close
-    max_dist = p_ipo.get("k_atr", 2.0) * atr_pct
+    max_dist = min(p_ipo.get("k_atr", 3.0) * atr_med_pct, p_ipo.get("max_dist_pct", 0.15))
     if dist_top > max_dist:
-        return f"too far under top (dist {dist_top*100:.1f}% > {max_dist*100:.1f}% [{p_ipo['k_atr']}*ATR])"
+        return f"too far under top (dist {dist_top*100:.1f}% > {max_dist*100:.1f}% [min({p_ipo['k_atr']}*ATR_med, {p_ipo['max_dist_pct']*100:.0f}%)])"
+    if dist_top < 0:
+        return f"broken out (dist {dist_top*100:.1f}% < 0)"
 
     post_top = hist.loc[base_top_idx:]
     lowest_low = float(post_top["low"].min())
-    base_depth = (base_top - lowest_low) / base_top
+    base_depth = (base_top - lowest_low) / base_top if base_top > 0 else 1.0
     if base_depth > p_ipo["max_base_depth"]:
         return f"base_depth ({base_depth*100:.1f}%) > {p_ipo['max_base_depth']*100:.1f}%"
 
     sessions_since_top = len(post_top) - 1
-    if sessions_since_top < p_ipo.get("min_sessions_since_base_top", 5):
+    if sessions_since_top < p_ipo.get("min_sessions_since_base_top", 2):
         return f"sessions_since_base_top ({sessions_since_top}) < {p_ipo['min_sessions_since_base_top']}"
 
     return "Unknown"
@@ -232,7 +242,7 @@ def explain_near_pivot_failure(row, hist, params):
 
 def main():
     print("======================================================================")
-    print("SCREENER CALIBRATION — ScanTheCharts vs Antigravity")
+    print("SCREENER CALIBRATION — Last 10 Trading Dates & Reference IPOs")
     print("======================================================================")
 
     data_path = Path("data/equity_ohlcv.parquet")
@@ -247,94 +257,123 @@ def main():
     # Compute indicators
     print("Computing base stock indicators (SMAs, Weinstein stages, 20d breakouts)...")
     df = compute_stock_indicators(df)
-    print("Computing screener indicators (EMAs, ATR(14), RS raw)...")
+    print("Computing screener indicators (EMAs, ATR(14), Median ATR(20), RS raw)...")
     df = compute_screener_indicators(df)
-
-    latest_date = df["trade_date"].apply(to_date).max()
-    print(f"Latest trade date in store: {latest_date}\n")
-
-    df_latest_hist = df[df["trade_date"].apply(to_date) <= latest_date].copy()
-    df_latest = df_latest_hist[df_latest_hist["trade_date"].apply(to_date) == latest_date].copy()
-
-    # Precompute tradability and RS rank
-    p_trad = SCREENER_PARAMS["tradability"]
-    tradable_mask = (
-        (df_latest["close"] >= p_trad["min_close"]) &
-        (df_latest["vol_sma_50"] >= p_trad["min_vol_sma_50"]) &
-        ((df_latest["close"] * df_latest["vol_sma_50"]) >= p_trad["min_traded_value"]) &
-        (df_latest["session_idx"] >= p_trad["min_history_sessions"])
-    )
-    df_latest["rs_rank"] = calculate_rs_rank(df_latest, tradable_mask)
-    df_latest["tt_pass"] = df_latest.apply(lambda row: evaluate_trend_template(row, SCREENER_PARAMS), axis=1)
 
     all_dates_sorted = df["trade_date"].apply(to_date).drop_duplicates().sort_values().tolist()
     earliest_session_idx = SCREENER_PARAMS["ipo_base"]["earliest_store_session_idx"]
     earliest_cutoff_date = all_dates_sorted[min(earliest_session_idx, len(all_dates_sorted) - 1)]
 
-    # Group history by token
-    hist_by_token = {tok: g.sort_values(by="trade_date") for tok, g in df_latest_hist.groupby("token")}
-    sym_to_token = {str(row["symbol"]).upper(): int(row["token"]) for _, row in df_latest.iterrows()}
+    last_10_dates = all_dates_sorted[-10:]
+    print(f"Evaluating across last 10 dates: {[str(d) for d in last_10_dates]}\n")
 
-    # Run evaluations
-    passing_symbols = {
-        "IPO Base": set(),
-        "VCP": set(),
-        "Stage 2 Breakout": set(),
-        "Near Pivot": set(),
-        "50 EMA Pullback": set(),
-    }
+    per_date_counts = []
+    latest_passing_symbols = {}
+    latest_eval_details = {}
 
-    for _, row in df_latest.iterrows():
-        tok = int(row["token"])
-        sym = str(row["symbol"]).upper()
-        h = hist_by_token.get(tok)
-        if h is None or h.empty:
-            continue
+    p_trad = SCREENER_PARAMS["tradability"]
+    max_ipo_cap = SCREENER_PARAMS["ipo_base"].get("max_results", 40)
 
-        if eval_ipo_base(row, h, earliest_cutoff_date, SCREENER_PARAMS):
-            passing_symbols["IPO Base"].add(sym)
-        if eval_vcp(row, h, SCREENER_PARAMS):
-            passing_symbols["VCP"].add(sym)
-        if eval_stage2_breakout(row, h, SCREENER_PARAMS):
-            passing_symbols["Stage 2 Breakout"].add(sym)
-        if eval_near_pivot(row, h, SCREENER_PARAMS):
-            passing_symbols["Near Pivot"].add(sym)
-        if eval_ema50_pullback(row, h, SCREENER_PARAMS):
-            passing_symbols["50 EMA Pullback"].add(sym)
+    for eval_date in last_10_dates:
+        df_hist = df[df["trade_date"].apply(to_date) <= eval_date].copy()
+        df_day = df_hist[df_hist["trade_date"].apply(to_date) == eval_date].copy()
 
-    # Output per screener
-    for screener_name, target_syms in TARGET_SYMBOLS.items():
-        print("----------------------------------------------------------------------")
-        print(f"SCREENER: {screener_name}")
-        print(f"Our Total Pass Count: {len(passing_symbols[screener_name])}")
-        print("ScanTheCharts Benchmark Symbols:")
+        tradable_mask = (
+            (df_day["close"] >= p_trad["min_close"]) &
+            (df_day["vol_sma_50"] >= p_trad["min_vol_sma_50"]) &
+            ((df_day["close"] * df_day["vol_sma_50"]) >= p_trad["min_traded_value"]) &
+            (df_day["session_idx"] >= p_trad["min_history_sessions"])
+        )
+        df_day["rs_rank"] = calculate_rs_rank(df_day, tradable_mask)
+        df_day["tt_pass"] = df_day.apply(lambda row: evaluate_trend_template(row, SCREENER_PARAMS), axis=1)
 
-        for sym in target_syms:
-            if sym in passing_symbols[screener_name]:
-                print(f"  {sym:<12} -> PASS")
+        hist_by_token = {tok: g.sort_values(by="trade_date") for tok, g in df_hist.groupby("token")}
+
+        day_candidates = {
+            "ipo_base": [],
+            "stage2_breakout": [],
+            "vcp": [],
+            "near_pivot": [],
+            "ema50_pullback": [],
+        }
+
+        for _, row in df_day.iterrows():
+            tok = int(row["token"])
+            sym = str(row["symbol"]).upper()
+            h = hist_by_token.get(tok)
+            if h is None or h.empty:
+                continue
+
+            res_ipo = eval_ipo_base(row, h, earliest_cutoff_date, SCREENER_PARAMS)
+            if res_ipo:
+                day_candidates["ipo_base"].append({"sym": sym, "dist": res_ipo["dist_to_pivot_pct"]})
+            if eval_stage2_breakout(row, h, SCREENER_PARAMS):
+                day_candidates["stage2_breakout"].append(sym)
+            if eval_vcp(row, h, SCREENER_PARAMS):
+                day_candidates["vcp"].append(sym)
+            if eval_near_pivot(row, h, SCREENER_PARAMS):
+                day_candidates["near_pivot"].append(sym)
+            if eval_ema50_pullback(row, h, SCREENER_PARAMS):
+                day_candidates["ema50_pullback"].append(sym)
+
+        # Apply ipo_base sort & cap
+        day_candidates["ipo_base"].sort(key=lambda x: x["dist"])
+        uncapped_ipo = len(day_candidates["ipo_base"])
+        day_candidates["ipo_base"] = day_candidates["ipo_base"][:max_ipo_cap]
+
+        counts_row = {
+            "date": str(eval_date),
+            "ipo_base": len(day_candidates["ipo_base"]),
+            "ipo_base_uncapped": uncapped_ipo,
+            "stage2_breakout": len(day_candidates["stage2_breakout"]),
+            "vcp": len(day_candidates["vcp"]),
+            "near_pivot": len(day_candidates["near_pivot"]),
+            "ema50_pullback": len(day_candidates["ema50_pullback"]),
+        }
+        per_date_counts.append(counts_row)
+
+        if eval_date == last_10_dates[-1]:
+            latest_passing_symbols = {
+                "IPO Base": {c["sym"] for c in day_candidates["ipo_base"]},
+                "Stage 2 Breakout": set(day_candidates["stage2_breakout"]),
+                "VCP": set(day_candidates["vcp"]),
+                "Near Pivot": set(day_candidates["near_pivot"]),
+                "50 EMA Pullback": set(day_candidates["ema50_pullback"]),
+            }
+            latest_eval_details = {
+                "df_day": df_day,
+                "hist_by_token": hist_by_token,
+                "sym_to_token": {str(row["symbol"]).upper(): int(row["token"]) for _, row in df_day.iterrows()}
+            }
+
+    # Print 10-date table
+    print("-----------------------------------------------------------------------------------------")
+    print(f"{'Date':<12} | {'IPO Base':<10} | {'Stage 2 BO':<10} | {'VCP':<8} | {'Near Pivot':<10} | {'50 EMA PB':<10}")
+    print("-----------------------------------------------------------------------------------------")
+    for cr in per_date_counts:
+        print(f"{cr['date']:<12} | {cr['ipo_base']:<10} | {cr['stage2_breakout']:<10} | {cr['vcp']:<8} | {cr['near_pivot']:<10} | {cr['ema50_pullback']:<10}")
+    print("-----------------------------------------------------------------------------------------\n")
+
+    # Evaluate 27 reference IPOs on latest date
+    print(f"Latest Date ({last_10_dates[-1]}) Reference IPO Evaluation (27 stocks):")
+    print("----------------------------------------------------------------------")
+    sym_to_token = latest_eval_details["sym_to_token"]
+    df_day = latest_eval_details["df_day"]
+    hist_by_token = latest_eval_details["hist_by_token"]
+
+    ipo_pass_set = latest_passing_symbols["IPO Base"]
+    for sym in REFERENCE_IPOS:
+        if sym in ipo_pass_set:
+            print(f"  {sym:<12} -> PASS")
+        else:
+            tok = sym_to_token.get(sym)
+            if tok is None:
+                print(f"  {sym:<12} -> NOT IN STORE")
             else:
-                tok = sym_to_token.get(sym)
-                if tok is None:
-                    print(f"  {sym:<12} -> NOT IN STORE")
-                else:
-                    row = df_latest[df_latest["token"] == tok].iloc[0]
-                    h = hist_by_token[tok]
-                    if screener_name == "IPO Base":
-                        reason = explain_ipo_base_failure(row, h, earliest_cutoff_date, SCREENER_PARAMS)
-                    elif screener_name == "VCP":
-                        reason = explain_vcp_failure(row, h, SCREENER_PARAMS)
-                    elif screener_name == "Stage 2 Breakout":
-                        reason = explain_stage2_breakout_failure(row, h, SCREENER_PARAMS)
-                    elif screener_name == "Near Pivot":
-                        reason = explain_near_pivot_failure(row, h, SCREENER_PARAMS)
-                    else:
-                        reason = "Criteria not met"
-                    print(f"  {sym:<12} -> FAILED: {reason}")
-
-        # 5 passing symbols not in benchmark list
-        diff = sorted(list(passing_symbols[screener_name] - set(target_syms)))
-        sample_diff = diff[:5]
-        print(f"Sample 5 Our Stocks Not In ScanTheCharts List: {', '.join(sample_diff) if sample_diff else 'None'}\n")
+                row = df_day[df_day["token"] == tok].iloc[0]
+                h = hist_by_token[tok]
+                reason = explain_ipo_base_failure(row, h, earliest_cutoff_date, SCREENER_PARAMS)
+                print(f"  {sym:<12} -> FAILED: {reason}")
 
 
 if __name__ == "__main__":

@@ -56,14 +56,14 @@ The standard trend foundation required for `stage2_breakout`, `vcp`, `near_pivot
 ### 4.1 Stage 2 Breakout (`stage2_breakout`)
 - Satisfies 8-rule Trend Template (`tt_pass == True`).
 - Confirmed Stan Weinstein Stage 2 (`stage_2 == 1`).
-- Breakout of 20-session high occurring on any of the last 3 sessions (`recency_sessions = 3`).
+- Breakout of 20-session high occurring on any of the last 5 sessions (`recency_sessions = 5`).
 - Breakout day criteria:
   - `breakout_20d == 1` (`close > pivot` where `pivot = high_20d` prior to breakout candle).
   - Volume surge: `volume >= 1.5 * vol_sma_50`.
   - Strong daily close: `(close - low) / (high - low) >= 0.60`.
   - Not extended on breakout: `close <= 1.05 * pivot`.
 - Holding criteria: today's close remains above pivot and not extended: `pivot <= close <= 1.05 * pivot`.
-- **Sort:** `days_ago` ascending, then `vol_ratio` descending.
+- **Sort:** `days_ago` ascending, then `vol_ratio` descending (nulls last).
 - **Overlay:**
   - `pivot`: Solid line at `pivot` from the pivot high candle.
   - `extension_limit`: Dashed line at `1.05 * pivot`.
@@ -78,7 +78,7 @@ The standard trend foundation required for `stage2_breakout`, `vcp`, `near_pivot
   - Strictly decreasing pullback depths: $\text{depth}_j > \text{depth}_{j+1}$.
   - First contraction depth $\ge 8\%$, last contraction depth $\le 10\%$.
   - Base length between 15 and 120 sessions.
-- Pivot is the swing high prior to the final contraction; current price must be within $-3\%$ to $+2\%$ of pivot.
+- Pivot is the swing high prior to the final contraction; current price must be within $-5\%$ to $+3\%$ of pivot (`min_dist_pivot_pct = -0.05`, `max_dist_pivot_pct = 0.03`).
 - **Sort:** Last contraction depth ascending.
 - **Overlay:**
   - `pivot`: Solid line at `pivot` from the pivot high date.
@@ -88,7 +88,7 @@ The standard trend foundation required for `stage2_breakout`, `vcp`, `near_pivot
 ### 4.3 Near Pivot (`near_pivot`)
 - Satisfies 8-rule Trend Template (`tt_pass == True`).
 - Consolidating tightly near 20-session pivot, scaled by stock volatility:
-  $$0 \le \frac{\text{pivot} - \text{close}}{\text{close}} \le 1.0 \times \text{atr\_pct}$$
+  $$0 \le \frac{\text{pivot} - \text{close}}{\text{close}} \le 0.6 \times \text{atr\_pct}$$
 - **Sort:** Distance to pivot ascending.
 - **Overlay:**
   - `pivot`: Solid line at `pivot_20` from the pivot high candle.
@@ -104,31 +104,42 @@ The standard trend foundation required for `stage2_breakout`, `vcp`, `near_pivot
   - $\text{avg\_vol} \ge 25,000$
 - `base_top` is the highest high from listing through previous session ($t-1$).
 - Not yet broken out: `close <= base_top`.
-- Proximity to base top scaled by volatility:
-  $$\frac{\text{base\_top} - \text{close}}{\text{close}} \le 2.0 \times \text{atr\_pct}$$
-- Base depth $\le 35\%$: $\frac{\text{base\_top} - \min(\text{low})}{\text{base\_top}} \le 0.35$.
-- Base maturity: at least 5 sessions elapsed since the `base_top` date.
+- `atr_med_pct`: Median true range percentage over the last $\min(20, n-1)$ sessions: $\text{median}(\max(H-L, |H-\text{prevC}|, |L-\text{prevC}|) / \text{close})$. Robust to listing-day volatility spikes.
+- Proximity to base top scaled by median volatility and capped:
+  $$0 \le \frac{\text{base\_top} - \text{close}}{\text{close}} \le \min(3.0 \times \text{atr\_med\_pct}, 0.15)$$
+- Base depth $\le 40\%$: $\frac{\text{base\_top} - \min(\text{low})}{\text{base\_top}} \le 0.40$.
+- Base maturity: at least 2 sessions elapsed since the `base_top` date (`min_sessions_since_base_top = 2`).
+- Candidate cap: top 40 candidates kept (`max_results = 40`), sorted by distance from base top ascending.
 - **Sort:** Distance from base top ascending.
 - **Overlay:**
   - `listing_high`: Solid line at `base_top` from the high date.
   - `base_low`: Dashed line at base low from the high date.
   - `marker`: Circle marker on listing session labeled "Listing".
-  - `stats`: `base_top`, `base_depth_pct`, `sessions_since_top`.
+  - `stats`: `base_top`, `base_depth_pct`, `sessions_since_top`, `atr_med_pct`.
 
 ### 4.5 50 EMA Pullback (`ema50_pullback`)
 - Satisfies 8-rule Trend Template (`tt_pass == True`).
 - 50 EMA sloping upward over 10 sessions: $\text{ema\_50} > \text{ema\_50}[t-10]$.
-- Touched 50 EMA support zone: $\text{low} \le 1.02 \times \text{ema\_50}$.
+- Touched 50 EMA support zone: $\text{low} \le 1.03 \times \text{ema\_50}$.
 - Closed above support zone: $\text{close} \ge 0.99 \times \text{ema\_50}$.
 - Quiet consolidation month:
   - Volume: average volume over last 21 sessions $\le 1.0 \times \text{vol\_sma\_50}$.
-  - Range: mean daily bar range over last 21 sessions $\le 1.0 \times$ mean daily bar range over last 63 sessions.
+  - Range: mean daily bar range over last 21 sessions $\le 1.15 \times$ mean daily bar range over last 63 sessions.
 - Prior extension: $\max(\text{close}_{30}) \ge 1.05 \times \text{ema\_50}$.
 - **Sort:** `rs_rank` descending.
 - **Overlay:**
   - `swing_high`: Dashed line at prior 30-session highest close.
   - `marker`: Circle marker at the touch session labeled "Touched 50 EMA".
   - `stats`: `ema_50`, `prior_extension_pct`.
+
+---
+
+## 4.6 Data Integrity & Null Semantics
+- No fabricated fallbacks anywhere in pipeline or UI.
+- `vol_ratio` = $\text{volume} / \text{vol\_sma\_50}$ only when $\text{vol\_sma\_50} > 0$, otherwise `null`.
+- For young IPOs (< 50 sessions) in `ipo_base`, `vol_ratio` is computed against the mean volume of sessions since listing before today (`vol_ratio_basis: listing_avg`), labeled honestly in UI tooltip.
+- `ret_1d_pct` and `pct_from_52w_high` preserve `null` when inputs are missing/NaN.
+- Null values render as `"—"` in the UI and sort last in tables.
 
 ---
 
