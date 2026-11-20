@@ -16,6 +16,50 @@ logger = logging.getLogger("pipeline.ingest")
 
 SCHEMA_COLUMNS = ["token", "symbol", "trade_date", "open", "high", "low", "close", "volume", "traded_val"]
 
+def is_genuine_corporate_action(
+    stored_closes_by_date: Dict[str, float],
+    refetched_candles: List[Dict[str, Any]],
+    symbol: str = "",
+    token: Optional[int] = None,
+    min_sessions: int = 5,
+    threshold: float = 0.001
+) -> bool:
+    """
+    S0-4 / 7e: After full re-fetch compare closes older than the last 5 sessions;
+    if max relative diff < 0.1% (0.001) it is NOT an adjustment (keep data, no price_adjustments row,
+    log 'reference price change').
+    Returns True if genuine corporate action, False if reference price change.
+    """
+    if not stored_closes_by_date or len(stored_closes_by_date) <= min_sessions:
+        return True
+
+    stored_dates = sorted(stored_closes_by_date.keys())
+    cutoff_date = stored_dates[-min_sessions]
+    older_stored_map = {d: stored_closes_by_date[d] for d in stored_dates if d < cutoff_date}
+
+    older_diffs = []
+    for c in refetched_candles:
+        cd_date = c.get("trade_date")
+        if cd_date in older_stored_map and older_stored_map[cd_date] > 0:
+            st_cl = older_stored_map[cd_date]
+            new_cl = c.get("close", 0.0)
+            if new_cl > 0:
+                older_diffs.append(abs(new_cl - st_cl) / st_cl)
+
+    if not older_diffs:
+        return True
+
+    max_older_diff = max(older_diffs)
+    if max_older_diff < threshold:  # < 0.1%
+        logger.info(
+            f"Reference price change for {symbol} ({token}): older history matches "
+            f"(diff={max_older_diff * 100:.3f}% < {threshold * 100:.1f}%). "
+            f"Updating data, no price adjustment recorded."
+        )
+        return False
+
+    return True
+
 def load_target_instruments(conn=None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Returns the list of active instruments to ingest (Nifty 500 first, then remaining liquid/traded).
@@ -272,13 +316,14 @@ def ingest_equities(
                                 full_c = fetch_equity_candles(client, tok, sym, from_date_str, to_date_str)
                                 if full_c:
                                     tokens_to_replace[tok] = full_c
-                                    corporate_actions.append({
-                                        "token": tok,
-                                        "symbol": sym,
-                                        "ex_date": discrepancy_date,
-                                        "action_type": "SPLIT_OR_BONUS",
-                                        "ratio": ratio
-                                    })
+                                    if is_genuine_corporate_action(stored_map, full_c, sym, tok):
+                                        corporate_actions.append({
+                                            "token": tok,
+                                            "symbol": sym,
+                                            "ex_date": discrepancy_date,
+                                            "action_type": "SPLIT_OR_BONUS",
+                                            "ratio": ratio
+                                        })
                             except Exception as re_err:
                                 logger.warning(f"Failed full re-fetch for adjusted token {sym}: {re_err}")
                         else:
@@ -359,13 +404,14 @@ def ingest_equities(
                                     full_c = fetch_equity_candles(client, tok, sym, from_date_str, to_date_str)
                                     if full_c:
                                         tokens_to_replace[tok] = full_c
-                                        corporate_actions.append({
-                                            "token": tok,
-                                            "symbol": sym,
-                                            "ex_date": discrepancy_date,
-                                            "action_type": "SPLIT_OR_BONUS",
-                                            "ratio": ratio
-                                        })
+                                        if is_genuine_corporate_action(stored_map, full_c, sym, tok):
+                                            corporate_actions.append({
+                                                "token": tok,
+                                                "symbol": sym,
+                                                "ex_date": discrepancy_date,
+                                                "action_type": "SPLIT_OR_BONUS",
+                                                "ratio": ratio
+                                            })
                                 except Exception as re_err:
                                     logger.warning(f"Failed full re-fetch for adjusted token {sym} in retry pass: {re_err}")
 

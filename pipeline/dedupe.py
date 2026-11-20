@@ -45,8 +45,9 @@ def dedupe_equity_parquet(
 
     logger.info(f"Found {len(dup_symbols)} symbols with multiple tokens: {dup_symbols}")
 
-    # Query active instruments from Neon DB
+    # Query active instruments and ISINs from Neon DB
     active_tokens_by_symbol = {}
+    token_to_isin = {}
     should_close = False
     try:
         if conn is None:
@@ -54,11 +55,15 @@ def dedupe_equity_parquet(
             conn = get_connection()
             should_close = True
         with conn.cursor() as cur:
-            cur.execute("SELECT symbol, token FROM instruments WHERE is_active = TRUE;")
-            for s, t in cur.fetchall():
-                active_tokens_by_symbol[s] = t
+            cur.execute("SELECT symbol, token, isin, is_active FROM instruments;")
+            for s, t, isin_val, is_act in cur.fetchall():
+                tok_int = int(t)
+                if is_act:
+                    active_tokens_by_symbol[s] = tok_int
+                if isin_val:
+                    token_to_isin[tok_int] = str(isin_val).strip()
     except Exception as e:
-        logger.warning(f"Could not query active instruments for dedupe: {e}")
+        logger.warning(f"Could not query instruments for dedupe: {e}")
     finally:
         if should_close and conn:
             try:
@@ -67,10 +72,18 @@ def dedupe_equity_parquet(
                 pass
 
     merged_info = []
+    # S0-5: Add deterministic priority column: preferred token rows get 1, others 0
+    df["_priority"] = 0
 
     for sym in dup_symbols:
         sym_df = df[df["symbol"] == sym]
         tokens = sym_df["token"].unique().tolist()
+
+        # S0-5: Group by ISIN where available so two different companies that ever reused one symbol are never merged
+        distinct_isins = set(token_to_isin[t] for t in tokens if t in token_to_isin and token_to_isin[t])
+        if len(distinct_isins) > 1:
+            logger.warning(f"Symbol {sym} has tokens with multiple distinct ISINs ({distinct_isins}). Skipping dedupe merge.")
+            continue
 
         # Decide winning token:
         # 1. Token currently active in instruments
@@ -91,11 +104,15 @@ def dedupe_equity_parquet(
             "dropped_tokens": dropped_tokens
         })
 
+        # S0-5: Rows originally belonging to preferred_token get priority 1
+        df.loc[(df["symbol"] == sym) & (df["token"] == preferred_token), "_priority"] = 1
         # Re-key all rows for this symbol to preferred_token
         df.loc[df["symbol"] == sym, "token"] = preferred_token
 
-    # Deduplicate by token and trade_date (keep last)
+    # S0-5: Sort by [token, trade_date, _priority] so preferred token's row comes last on date collision
+    df = df.sort_values(by=["token", "trade_date", "_priority"])
     df = df.drop_duplicates(subset=["token", "trade_date"], keep="last")
+    df = df.drop(columns=["_priority"])
     df = df.sort_values(by=["token", "trade_date"])
 
     after_rows = len(df)

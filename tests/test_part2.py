@@ -10,7 +10,9 @@ Test suite validating Part 2 — Live Chart from Angel (secured) + EMA Only + Cl
 """
 
 import json
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 import pytest
@@ -78,7 +80,8 @@ def test_playwright_removed_from_package_json():
 
 def test_indicators_node_test_suite():
     """Execute indicators node test suite."""
-    cmd = ["node", "tests/test_indicators.mjs"]
+    node_bin = shutil.which("node") or ("/opt/homebrew/bin/node" if Path("/opt/homebrew/bin/node").exists() else "node")
+    cmd = [node_bin, "tests/test_indicators.mjs"]
     res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, f"Indicators test failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
     assert "All Indicators Tests Passed Successfully!" in res.stdout

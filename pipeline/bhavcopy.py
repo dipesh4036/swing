@@ -20,6 +20,7 @@ from pipeline.ingest import (
     log_ingest_run,
     log_price_adjustments,
     fetch_equity_candles,
+    is_genuine_corporate_action,
 )
 
 logger = logging.getLogger("pipeline.bhavcopy")
@@ -406,12 +407,20 @@ def ingest_bhavcopy(
                             upload_parquet_store(parquet_path, job_succeeded=True)
                         except Exception as ue:
                             logger.warning(f"Notice: partial progress upload: {ue}")
+                        # S0-8: Authentic counts on partial run
+                        latest_date = dates_ingested[-1]
+                        latest_date_df = existing_df[existing_df["trade_date"] == latest_date]
+                        latest_tokens = set(latest_date_df["token"].unique())
+                        expected_set = set(t for t in stored_prev_closes.keys() if t in active_instruments) if stored_prev_closes else active_instruments
+                        p_tot = len(expected_set) if expected_set else len(latest_tokens)
+                        p_succ = len(latest_tokens & expected_set) if expected_set else len(latest_tokens)
+                        p_fail = max(0, p_tot - p_succ)
                         log_ingest_run(
                             run_type="equities",
                             status="partial",
-                            total=len(active_instruments),
-                            success=len(active_instruments),
-                            failed=0,
+                            total=p_tot,
+                            success=p_succ,
+                            failed=p_fail,
                             started_at=started_at,
                             error_msg=fail_msg,
                             quality_gate_passed=True,
@@ -460,6 +469,8 @@ def ingest_bhavcopy(
 
         # Fix 7a: Series moves (identity key = ISIN)
         # Re-key stored rows if token changed but ISIN is already in store
+        # S0-7: Track rekeyed tokens on this date to skip them in the prev-close check
+        rekeyed_tokens_on_date = set()
         for _, brow in bhav_df.iterrows():
             f_tok = int(brow["token"])
             f_isin = str(brow.get("isin", "")).strip()
@@ -481,12 +492,16 @@ def ingest_bhavcopy(
                         stored_prev_closes[f_tok] = stored_prev_closes.pop(old_tok)
                     stored_token_to_isin[f_tok] = f_isin
                     isin_to_stored_token[f_isin] = f_tok
+                    rekeyed_tokens_on_date.add(f_tok)
 
         file_tokens_set = set(bhav_df["token"].unique())
 
         # Check PrvsClsgPric vs stored close
+        # S0-7: Skip re-keyed tokens for series moves (NSE's previous close can differ due to series move)
         for _, row in bhav_df.iterrows():
             tok = int(row["token"])
+            if tok in rekeyed_tokens_on_date:
+                continue
             sym = str(row["symbol"])
             prev_close = float(row["prev_close"])
 
@@ -551,30 +566,10 @@ def ingest_bhavcopy(
                     if candles:
                         c_df = pd.DataFrame(candles)[SCHEMA_COLUMNS]
 
-                        # Fix 7e: Compare re-fetched closes with stored closes for older dates (>5 sessions old)
+                        # S0-4 / Fix 7e: Shared helper compares closes older than last 5 sessions (< 0.1% = reference price change)
                         tok_stored = existing_df[existing_df["token"] == tok]
-                        is_genuine_adj = True
-                        if not tok_stored.empty and len(tok_stored) > 5:
-                            stored_dates = sorted(tok_stored["trade_date"].unique())
-                            cutoff_date = stored_dates[-5]
-                            older_stored = tok_stored[tok_stored["trade_date"] < cutoff_date]
-                            older_stored_map = dict(zip(older_stored["trade_date"], older_stored["close"]))
-
-                            older_diffs = []
-                            for c in candles:
-                                cd_date = c["trade_date"]
-                                if cd_date in older_stored_map and older_stored_map[cd_date] > 0:
-                                    st_cl = older_stored_map[cd_date]
-                                    new_cl = c["close"]
-                                    older_diffs.append(abs(new_cl - st_cl) / st_cl)
-
-                            max_older_diff = max(older_diffs) if older_diffs else 0.0
-                            if max_older_diff < 0.001:  # max relative diff < 0.1%
-                                is_genuine_adj = False
-                                logger.info(
-                                    f"Reference price change for {sym} ({tok}): older history matches (diff={max_older_diff*100:.3f}% < 0.1%). "
-                                    f"Updating data, no price adjustment recorded."
-                                )
+                        stored_map = dict(zip(tok_stored["trade_date"], tok_stored["close"])) if not tok_stored.empty else {}
+                        is_genuine_adj = is_genuine_corporate_action(stored_map, candles, symbol=sym, token=tok)
 
                         # Replace rows in existing_df
                         existing_df = existing_df[existing_df["token"] != tok]
@@ -621,19 +616,37 @@ def ingest_bhavcopy(
         logger.info(f"Successfully merged Bhavcopy for {target_str} ({len(clean_date_df)} rows).")
 
     # Record run in ingest_runs (Fix 6: Log partial when caps hit)
+    # S0-8: Authentic counts on the bhavcopy path
     run_status = "partial" if any_cap_hit else "success"
-    summary_msg = (
-        f"Bhavcopy: dates={len(dates_ingested)}, rows={total_new_rows}, "
-        f"refetched={len(all_refetched_tokens)}, new_tokens={len(all_new_tokens_fetched)}, "
-        f"absent={total_absent_count} (status={run_status})"
-    )
+    if not dates_ingested:
+        total_count = 0
+        success_count = 0
+        failed_count = 0
+        summary_msg = "Bhavcopy ingest completed: holiday or no dates ingested (0/0/0)"
+    else:
+        # total = tokens expected (previous session's tokens that are still active)
+        # success = tokens present in the merged bhavcopy rows for the latest ingested date
+        # failed = expected minus success
+        expected_set = set(t for t in stored_prev_closes.keys() if t in active_instruments) if stored_prev_closes else active_instruments
+        total_count = len(expected_set) if expected_set else total_new_rows
+        latest_date = dates_ingested[-1]
+        latest_date_df = existing_df[existing_df["trade_date"] == latest_date]
+        latest_tokens = set(latest_date_df["token"].unique())
+        success_count = len(latest_tokens & expected_set) if expected_set else len(latest_tokens)
+        failed_count = max(0, total_count - success_count)
+        summary_msg = (
+            f"Bhavcopy: dates={len(dates_ingested)}, rows={total_new_rows}, "
+            f"refetched={len(all_refetched_tokens)}, new_tokens={len(all_new_tokens_fetched)}, "
+            f"absent={total_absent_count} (status={run_status})"
+        )
+
     logger.info(f"Bhavcopy ingest completed: {summary_msg}")
     log_ingest_run(
         run_type="equities",
         status=run_status,
-        total=len(active_instruments) if active_instruments else total_new_rows,
-        success=len(active_instruments) if active_instruments else total_new_rows,
-        failed=0,
+        total=total_count,
+        success=success_count,
+        failed=failed_count,
         started_at=started_at,
         error_msg=summary_msg,
         quality_gate_passed=True,

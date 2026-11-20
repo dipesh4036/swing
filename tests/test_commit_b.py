@@ -527,7 +527,13 @@ def test_dedupe_keeps_preferred_token():
 def test_smartapi_adaptive_rate_recovery():
     """Item 5: Adaptive rate cuts once per throttled token and recovers +10% per 25 clean calls."""
     from pipeline.smartapi_client import SmartAPIClient, SmartAPIThrottledError
-    client = SmartAPIClient()
+    client = SmartAPIClient.__new__(SmartAPIClient)
+    client.initial_req_per_sec = 1.0
+    client.current_req_per_sec = 1.0
+    client.clean_calls_streak = 0
+    client.total_calls = 0
+    client.throttle_count = 0
+    client.throttled_tokens_this_session = set()
     client.set_rate(1.0)
 
     # 1. on_throttle cuts rate by 25%
@@ -575,4 +581,174 @@ def test_verify_bhavcopy_command_with_list_candles():
 
         code = verify_bhavcopy_command(parquet_path="/nonexistent.parquet")
         assert code == 0
+
+
+def test_workflow_branch_timing_and_no_op():
+    """S0-1: get_latest_completed_trading_day is time-based and check_workflow_branch handles cron timing."""
+    from datetime import datetime, timezone, timedelta
+    from pipeline.workflow import get_latest_completed_trading_day, check_workflow_branch
+
+    tz_ist = timezone(timedelta(hours=5, minutes=30))
+
+    # 1. Monday 19:30 IST (after 18:30) -> today (Monday 2026-11-23)
+    dt_mon_eve = datetime(2026, 11, 23, 19, 30, tzinfo=tz_ist)
+    assert get_latest_completed_trading_day(dt_mon_eve) == date(2026, 11, 23)
+
+    # 2. Monday 10:00 IST (before 18:30) -> prior weekday (Friday 2026-11-20)
+    dt_mon_morn = datetime(2026, 11, 23, 10, 0, tzinfo=tz_ist)
+    assert get_latest_completed_trading_day(dt_mon_morn) == date(2026, 11, 20)
+
+    # 3. Saturday 12:00 IST -> Friday 2026-11-20
+    dt_sat = datetime(2026, 11, 21, 12, 0, tzinfo=tz_ist)
+    assert get_latest_completed_trading_day(dt_sat) == date(2026, 11, 20)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pq = os.path.join(tmpdir, "test.parquet")
+        # Parquet max = Friday 2026-11-20
+        df = pd.DataFrame([{"token": 1, "symbol": "S", "trade_date": "2026-11-20", "open": 1, "high": 2, "low": 1, "close": 2, "volume": 10, "traded_val": 20}])
+        df.to_parquet(pq, index=False)
+
+        mock_cur = MagicMock()
+
+        # Monday 19:30 with data through Friday -> full_workflow
+        mock_cur.fetchone.return_value = (date(2026, 11, 20),)  # breadth max = Friday
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        dec = check_workflow_branch(now_ist=dt_mon_eve, parquet_path=pq, conn=mock_conn)
+        assert dec["branch"] == "full_workflow"
+
+        # Monday 10:00 with data through Friday -> idempotent_no_op (today's trading not completed yet)
+        dec = check_workflow_branch(now_ist=dt_mon_morn, parquet_path=pq, conn=mock_conn)
+        assert dec["branch"] == "idempotent_no_op"
+
+        # Monday 19:30 with data through Monday -> idempotent_no_op
+        df_mon = pd.DataFrame([{"token": 1, "symbol": "S", "trade_date": "2026-11-23", "open": 1, "high": 2, "low": 1, "close": 2, "volume": 10, "traded_val": 20}])
+        df_mon.to_parquet(pq, index=False)
+        mock_cur.fetchone.return_value = (date(2026, 11, 23),)
+        dec = check_workflow_branch(now_ist=dt_mon_eve, parquet_path=pq, conn=mock_conn)
+        assert dec["branch"] == "idempotent_no_op"
+
+        # Saturday with data through Friday -> idempotent_no_op
+        df.to_parquet(pq, index=False)
+        mock_cur.fetchone.return_value = (date(2026, 11, 20),)
+        dec = check_workflow_branch(now_ist=dt_sat, parquet_path=pq, conn=mock_conn)
+        assert dec["branch"] == "idempotent_no_op"
+
+
+def test_is_genuine_corporate_action_logic():
+    """S0-4: is_genuine_corporate_action distinguishes corporate splits from reference price changes."""
+    from pipeline.ingest import is_genuine_corporate_action
+
+    # 10 stored historical sessions
+    stored_closes = {f"2026-11-{i:02d}": 100.0 for i in range(1, 11)}
+
+    # Case 1: Refetched candles have identical closes older than 5 sessions -> reference price change
+    refetched_ref_change = [
+        {"trade_date": f"2026-11-{i:02d}", "close": 100.0} for i in range(1, 6)
+    ] + [
+        {"trade_date": f"2026-11-{i:02d}", "close": 50.0} for i in range(6, 11)
+    ]
+    assert is_genuine_corporate_action(stored_closes, refetched_ref_change, "TEST", 123) is False
+
+    # Case 2: Refetched candles have split-adjusted closes across historical sessions (>0.1% diff) -> genuine action
+    refetched_split = [
+        {"trade_date": f"2026-11-{i:02d}", "close": 50.0} for i in range(1, 11)
+    ]
+    assert is_genuine_corporate_action(stored_closes, refetched_split, "TEST", 123) is True
+
+
+def test_dedupe_deterministic_row_winner_and_isin():
+    """S0-5: Preferred token row deterministically wins on date collisions; differing ISINs are not merged."""
+    from pipeline.dedupe import dedupe_equity_parquet
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pq = os.path.join(tmpdir, "test.parquet")
+        # Same date '2026-11-16' has token 10 close=100.0 and token 20 close=200.0
+        # If token 20 is preferred, close 200.0 MUST survive regardless of input row order
+        df = pd.DataFrame([
+            {"token": 20, "symbol": "SYM", "trade_date": "2026-11-16", "open": 200.0, "high": 205.0, "low": 195.0, "close": 200.0, "volume": 10, "traded_val": 2000.0},
+            {"token": 10, "symbol": "SYM", "trade_date": "2026-11-16", "open": 100.0, "high": 105.0, "low": 95.0, "close": 100.0, "volume": 10, "traded_val": 1000.0},
+            {"token": 10, "symbol": "SYM", "trade_date": "2026-11-15", "open": 100.0, "high": 105.0, "low": 95.0, "close": 100.0, "volume": 10, "traded_val": 1000.0},
+            {"token": 20, "symbol": "SYM", "trade_date": "2026-11-17", "open": 200.0, "high": 205.0, "low": 195.0, "close": 200.0, "volume": 10, "traded_val": 2000.0},
+        ])
+        df.to_parquet(pq, index=False)
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        # Token 20 is active, both share same ISIN 'INE123'
+        mock_cur.fetchall.return_value = [
+            ("SYM", 20, "INE123", True),
+            ("SYM", 10, "INE123", False),
+        ]
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+        res = dedupe_equity_parquet(parquet_path=pq, conn=mock_conn)
+        assert res["status"] == "success"
+
+        out_df = pd.read_parquet(pq)
+        assert set(out_df["token"].unique()) == {20}
+        row_16 = out_df[out_df["trade_date"] == "2026-11-16"].iloc[0]
+        # Preferred token 20's close (200.0) MUST win
+        assert row_16["close"] == 200.0
+
+        # Different ISINs test: SYM reused by different company
+        df_diff_isin = pd.DataFrame([
+            {"token": 10, "symbol": "REUSED", "trade_date": "2026-11-15", "open": 10, "high": 10, "low": 10, "close": 10, "volume": 10, "traded_val": 100},
+            {"token": 20, "symbol": "REUSED", "trade_date": "2026-11-16", "open": 20, "high": 20, "low": 20, "close": 20, "volume": 20, "traded_val": 200},
+        ])
+        df_diff_isin.to_parquet(pq, index=False)
+        mock_cur.fetchall.return_value = [
+            ("REUSED", 20, "INE_NEW_COMPANY", True),
+            ("REUSED", 10, "INE_OLD_COMPANY", False),
+        ]
+        res2 = dedupe_equity_parquet(parquet_path=pq, conn=mock_conn)
+        out2_df = pd.read_parquet(pq)
+        # Should NOT merge different companies
+        assert out2_df["token"].nunique() == 2
+
+
+def test_series_move_zero_angel_calls():
+    """S0-7: Series move re-keying with mismatching PrvsClsgPric makes 0 Angel API calls."""
+    from pipeline.bhavcopy import ingest_bhavcopy
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pq = os.path.join(tmpdir, "test.parquet")
+        # Stored has old token 100 with ISIN 'INE999' and close=500.0
+        df = pd.DataFrame([
+            {"token": 100, "symbol": "SERIESMOVE", "trade_date": "2026-11-18", "open": 500.0, "high": 505.0, "low": 495.0, "close": 500.0, "volume": 1000, "traded_val": 500000.0}
+        ])
+        df.to_parquet(pq, index=False)
+
+        # Bhavcopy has new token 200 for 'SERIESMOVE' ('INE999') with prev_close=400.0 (mismatch!)
+        rows = [
+            {"token": 200, "symbol": "SERIESMOVE", "ISIN": "INE999", "open": 410.0, "high": 420.0, "low": 405.0, "close": 415.0, "volume": 2000, "traded_val": 830000.0, "prev_close": 400.0}
+        ]
+        zb = make_synthetic_bhavcopy_zip(rows, target_date_str="2026-11-19")
+
+        mock_client = MagicMock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        # active instruments: token 200 has INE999
+        mock_cur.fetchall.side_effect = [
+            [(200, "INE999")],  # active
+            [(100, "INE999")],  # inactive
+        ]
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+        with patch("pipeline.bhavcopy.get_ist_today", return_value=date(2026, 11, 19)), \
+             patch("pipeline.bhavcopy.download_bhavcopy_raw", return_value=(zb, {"status_code": 200})), \
+             patch("pipeline.bhavcopy.check_nifty_candle_exists", return_value=True), \
+             patch("pipeline.bhavcopy.SmartAPIClient.login_from_env", return_value=mock_client), \
+             patch("pipeline.bhavcopy.log_ingest_run") as mock_log_run:
+
+            res = ingest_bhavcopy(parquet_path=pq, conn=mock_conn, min_rows=1)
+            assert res["status"] == "success"
+            # Crucial: ZERO Angel calls made for series move!
+            mock_client.get_candle_data.assert_not_called()
+
+            # Parquet re-keyed to token 200
+            out_df = pd.read_parquet(pq)
+            assert set(out_df["token"].unique()) == {200}
+            assert len(out_df) == 2  # old date + new date preserved
+
 

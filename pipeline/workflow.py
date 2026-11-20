@@ -9,37 +9,18 @@ from pipeline.alerts import send_telegram_alert
 logger = logging.getLogger("pipeline.workflow")
 
 def get_latest_completed_trading_day(now_ist: Optional[datetime] = None, conn=None) -> date:
-    """Returns latest completed trading day in IST, checking Neon Nifty 50 candle first."""
-    # Check Neon daily_index_ohlcv for latest completed NIFTY 50 trading date (Fix 2)
-    should_close = False
-    try:
-        if conn is None:
-            from pipeline.db import get_connection
-            conn = get_connection()
-            should_close = True
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT MAX(trade_date)::text FROM daily_index_ohlcv
-                WHERE index_name = 'NIFTY 50';
-            """)
-            row = cur.fetchone()
-            if row and row[0]:
-                return datetime.strptime(str(row[0]).split("T")[0], "%Y-%m-%d").date()
-    except Exception as e:
-        logger.debug(f"Could not query Nifty 50 date from Neon: {e}")
-    finally:
-        if should_close and conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
+    """
+    Returns latest completed trading day in IST based on time only (S0-1):
+    - Today if weekday (Mon-Fri) and IST >= 18:30 (matching bhavcopy publication rule)
+    - Else the previous weekday.
+    No Neon Nifty queries (avoids circular dependency with workflow sync steps).
+    """
     if now_ist is None:
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
     today = now_ist.date()
-    # Market closes at 15:30 IST; by 16:00 IST trading day is completed
-    if today.weekday() < 5 and (now_ist.hour > 16 or (now_ist.hour == 16 and now_ist.minute >= 0)):
+    # Market closes at 15:30 IST; by 18:30 IST bhavcopy and daily session are complete
+    if today.weekday() < 5 and (now_ist.hour > 18 or (now_ist.hour == 18 and now_ist.minute >= 30)):
         return today
     # Prior weekday
     curr = today - timedelta(days=1)
@@ -308,6 +289,18 @@ def run_daily_workflow(
         logger.info("Step 6/9: ingest_equities")
         t0 = time.time()
         try:
+            # S0-2: Dedupe store if duplicate symbols across tokens exist (cheap, no Angel calls, writes backup)
+            if os.path.exists(pq_path):
+                try:
+                    import pandas as _pd
+                    _chk_df = _pd.read_parquet(pq_path, columns=["symbol", "token"])
+                    if not _chk_df.empty and (_chk_df.groupby("symbol")["token"].nunique() > 1).any():
+                        logger.info("Duplicate symbols across tokens found in Parquet. Running dedupe before ingest...")
+                        from pipeline.dedupe import dedupe_equity_parquet
+                        dedupe_equity_parquet(parquet_path=pq_path, conn=conn)
+                except Exception as _dedup_err:
+                    logger.warning(f"Notice: pre-ingest dedupe check encountered: {_dedup_err}")
+
             fn6 = ingest_equities_fn
             if fn6 is None:
                 daily_source = os.environ.get("DAILY_SOURCE", "bhavcopy").strip().lower()
@@ -367,6 +360,17 @@ def run_daily_workflow(
     logger.info("Verifying Quality Gate prior to compute and publish...")
     t0 = time.time()
     try:
+        if os.path.exists(pq_path):
+            try:
+                import pandas as _pd
+                _chk_df = _pd.read_parquet(pq_path, columns=["symbol", "token"])
+                if not _chk_df.empty and (_chk_df.groupby("symbol")["token"].nunique() > 1).any():
+                    logger.info("Duplicate symbols found before quality gate. Running dedupe...")
+                    from pipeline.dedupe import dedupe_equity_parquet
+                    dedupe_equity_parquet(parquet_path=pq_path, conn=conn)
+            except Exception as _dedup_err:
+                logger.warning(f"Notice: pre-quality-gate dedupe check encountered: {_dedup_err}")
+
         fn_qg = quality_gate_fn
         if fn_qg is None:
             from pipeline.quality_gate import verify_quality_gate

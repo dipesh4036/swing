@@ -418,7 +418,58 @@ export default function ScreenerChart({
     });
     resizeObserver.observe(container);
 
+    // 12. Theme Mutation Observer (S0-6: dynamically recolor chart and series on dark/light toggle)
+    const updateThemeOptions = () => {
+      if (!chartInstanceRef.current) return;
+      const isDarkNow = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+      chartInstanceRef.current.applyOptions({
+        layout: {
+          background: { color: isDarkNow ? "#18181B" : "#FFFFFF" },
+          textColor: isDarkNow ? "#A1A1AA" : "#71717A",
+        },
+        grid: {
+          horzLines: { color: isDarkNow ? "#27272A" : "#F4F4F5" },
+        },
+        crosshair: {
+          vertLine: {
+            color: isDarkNow ? "#52525B" : "#A1A1AA",
+            labelBackgroundColor: isDarkNow ? "#27272A" : "#18181B",
+          },
+          horzLine: {
+            color: isDarkNow ? "#52525B" : "#A1A1AA",
+            labelBackgroundColor: isDarkNow ? "#27272A" : "#18181B",
+          },
+        },
+        rightPriceScale: {
+          borderColor: isDarkNow ? "#27272A" : "#E4E4E7",
+        },
+        timeScale: {
+          borderColor: isDarkNow ? "#27272A" : "#E4E4E7",
+        },
+      });
+      if (candleSeries) {
+        candleSeries.applyOptions({
+          upColor: isDarkNow ? "#10B981" : "#059669",
+          downColor: isDarkNow ? "#F43F5E" : "#E11D48",
+          wickUpColor: isDarkNow ? "#10B981" : "#059669",
+          wickDownColor: isDarkNow ? "#F43F5E" : "#E11D48",
+        });
+      }
+    };
+
+    const themeObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "attributes" && mutation.attributeName === "class") {
+          updateThemeOptions();
+        }
+      }
+    });
+    if (typeof document !== "undefined" && document.documentElement) {
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    }
+
     return () => {
+      themeObserver.disconnect();
       resizeObserver.disconnect();
       if (chartInstanceRef.current) {
         chartInstanceRef.current.remove();

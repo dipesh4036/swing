@@ -8,6 +8,7 @@ Test suite validating Part 1 Authentication:
 """
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 import pytest
@@ -15,7 +16,8 @@ import pytest
 
 def test_auth_node_test_suite():
     """Run Node auth test suite covering bcryptjs, jose, IP hashing, and requireAuth."""
-    cmd = ["node", "tests/test_auth.mjs"]
+    node_bin = shutil.which("node") or ("/opt/homebrew/bin/node" if Path("/opt/homebrew/bin/node").exists() else "node")
+    cmd = [node_bin, "tests/test_auth.mjs"]
     res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, f"Node auth tests failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
     assert "All Auth Tests Passed Successfully!" in res.stdout

@@ -17,8 +17,12 @@ def test_latest_completed_trading_day_calculation():
     mon_morning = datetime(2026, 11, 16, 10, 0)
     assert get_latest_completed_trading_day(mon_morning) == date(2026, 11, 13)
 
-    # Mon Nov 16 at 17:00 IST -> completed day is Mon Nov 16
-    mon_evening = datetime(2026, 11, 16, 17, 0)
+    # Mon Nov 16 at 17:00 IST (before 18:30) -> prior weekday was Fri Nov 13
+    mon_afternoon = datetime(2026, 11, 16, 17, 0)
+    assert get_latest_completed_trading_day(mon_afternoon) == date(2026, 11, 13)
+
+    # Mon Nov 16 at 19:00 IST (after 18:30) -> completed day is Mon Nov 16
+    mon_evening = datetime(2026, 11, 16, 19, 0)
     assert get_latest_completed_trading_day(mon_evening) == date(2026, 11, 16)
 
     # Sun Nov 15 at 12:00 IST -> completed day was Fri Nov 13
