@@ -27,6 +27,8 @@ const ScreenerChart = dynamic(
   }
 );
 
+import FundamentalsPanel from "@/components/screener/FundamentalsPanel";
+
 const SCREENER_INFO = {
   stage2_breakout: {
     name: "Stage 2 Breakout",
@@ -583,7 +585,7 @@ export default function ScreenerPage() {
 
         {/* RIGHT COLUMN: Chart Panel (Fills Remaining Width and Height) */}
         <div
-          className={`flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-surface ${
+          className={`flex-1 min-w-0 h-full flex flex-col overflow-y-auto lg:overflow-hidden bg-surface ${
             mobileView === "list" ? "hidden lg:flex" : "flex"
           }`}
         >
@@ -599,14 +601,17 @@ export default function ScreenerPage() {
             </button>
           </div>
 
-          {/* Interactive Chart Canvas (70vh on mobile, full-height on desktop) */}
-          <div className="flex-1 min-h-[70vh] lg:min-h-0 h-full">
-            <ScreenerChart
-              stockData={chartData}
-              screenerId={activeScreener}
-              loading={loadingChart}
-              error={chartError}
-            />
+          {/* Interactive Chart Canvas and Collapsible Fundamentals Panel */}
+          <div className="flex-1 min-h-[70vh] lg:min-h-0 h-full flex flex-col">
+            <div className="flex-1 min-h-[380px] lg:min-h-0 h-full">
+              <ScreenerChart
+                stockData={chartData}
+                screenerId={activeScreener}
+                loading={loadingChart}
+                error={chartError}
+              />
+            </div>
+            <FundamentalsPanel symbol={selectedStock?.symbol} />
           </div>
         </div>
       </div>

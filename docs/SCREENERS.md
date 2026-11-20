@@ -190,3 +190,22 @@ To preserve the Neon 0.5 GB free storage tier:
   ```
 - **Cache-Control:** `public, s-maxage=900, stale-while-revalidate=3600`
 
+---
+
+## 7. Fundamentals (Tapetide)
+
+An on-demand fundamentals panel is available for any candidate stock selected in the screener UI.
+
+- **Data Source:** Fetched on-demand from `https://tapetide.com/stocks/<SYMBOL>.md`.
+- **Nature:** Third-party data, license unstated. Personal, single-user use only.
+- **Storage:** Never stored in Neon DB or Parquet store; fetched only when the user expands the fundamentals panel or changes the selected stock while expanded.
+- **Resilience:** The markdown structure is parsed defensively with generic label extraction. If Tapetide changes its format, missing fields gracefully degrade to `null` ("—" in the UI) without breaking the application.
+- **Security & Rate Limiting:**
+  - Authenticated via session cookie (`requireAuth`).
+  - Strict symbol regex validation (`^[A-Z0-9&-]{1,20}$`) and must exist in the latest screener results.
+  - In-memory LRU cache (200 entries, 24-hour success TTL, 15-minute negative cache).
+  - Single-flight per symbol prevents duplicate concurrent upstream fetches.
+  - Global rate limiter capped at ~20 upstream requests/minute per instance.
+  - Response size cap: 1 MB. Upstream timeout: 8 seconds.
+
+
