@@ -43,7 +43,7 @@ export function AppShell({ children }) {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-[11px] text-bullish font-medium bg-bullish-bg px-2.5 py-1 rounded-md border border-bullish-border">
               <span className="w-1.5 h-1.5 rounded-full bg-bullish animate-pulse" />
-              <span>SmartAPI</span>
+              <span>Live Feed</span>
             </div>
             <ThemeToggle compact />
           </div>

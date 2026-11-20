@@ -444,6 +444,10 @@ export function parseTapetideMarkdown(text, fallbackSymbol = "") {
   return {
     available: true,
     symbol: resolvedSymbol,
+    company: frontmatter.company ? sanitizeText(frontmatter.company, 80) : null,
+    sector: frontmatter.sector ? sanitizeText(frontmatter.sector, 50) : null,
+    industry: frontmatter.industry ? sanitizeText(frontmatter.industry, 60) : null,
+    isin: frontmatter.isin ? sanitizeText(frontmatter.isin, 20) : null,
     source_url,
     generated_at,
     snapshot,

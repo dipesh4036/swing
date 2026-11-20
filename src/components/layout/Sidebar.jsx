@@ -89,10 +89,6 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                 <div className="text-[13px] font-bold text-text tracking-tight truncate flex items-center gap-1.5 uppercase">
                   Swing Terminal
                 </div>
-                <div className="text-[10px] text-text-muted font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-bullish inline-block animate-pulse" />
-                  <span>SmartAPI Active</span>
-                </div>
               </div>
             )}
           </div>
@@ -158,18 +154,6 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
 
         {/* Bottom Theme Toggle, Collapse & Footer */}
         <div className="p-2 border-t border-border shrink-0 bg-bg/50 space-y-2">
-          {!collapsed && (
-            <div className="px-2.5 py-2 bg-surface border border-border rounded-md text-[10px] space-y-0.5">
-              <div className="flex items-center justify-between text-text-secondary">
-                <span>Data Feed</span>
-                <span className="text-bullish font-semibold">Synced</span>
-              </div>
-              <div className="text-[9px] text-text-muted truncate">
-                Angel One SmartAPI · NSE Cash
-              </div>
-            </div>
-          )}
-
           {/* Theme Toggle Button */}
           <div className="flex items-center justify-between px-1">
             {!collapsed && (

@@ -2,24 +2,27 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  ChevronDown,
-  ChevronRight,
+  X,
   ExternalLink,
   TrendingUp,
   TrendingDown,
   AlertCircle,
   ShieldCheck,
   ShieldAlert,
+  BarChart3,
+  PieChart,
+  Activity,
+  Layers,
 } from "lucide-react";
 
-export default function FundamentalsPanel({ symbol }) {
-  const [expanded, setExpanded] = useState(false);
+export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }) {
+  const [activeTab, setActiveTab] = useState("summary"); // "summary" | "financials" | "shareholding"
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [errorReason, setErrorReason] = useState(null);
 
   useEffect(() => {
-    if (!expanded || !symbol) {
+    if (!isOpen || !symbol) {
       return;
     }
 
@@ -63,9 +66,9 @@ export default function FundamentalsPanel({ symbol }) {
     return () => {
       controller.abort();
     };
-  }, [expanded, symbol]);
+  }, [isOpen, symbol]);
 
-  if (!symbol) {
+  if (!isOpen || !symbol) {
     return null;
   }
 
@@ -77,363 +80,513 @@ export default function FundamentalsPanel({ symbol }) {
       case "not_found":
         return "Fundamentals not found for this symbol on Tapetide.";
       case "rate_limited":
-        return "Rate limit reached. Please try again in a few moments.";
+        return "Rate limit reached. Please try again shortly.";
       case "timeout":
-        return "Request to Tapetide timed out.";
+        return "Tapetide request timed out.";
       case "parse_error":
-        return "Unable to parse fundamentals data from Tapetide.";
+        return "Unable to parse fundamentals data.";
       default:
         return "Unable to load fundamentals from Tapetide.";
     }
   };
 
-  return (
-    <div className="border-t border-border bg-surface shrink-0 flex flex-col text-xs text-text transition-all">
-      {/* Header / Collapse Toggle */}
-      <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/60 hover:bg-bg-hover cursor-pointer select-none">
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          className="flex items-center gap-2 font-semibold text-text text-left flex-1"
-        >
-          {expanded ? (
-            <ChevronDown size={15} className="text-text-muted" />
-          ) : (
-            <ChevronRight size={15} className="text-text-muted" />
-          )}
-          <span>Fundamentals</span>
-          <span className="text-[10px] font-normal text-text-muted">
-            (Tapetide · {symbol})
-          </span>
-        </button>
+  // Helper to extract snapshot value by label
+  const getSnap = (labels) => {
+    if (!data?.snapshot) return null;
+    const lowerLabels = labels.map((l) => l.toLowerCase());
+    return data.snapshot.find((s) => lowerLabels.includes(s.label.toLowerCase()));
+  };
 
-        <a
-          href={sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open fundamentals on Tapetide (external)"
-          className="flex items-center gap-1 text-[11px] text-text-muted hover:text-primary transition-colors ml-2"
-        >
-          <span>Tapetide</span>
-          <ExternalLink size={12} />
-        </a>
+  const mcap = getSnap(["Market Cap"]);
+  const pe = getSnap(["P/E (TTM)", "P/E"]);
+  const roce = getSnap(["ROCE"]);
+  const roe = getSnap(["ROE"]);
+  const debtToEq = getSnap(["Debt to Equity"]);
+  const promoter = getSnap(["Promoter Holding"]);
+
+  return (
+    <div className="fixed lg:static inset-y-0 right-0 z-30 lg:z-10 w-full max-w-[420px] xl:max-w-[460px] h-full flex flex-col bg-surface border-l border-border shrink-0 text-xs text-text shadow-2xl lg:shadow-none overflow-hidden transition-all duration-200">
+      {/* ── Top Header ────────────────────────────────────────── */}
+      <div className="p-3 border-b border-border bg-bg-secondary/40 shrink-0 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-bold text-text tracking-tight">
+                {symbol}
+              </span>
+              {stockInfo?.rs_rank !== null && stockInfo?.rs_rank !== undefined && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold bg-primary-subtle text-primary border border-primary/20">
+                  RS {stockInfo.rs_rank}
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-text-secondary truncate mt-0.5 font-medium">
+              {data?.company || stockInfo?.company || symbol}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open full fundamentals on Tapetide"
+              className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors flex items-center gap-1 text-[11px]"
+            >
+              <span>Tapetide</span>
+              <ExternalLink size={12} />
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close fundamentals panel"
+              className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Sector & Industry Pills */}
+        {(data?.sector || data?.industry) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {data.sector && (
+              <span className="px-2 py-0.5 rounded text-[10px] bg-bg-secondary text-text-muted font-medium border border-border/60 truncate max-w-[180px]">
+                {data.sector}
+              </span>
+            )}
+            {data.industry && (
+              <span className="px-2 py-0.5 rounded text-[10px] bg-bg-secondary text-text-muted font-medium border border-border/60 truncate max-w-[220px]">
+                {data.industry}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Core KPI Strip (Always visible) */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-1">
+          <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">MCap</span>
+            <span className="font-mono text-[11px] font-bold text-text truncate">
+              {mcap?.value_text || "—"}
+            </span>
+          </div>
+          <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">P/E</span>
+            <span className="font-mono text-[11px] font-bold text-text truncate">
+              {pe?.value_text || "—"}
+            </span>
+          </div>
+          <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">ROCE</span>
+            <span className="font-mono text-[11px] font-bold text-bullish truncate">
+              {roce?.value_text || "—"}
+            </span>
+          </div>
+          <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">ROE</span>
+            <span className="font-mono text-[11px] font-bold text-text truncate">
+              {roe?.value_text || "—"}
+            </span>
+          </div>
+          <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">D/E</span>
+            <span className="font-mono text-[11px] font-bold text-text truncate">
+              {debtToEq?.value_text || "—"}
+            </span>
+          </div>
+          <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">Promoter</span>
+            <span className="font-mono text-[11px] font-bold text-text truncate">
+              {promoter?.value_text || "—"}
+            </span>
+          </div>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1 p-0.5 bg-bg-secondary rounded-md border border-border/60">
+          <button
+            type="button"
+            onClick={() => setActiveTab("summary")}
+            className={`flex-1 py-1 px-2 rounded text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === "summary"
+                ? "bg-surface text-primary shadow-xs"
+                : "text-text-muted hover:text-text"
+            }`}
+          >
+            <Activity size={12} />
+            <span>Overview</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("financials")}
+            className={`flex-1 py-1 px-2 rounded text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === "financials"
+                ? "bg-surface text-primary shadow-xs"
+                : "text-text-muted hover:text-text"
+            }`}
+          >
+            <BarChart3 size={12} />
+            <span>Financials</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("shareholding")}
+            className={`flex-1 py-1 px-2 rounded text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === "shareholding"
+                ? "bg-surface text-primary shadow-xs"
+                : "text-text-muted hover:text-text"
+            }`}
+          >
+            <PieChart size={12} />
+            <span>Ownership</span>
+          </button>
+        </div>
       </div>
 
-      {/* Expanded Content */}
-      {expanded && (
-        <div className="p-3 max-h-[360px] overflow-y-auto space-y-4">
-          {loading ? (
-            /* Skeleton Loading State */
-            <div className="space-y-3 animate-pulse py-2">
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-12 bg-bg-secondary rounded p-2" />
-                ))}
-              </div>
-              <div className="h-20 bg-bg-secondary rounded" />
-              <div className="h-24 bg-bg-secondary rounded" />
+      {/* ── Scrollable Body Area ──────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        {loading ? (
+          /* Loading State */
+          <div className="space-y-3 animate-pulse py-2">
+            <div className="grid grid-cols-2 gap-2">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-12 bg-bg-secondary rounded p-2" />
+              ))}
             </div>
-          ) : errorReason ? (
-            /* Failure / Error Fallback Card */
-            <div className="flex items-center justify-between p-3 rounded bg-bg-secondary border border-border text-xs">
-              <div className="flex items-center gap-2 text-text-secondary">
-                <AlertCircle size={15} className="text-warning shrink-0" />
-                <span>{getReasonMessage(errorReason)}</span>
-              </div>
-              <a
-                href={sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-primary hover:underline font-medium shrink-0 ml-3"
-              >
-                <span>View on Tapetide</span>
-                <ExternalLink size={12} />
-              </a>
+            <div className="h-28 bg-bg-secondary rounded" />
+            <div className="h-32 bg-bg-secondary rounded" />
+          </div>
+        ) : errorReason ? (
+          /* Error Fallback Card */
+          <div className="p-4 rounded-lg bg-bg-secondary border border-border text-center space-y-3 my-6">
+            <AlertCircle size={24} className="text-warning mx-auto" />
+            <div className="text-xs text-text-secondary leading-relaxed">
+              {getReasonMessage(errorReason)}
             </div>
-          ) : data ? (
-            <>
-              {/* 1. Snapshot Grid */}
-              {data.snapshot && data.snapshot.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-                    Key Snapshot
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary font-medium hover:underline"
+            >
+              <span>View details on Tapetide</span>
+              <ExternalLink size={13} />
+            </a>
+          </div>
+        ) : data ? (
+          <>
+            {/* ── TAB 1: SUMMARY / OVERVIEW ────────────────────── */}
+            {activeTab === "summary" && (
+              <div className="space-y-3.5">
+                {/* Strengths & Weaknesses (Qualitative Insights) */}
+                {((data.strengths && data.strengths.length > 0) ||
+                  (data.weaknesses && data.weaknesses.length > 0)) && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers size={12} />
+                      <span>Key Insights & Fundamentals</span>
+                    </div>
+
+                    {data.strengths && data.strengths.length > 0 && (
+                      <div className="border border-border/80 rounded-md p-2.5 bg-bullish-bg/20">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-bullish mb-1">
+                          <ShieldCheck size={14} className="shrink-0" />
+                          <span>Strengths</span>
+                        </div>
+                        <ul className="space-y-1 text-[11px] text-text-secondary list-disc pl-4">
+                          {data.strengths.map((str, idx) => (
+                            <li key={idx} className="leading-snug">
+                              {str}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {data.weaknesses && data.weaknesses.length > 0 && (
+                      <div className="border border-border/80 rounded-md p-2.5 bg-bearish-bg/20">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-bearish mb-1">
+                          <ShieldAlert size={14} className="shrink-0" />
+                          <span>Weaknesses / Risks</span>
+                        </div>
+                        <ul className="space-y-1 text-[11px] text-text-secondary list-disc pl-4">
+                          {data.weaknesses.map((wk, idx) => (
+                            <li key={idx} className="leading-snug">
+                              {wk}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {data.snapshot.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex flex-col justify-center"
-                      >
-                        <span className="text-[10px] text-text-muted truncate">
-                          {item.label}
-                        </span>
-                        <span className="font-mono text-xs font-semibold text-text mt-0.5 truncate">
-                          {item.value_text || "—"}
+                )}
+
+                {/* Technical Consensus / Bias */}
+                {data.signals && (
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Technical Indicator Consensus
+                    </div>
+                    <div className="p-2.5 rounded-md border border-border/80 bg-bg-secondary/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-text-muted font-medium">Overall Bias</span>
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-primary-subtle text-primary border border-primary/30">
+                          {data.signals.overall || "Neutral"}
                         </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 2. Growth Rates */}
-              {data.growth && data.growth.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-                    Growth Rates
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                    {data.growth.map((g, idx) => {
-                      const isPos = g.value_num !== null && g.value_num > 0;
-                      const isNeg = g.value_num !== null && g.value_num < 0;
-                      return (
-                        <div
-                          key={idx}
-                          className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex flex-col justify-center"
-                        >
-                          <span className="text-[10px] text-text-muted truncate">
-                            {g.label} ({g.period})
-                          </span>
-                          <span
-                            className={`font-mono text-xs font-semibold mt-0.5 truncate ${
-                              isPos
-                                ? "text-bullish"
-                                : isNeg
-                                ? "text-bearish"
-                                : "text-text"
-                            }`}
-                          >
-                            {g.value_text || "—"}
-                          </span>
+                      <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[11px]">
+                        <div className="bg-bullish-bg/50 border border-bullish-border/60 rounded py-1 px-1.5">
+                          <span className="block text-[9px] text-bullish uppercase font-sans">Bullish</span>
+                          <span className="font-bold text-bullish">{data.signals.bullish ?? 0}</span>
                         </div>
-                      );
-                    })}
+                        <div className="bg-neutral-bg border border-border rounded py-1 px-1.5">
+                          <span className="block text-[9px] text-text-muted uppercase font-sans">Neutral</span>
+                          <span className="font-bold text-text-secondary">{data.signals.neutral ?? 0}</span>
+                        </div>
+                        <div className="bg-bearish-bg/50 border border-bearish-border/60 rounded py-1 px-1.5">
+                          <span className="block text-[9px] text-bearish uppercase font-sans">Bearish</span>
+                          <span className="font-bold text-bearish">{data.signals.bearish ?? 0}</span>
+                        </div>
+                      </div>
+                      {(data.signals.oscillators || data.signals.moving_averages) && (
+                        <div className="flex items-center justify-between text-[10px] text-text-muted pt-1 border-t border-border/60">
+                          <span>Oscillators: <strong className="text-text">{data.signals.oscillators || "—"}</strong></span>
+                          <span>Moving Averages: <strong className="text-text">{data.signals.moving_averages || "—"}</strong></span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* 3. Quarterly Results Mini-Table */}
-              {data.quarters && data.quarters.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-                    Quarterly Results (₹ Cr)
-                  </div>
-                  <div className="overflow-x-auto border border-border/80 rounded bg-bg-secondary/20">
-                    <table className="w-full text-left font-mono text-[11px]">
-                      <thead>
-                        <tr className="border-b border-border bg-bg-secondary/60 text-text-muted text-[10px]">
-                          <th className="py-1 px-2.5 font-medium">Period</th>
-                          <th className="py-1 px-2.5 font-medium text-right">Sales</th>
-                          <th className="py-1 px-2.5 font-medium text-right">Net Profit</th>
-                          <th className="py-1 px-2.5 font-medium text-right">OPM %</th>
-                          <th className="py-1 px-2.5 font-medium text-right">EPS (₹)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {data.quarters.map((q, idx) => (
-                          <tr key={idx} className="hover:bg-bg-hover/40">
-                            <td className="py-1 px-2.5 text-text font-medium">
-                              {q.period || "—"}
-                            </td>
-                            <td className="py-1 px-2.5 text-right text-text">
-                              {q.sales !== null && q.sales !== undefined ? q.sales : "—"}
-                            </td>
-                            <td className="py-1 px-2.5 text-right text-text">
-                              {q.net_profit !== null && q.net_profit !== undefined
-                                ? q.net_profit
-                                : "—"}
-                            </td>
-                            <td className="py-1 px-2.5 text-right text-text">
-                              {q.opm !== null && q.opm !== undefined ? `${q.opm}%` : "—"}
-                            </td>
-                            <td className="py-1 px-2.5 text-right text-text">
-                              {q.eps !== null && q.eps !== undefined ? q.eps : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* 4. Shareholding Pattern (Latest vs Previous with deltas) */}
-              {data.shareholding?.latest && (
-                <div>
-                  <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-                    Shareholding Pattern ({data.shareholding.latest.period || "Latest"}
-                    {data.shareholding.previous?.period
-                      ? ` vs ${data.shareholding.previous.period}`
-                      : ""}
-                    )
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      {
-                        label: "Promoters",
-                        cur: data.shareholding.latest.promoters,
-                        prev: data.shareholding.previous?.promoters,
-                      },
-                      {
-                        label: "FIIs",
-                        cur: data.shareholding.latest.fii,
-                        prev: data.shareholding.previous?.fii,
-                      },
-                      {
-                        label: "DIIs",
-                        cur: data.shareholding.latest.dii,
-                        prev: data.shareholding.previous?.dii,
-                      },
-                      {
-                        label: "Public",
-                        cur: data.shareholding.latest.public,
-                        prev: data.shareholding.previous?.public,
-                      },
-                    ].map((item, idx) => {
-                      const delta =
-                        item.cur !== null &&
-                        item.cur !== undefined &&
-                        item.prev !== null &&
-                        item.prev !== undefined
-                          ? Number((item.cur - item.prev).toFixed(2))
-                          : null;
-                      return (
+                {/* Detailed Ratios Grid */}
+                {data.snapshot && data.snapshot.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Key Ratios & Valuation
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {data.snapshot.map((item, idx) => (
                         <div
                           key={idx}
-                          className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex flex-col justify-center"
+                          className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex items-center justify-between"
                         >
-                          <span className="text-[10px] text-text-muted truncate">
+                          <span className="text-[11px] text-text-muted truncate pr-1">
                             {item.label}
                           </span>
-                          <div className="flex items-center gap-1.5 mt-0.5 font-mono text-xs font-semibold">
-                            <span>
-                              {item.cur !== null && item.cur !== undefined
-                                ? `${item.cur}%`
-                                : "—"}
-                            </span>
-                            {delta !== null && delta !== 0 && (
-                              <span
-                                className={`text-[10px] flex items-center ${
-                                  delta > 0 ? "text-bullish" : "text-bearish"
-                                }`}
-                              >
-                                {delta > 0 ? (
-                                  <TrendingUp size={11} className="mr-0.5" />
-                                ) : (
-                                  <TrendingDown size={11} className="mr-0.5" />
-                                )}
-                                {delta > 0 ? `+${delta}%` : `${delta}%`}
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-mono text-xs font-semibold text-text truncate">
+                            {item.value_text || "—"}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* 5. Key Insights: Strengths & Weaknesses */}
-              {((data.strengths && data.strengths.length > 0) ||
-                (data.weaknesses && data.weaknesses.length > 0)) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Strengths */}
-                  {data.strengths && data.strengths.length > 0 && (
-                    <div className="border border-border/80 rounded p-2.5 bg-bg-secondary/20">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-bullish mb-1.5">
-                        <ShieldCheck size={13} />
-                        <span>Strengths</span>
-                      </div>
-                      <ul className="space-y-1 text-[11px] text-text-secondary list-disc pl-4">
-                        {data.strengths.map((str, idx) => (
-                          <li key={idx} className="leading-relaxed">
-                            {str}
-                          </li>
-                        ))}
-                      </ul>
+                      ))}
                     </div>
-                  )}
-
-                  {/* Weaknesses */}
-                  {data.weaknesses && data.weaknesses.length > 0 && (
-                    <div className="border border-border/80 rounded p-2.5 bg-bg-secondary/20">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-bearish mb-1.5">
-                        <ShieldAlert size={13} />
-                        <span>Weaknesses</span>
-                      </div>
-                      <ul className="space-y-1 text-[11px] text-text-secondary list-disc pl-4">
-                        {data.weaknesses.map((wk, idx) => (
-                          <li key={idx} className="leading-relaxed">
-                            {wk}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 6. Technical Signals Summary */}
-              {data.signals && (
-                <div>
-                  <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-                    Technical Signals Summary
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {data.signals.overall && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-primary-subtle text-primary border border-primary/30">
-                        Overall: {data.signals.overall}
-                      </span>
-                    )}
-                    {data.signals.bullish !== undefined && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-bullish-bg text-bullish border border-bullish-border">
-                        Bullish: {data.signals.bullish}
-                      </span>
-                    )}
-                    {data.signals.neutral !== undefined && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-neutral-bg text-text-secondary border border-border">
-                        Neutral: {data.signals.neutral}
-                      </span>
-                    )}
-                    {data.signals.bearish !== undefined && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-bearish-bg text-bearish border border-bearish-border">
-                        Bearish: {data.signals.bearish}
-                      </span>
-                    )}
-                    {data.signals.oscillators && (
-                      <span className="px-2 py-0.5 rounded text-[11px] text-text-muted border border-border">
-                        Oscillators: {data.signals.oscillators}
-                      </span>
-                    )}
-                    {data.signals.moving_averages && (
-                      <span className="px-2 py-0.5 rounded text-[11px] text-text-muted border border-border">
-                        MAs: {data.signals.moving_averages}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Footer */}
-              <div className="pt-2 border-t border-border/60 text-[10px] text-text-muted flex items-center justify-between">
-                <span>
-                  As of {data.generated_at || "latest"}. Source:{" "}
-                  <a
-                    href={sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    Tapetide ↗
-                  </a>{" "}
-                  (third-party, not verified by this dashboard)
-                </span>
+                )}
               </div>
-            </>
-          ) : null}
-        </div>
-      )}
+            )}
+
+            {/* ── TAB 2: FINANCIALS (QUARTERS & GROWTH) ────────── */}
+            {activeTab === "financials" && (
+              <div className="space-y-3.5">
+                {/* Growth Rates CAGR Cards */}
+                {data.growth && data.growth.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Compounded Growth Rates
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {data.growth.map((g, idx) => {
+                        const isPos = g.value_num !== null && g.value_num > 0;
+                        const isNeg = g.value_num !== null && g.value_num < 0;
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex flex-col justify-center"
+                          >
+                            <span className="text-[10px] text-text-muted truncate">
+                              {g.label} ({g.period})
+                            </span>
+                            <span
+                              className={`font-mono text-xs font-semibold mt-0.5 truncate ${
+                                isPos
+                                  ? "text-bullish"
+                                  : isNeg
+                                  ? "text-bearish"
+                                  : "text-text"
+                              }`}
+                            >
+                              {g.value_text || "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quarterly Results Table */}
+                {data.quarters && data.quarters.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Quarterly Statements (₹ Cr)
+                    </div>
+                    <div className="overflow-x-auto border border-border/80 rounded-md bg-bg-secondary/20">
+                      <table className="w-full text-left font-mono text-[11px]">
+                        <thead>
+                          <tr className="border-b border-border bg-bg-secondary/60 text-text-muted text-[10px]">
+                            <th className="py-1 px-2 font-medium">Period</th>
+                            <th className="py-1 px-2 font-medium text-right">Sales</th>
+                            <th className="py-1 px-2 font-medium text-right">Net Profit</th>
+                            <th className="py-1 px-2 font-medium text-right">OPM %</th>
+                            <th className="py-1 px-2 font-medium text-right">EPS</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {data.quarters.map((q, idx) => (
+                            <tr key={idx} className="hover:bg-bg-hover/40">
+                              <td className="py-1.5 px-2 text-text font-medium">
+                                {q.period || "—"}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-text">
+                                {q.sales !== null && q.sales !== undefined ? q.sales : "—"}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-text font-semibold">
+                                {q.net_profit !== null && q.net_profit !== undefined
+                                  ? q.net_profit
+                                  : "—"}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-text">
+                                {q.opm !== null && q.opm !== undefined ? `${q.opm}%` : "—"}
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-text">
+                                {q.eps !== null && q.eps !== undefined ? `₹${q.eps}` : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── TAB 3: SHAREHOLDING / OWNERSHIP ─────────────── */}
+            {activeTab === "shareholding" && (
+              <div className="space-y-3.5">
+                {data.shareholding?.latest ? (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider flex items-center justify-between">
+                      <span>Ownership Pattern</span>
+                      <span className="font-mono text-[10px] text-text-muted">
+                        {data.shareholding.latest.period || "Latest"}
+                        {data.shareholding.previous?.period
+                          ? ` vs ${data.shareholding.previous.period}`
+                          : ""}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {[
+                        {
+                          label: "Promoters",
+                          cur: data.shareholding.latest.promoters,
+                          prev: data.shareholding.previous?.promoters,
+                        },
+                        {
+                          label: "Foreign Institutions (FIIs)",
+                          cur: data.shareholding.latest.fii,
+                          prev: data.shareholding.previous?.fii,
+                        },
+                        {
+                          label: "Domestic Institutions (DIIs)",
+                          cur: data.shareholding.latest.dii,
+                          prev: data.shareholding.previous?.dii,
+                        },
+                        {
+                          label: "Public & Others",
+                          cur: data.shareholding.latest.public,
+                          prev: data.shareholding.previous?.public,
+                        },
+                      ].map((item, idx) => {
+                        const delta =
+                          item.cur !== null &&
+                          item.cur !== undefined &&
+                          item.prev !== null &&
+                          item.prev !== undefined
+                            ? Number((item.cur - item.prev).toFixed(2))
+                            : null;
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-bg-secondary/40 border border-border/80 rounded-md p-2.5 flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="text-[11px] font-medium text-text block">
+                                {item.label}
+                              </span>
+                              <span className="font-mono text-sm font-bold text-text mt-0.5 block">
+                                {item.cur !== null && item.cur !== undefined
+                                  ? `${item.cur}%`
+                                  : "—"}
+                              </span>
+                            </div>
+
+                            <div className="text-right">
+                              {delta !== null ? (
+                                <span
+                                  className={`font-mono text-xs font-semibold inline-flex items-center ${
+                                    delta > 0
+                                      ? "text-bullish"
+                                      : delta < 0
+                                      ? "text-bearish"
+                                      : "text-text-muted"
+                                  }`}
+                                >
+                                  {delta > 0 ? (
+                                    <TrendingUp size={13} className="mr-0.5" />
+                                  ) : delta < 0 ? (
+                                    <TrendingDown size={13} className="mr-0.5" />
+                                  ) : null}
+                                  {delta > 0 ? `+${delta}%` : `${delta}%`}
+                                </span>
+                              ) : (
+                                <span className="text-text-muted text-[11px]">—</span>
+                              )}
+                              <span className="block text-[9px] text-text-muted">
+                                vs prior quarter
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-text-muted text-xs">
+                    Shareholding pattern not reported for this symbol.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Footer ──────────────────────────────────────── */}
+            <div className="pt-2 border-t border-border/60 text-[10px] text-text-muted flex items-center justify-between">
+              <span>
+                As of {data.generated_at || "latest"}. Source:{" "}
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Tapetide ↗
+                </a>
+              </span>
+            </div>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
-

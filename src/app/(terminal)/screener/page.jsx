@@ -113,6 +113,7 @@ export default function ScreenerPage() {
   const [showRuleInfo, setShowRuleInfo] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileView, setMobileView] = useState("list"); // "list" | "chart"
+  const [showFundamentals, setShowFundamentals] = useState(true);
 
   // 1. Fetch Screener Candidate List
   const fetchScreenerList = useCallback(async () => {
@@ -583,14 +584,14 @@ export default function ScreenerPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Chart Panel (Fills Remaining Width and Height) */}
+        {/* CENTER COLUMN: Chart Panel (Fills Remaining Width and Height) */}
         <div
-          className={`flex-1 min-w-0 h-full flex flex-col overflow-y-auto lg:overflow-hidden bg-surface ${
+          className={`flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-surface ${
             mobileView === "list" ? "hidden lg:flex" : "flex"
           }`}
         >
-          {/* Mobile Back Button */}
-          <div className="lg:hidden p-2 border-b border-border bg-bg-secondary shrink-0">
+          {/* Mobile Back Button & Mobile Fundamentals Toggle */}
+          <div className="lg:hidden p-2 border-b border-border bg-bg-secondary shrink-0 flex items-center justify-between">
             <button
               type="button"
               onClick={() => setMobileView("list")}
@@ -599,21 +600,44 @@ export default function ScreenerPage() {
               <ChevronLeft size={15} />
               Back to Candidate List
             </button>
+
+            {selectedStock && (
+              <button
+                type="button"
+                onClick={() => setShowFundamentals((prev) => !prev)}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border transition-colors ${
+                  showFundamentals
+                    ? "bg-primary text-text-inverse border-primary"
+                    : "bg-surface border-border text-text hover:bg-bg-hover"
+                }`}
+              >
+                <span>Fundamentals</span>
+              </button>
+            )}
           </div>
 
-          {/* Interactive Chart Canvas and Collapsible Fundamentals Panel */}
-          <div className="flex-1 min-h-[70vh] lg:min-h-0 h-full flex flex-col">
-            <div className="flex-1 min-h-[380px] lg:min-h-0 h-full">
-              <ScreenerChart
-                stockData={chartData}
-                screenerId={activeScreener}
-                loading={loadingChart}
-                error={chartError}
-              />
-            </div>
-            <FundamentalsPanel symbol={selectedStock?.symbol} />
+          {/* Interactive Chart Canvas */}
+          <div className="flex-1 min-h-[70vh] lg:min-h-0 h-full relative">
+            <ScreenerChart
+              stockData={chartData}
+              screenerId={activeScreener}
+              loading={loadingChart}
+              error={chartError}
+              showFundamentals={showFundamentals}
+              onToggleFundamentals={() => setShowFundamentals((prev) => !prev)}
+            />
           </div>
         </div>
+
+        {/* RIGHT COLUMN: Fundamentals Panel (Side Drawer on mobile, column on desktop) */}
+        {showFundamentals && (
+          <FundamentalsPanel
+            symbol={selectedStock?.symbol}
+            isOpen={showFundamentals}
+            onClose={() => setShowFundamentals(false)}
+            stockInfo={selectedStock}
+          />
+        )}
       </div>
     </div>
   );

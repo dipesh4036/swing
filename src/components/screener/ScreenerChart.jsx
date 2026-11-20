@@ -28,6 +28,8 @@ export default function ScreenerChart({
   screenerId,
   loading = false,
   error = null,
+  showFundamentals = false,
+  onToggleFundamentals = null,
 }) {
   const chartContainerRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -522,15 +524,30 @@ export default function ScreenerChart({
             >
               <ExternalLink size={13} />
             </a>
-            <a
-              href={`https://tapetide.com/stocks/${encodeURIComponent(stockData.symbol)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-text-muted hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-bg-hover flex items-center gap-0.5"
-              title="Open fundamentals on Tapetide (external)"
-            >
-              <span>Fundamentals ↗</span>
-            </a>
+            {onToggleFundamentals ? (
+              <button
+                type="button"
+                onClick={onToggleFundamentals}
+                className={`text-xs font-semibold px-2 py-0.5 rounded-md border transition-colors flex items-center gap-1 cursor-pointer ${
+                  showFundamentals
+                    ? "bg-primary text-text-inverse border-primary"
+                    : "bg-surface border-border text-text hover:bg-bg-hover"
+                }`}
+                title="Toggle Fundamentals Panel"
+              >
+                <span>Fundamentals</span>
+              </button>
+            ) : (
+              <a
+                href={`https://tapetide.com/stocks/${encodeURIComponent(stockData.symbol)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-text-muted hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-bg-hover flex items-center gap-0.5"
+                title="Open fundamentals on Tapetide (external)"
+              >
+                <span>Fundamentals ↗</span>
+              </a>
+            )}
           </div>
 
           {/* D / W Timeframe Toggle */}
@@ -665,15 +682,10 @@ export default function ScreenerChart({
         <div ref={chartContainerRef} className="absolute inset-0 w-full h-full" />
       </div>
 
-      {/* ── Clean Attribution Footer ───────────────────────────────── */}
+      {/* ── Legend Footer ─────────────────────────────────────────── */}
       <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-text-muted bg-bg-secondary shrink-0">
         <div className="flex items-center gap-3">
           <span>{candles.length} bars</span>
-          {stockData.source === "db" && (
-            <span className="text-warning font-medium bg-warning-bg px-1.5 py-0.5 rounded-sm border border-warning/30">
-              Showing stored data (260 sessions)
-            </span>
-          )}
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-primary" />
             HVQ: 63D high
@@ -682,17 +694,6 @@ export default function ScreenerChart({
             <span className="w-1.5 h-1.5 rounded-full bg-[#9333EA]" />
             HVY: 252D high
           </span>
-        </div>
-        <div>
-          Powered by{" "}
-          <a
-            href="https://www.tradingview.com/lightweight-charts/"
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-text underline transition-colors"
-          >
-            TradingView Lightweight Charts™
-          </a>
         </div>
       </div>
     </div>
