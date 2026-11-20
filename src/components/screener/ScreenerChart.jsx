@@ -589,7 +589,10 @@ export default function ScreenerChart({
             </span>
           </div>
 
-          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
+          <div
+            title={stockData.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}
+            className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1 cursor-help"
+          >
             <span className="text-text-muted">Vol</span>
             <span className="font-semibold text-text">
               {stockData.vol_ratio !== null && stockData.vol_ratio !== undefined ? `${stockData.vol_ratio}x` : "—"}

@@ -460,3 +460,98 @@ def test_run_screeners_with_fake_connection():
     assert res is not None
     assert "counts" in res
     assert fake_conn.commit.called
+
+
+# -----------------------------------------------------------------------------
+# S1: No Fabricated Fallbacks Tests
+# -----------------------------------------------------------------------------
+
+def test_nan_vol_sma_50_eval_screeners_returns_none():
+    """S1: eval_stage2_breakout, eval_vcp, eval_ema50_pullback return None/skip when vol_sma_50 is NaN."""
+    # 1. stage2_breakout with NaN vol_sma_50
+    hist = pd.DataFrame([{
+        "trade_date": "2026-11-18",
+        "open": 100.0, "high": 110.0, "low": 98.0, "close": 108.0,
+        "volume": 100000, "breakout_20d": 1,
+        "vol_sma_50": np.nan, "high_20d": 105.0
+    }])
+    row = hist.iloc[-1]
+    params = {"stage2_breakout": {"recency_sessions": 3, "min_volume_ratio": 1.5, "min_close_range_ratio": 0.6, "max_extension_factor": 1.05}}
+    assert eval_stage2_breakout(row, hist, params) is None
+
+    # 2. vcp with volume dryup required and NaN vol_sma_50
+    hist_vcp = pd.DataFrame([{
+        "trade_date": f"2026-11-{i+1:02d}",
+        "open": 100.0, "high": 105.0, "low": 95.0, "close": 100.0,
+        "volume": 1000, "vol_avg_10": 500, "vol_sma_50": np.nan
+    } for i in range(20)])
+    row_vcp = hist_vcp.iloc[-1]
+    params_vcp = {"vcp": {"min_base_length": 15, "require_volume_dryup": True, "max_window_sessions": 120, "zigzag_min_pct": 0.04}}
+    assert eval_vcp(row_vcp, hist_vcp, params_vcp) is None
+
+    # 3. ema50_pullback with NaN vol_sma_50
+    hist_pb = pd.DataFrame([{
+        "trade_date": f"2026-{i+1:02d}-01",
+        "open": 100.0, "high": 105.0, "low": 98.0, "close": 101.0,
+        "volume": 1000, "vol_sma_50": np.nan
+    } for i in range(70)])
+    row_pb = hist_pb.iloc[-1]
+    row_pb["ema_50"] = 100.0
+    params_pb = {"ema50_pullback": {"max_touch_factor": 1.02, "min_close_factor": 0.99, "quiet_month_vol_ratio": 1.0, "quiet_month_range_ratio": 1.0, "prior_window": 30, "prior_extension_factor": 1.05}}
+    assert eval_ema50_pullback(row_pb, hist_pb, params_pb) is None
+
+
+def test_ipo_base_sane_vol_ratio_and_none_fallbacks():
+    """S1: IPO base with NaN vol_sma_50 computes vol_ratio from listing average; null ret_1d stays None."""
+    # 20 sessions of IPO
+    dates = [date(2026, 10, 1) + timedelta(days=i) for i in range(20)]
+    closes = [100.0 + (i * 0.5) for i in range(20)]
+    # All prior days volume = 50,000; today volume = 100,000 -> ratio should be 2.0x, NOT 100,000x!
+    volumes = [50000] * 19 + [100000]
+    df = pd.DataFrame({
+        "token": [999] * 20,
+        "symbol": ["NEWIPO"] * 20,
+        "trade_date": dates,
+        "open": closes,
+        "high": [c + 1.0 for c in closes],
+        "low": [c - 1.0 for c in closes],
+        "close": closes,
+        "volume": volumes,
+        "traded_val": [c * v for c, v in zip(closes, volumes)],
+        "sma_50": [np.nan] * 20,
+        "sma_150": [np.nan] * 20,
+        "sma_200": [np.nan] * 20,
+        "high_20d": [max(closes)] * 20,
+        "high_50d": [np.nan] * 20,
+        "high_252d": [np.nan] * 20,
+        "vol_sma_50": [np.nan] * 20,       # NaN because < 50 sessions
+        "high_52w_incl": [np.nan] * 20,    # NaN
+        "ret_1d": [np.nan] + [0.01] * 18 + [np.nan],  # today ret_1d is NaN
+        "atr_pct": [0.03] * 20,
+        "stage_2": [1] * 20,
+    })
+
+    fake_conn = MagicMock()
+    fake_cursor = MagicMock()
+    fake_conn.cursor.return_value.__enter__.return_value = fake_cursor
+
+    res = run_screeners(df, target_date=dates[-1], conn=fake_conn)
+    assert res is not None
+
+    # Inspect the rows passed to execute_values
+    inserted_args = fake_cursor.execute.call_args_list or []
+    # Verify no row has vol_ratio > 100
+    for call_args in fake_cursor.method_calls:
+        if "execute_values" in str(call_args):
+            for row_tuple in call_args[1][1]:
+                # vol_ratio is index 6
+                vr = row_tuple[6]
+                if vr is not None:
+                    assert vr < 100.0, f"vol_ratio should not be fabricated raw volume: {vr}"
+                # ret_1d_pct is index 5
+                ret = row_tuple[5]
+                # pct_from_52w_high is index 7
+                pct_52w = row_tuple[7]
+                assert ret is None or isinstance(ret, (int, float))
+                assert pct_52w is None or isinstance(pct_52w, (int, float))
+

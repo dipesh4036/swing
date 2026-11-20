@@ -567,7 +567,10 @@ export default function ScreenerPage() {
                           ? `${row.ret_1d_pct > 0 ? "+" : ""}${row.ret_1d_pct}%`
                           : "—"}
                       </span>
-                      <span className="text-text-secondary">
+                      <span
+                        title={row.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}
+                        className="text-text-secondary cursor-help"
+                      >
                         Vol {row.vol_ratio !== null && row.vol_ratio !== undefined ? `${row.vol_ratio}x` : "—"}
                       </span>
                     </div>

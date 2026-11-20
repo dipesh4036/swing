@@ -289,10 +289,11 @@ def eval_stage2_breakout(row: pd.Series, hist: pd.DataFrame, params: dict = SCRE
         b_high = float(b_row["high"])
         b_low = float(b_row["low"])
         b_vol = float(b_row["volume"])
-        b_vol_sma_50 = float(b_row["vol_sma_50"]) if pd.notna(b_row.get("vol_sma_50")) else 1.0
+        b_vol_sma_50 = float(b_row["vol_sma_50"]) if pd.notna(b_row.get("vol_sma_50")) and float(b_row["vol_sma_50"]) > 0 else None
         b_pivot = float(b_row["high_20d"]) if pd.notna(b_row.get("high_20d")) else None
 
-        if not (b_pivot and b_high > b_low):
+        # S1: Never substitute 1.0 for NaN vol_sma_50
+        if not (b_pivot and b_high > b_low and b_vol_sma_50):
             continue
 
         # Volume expansion on breakout day
@@ -312,7 +313,7 @@ def eval_stage2_breakout(row: pd.Series, hist: pd.DataFrame, params: dict = SCRE
             continue
 
         b_date = str(b_row["trade_date"])
-        vol_ratio = round(b_vol / max(1.0, b_vol_sma_50), 2)
+        vol_ratio = round(b_vol / b_vol_sma_50, 2)
         matched_breakout = {
             "days_ago": days_ago,
             "b_date": b_date,
@@ -378,10 +379,11 @@ def eval_vcp(row: pd.Series, hist: pd.DataFrame, params: dict = SCREENER_PARAMS)
         return None
 
     # Optional volume dry-up
+    # S1: Never substitute 1.0 for NaN vol_sma_50
     if p_vcp.get("require_volume_dryup", False):
         vol_avg_10 = float(row["vol_avg_10"]) if pd.notna(row.get("vol_avg_10")) else None
-        vol_sma_50 = float(row["vol_sma_50"]) if pd.notna(row.get("vol_sma_50")) else 1.0
-        if not vol_avg_10 or vol_avg_10 > 0.85 * vol_sma_50:
+        vol_sma_50 = float(row["vol_sma_50"]) if pd.notna(row.get("vol_sma_50")) and float(row["vol_sma_50"]) > 0 else None
+        if not vol_avg_10 or not vol_sma_50 or vol_avg_10 > 0.85 * vol_sma_50:
             return None
 
     # Slice last 120 sessions for zigzag swing analysis
@@ -655,7 +657,10 @@ def eval_ema50_pullback(row: pd.Series, hist: pd.DataFrame, params: dict = SCREE
         return None
 
     # Quiet month:
-    vol_sma_50 = float(row["vol_sma_50"]) if pd.notna(row.get("vol_sma_50")) else 1.0
+    # S1: Never substitute 1.0 for NaN vol_sma_50
+    vol_sma_50 = float(row["vol_sma_50"]) if pd.notna(row.get("vol_sma_50")) and float(row["vol_sma_50"]) > 0 else None
+    if not vol_sma_50:
+        return None
     last_21 = hist.iloc[-21:]
     last_63 = hist.iloc[-63:]
     avg_vol_21 = float(last_21["volume"].mean())
@@ -771,12 +776,37 @@ def run_screeners(
             "ema50_pullback": [],
         }
 
-        def make_candidate_record(row, result_dict, in_n500):
+        def make_candidate_record(row, result_dict, in_n500, stock_up_to_today=None):
             vol = float(row["volume"])
-            vol_sma_50 = float(row["vol_sma_50"]) if pd.notna(row.get("vol_sma_50")) else 1.0
-            high_52w = float(row["high_52w_incl"]) if pd.notna(row.get("high_52w_incl")) else float(row["close"])
-            pct_52w = round((float(row["close"]) - high_52w) / high_52w * 100, 2)
-            ret_1d = round(float(row["ret_1d"]) * 100, 2) if pd.notna(row.get("ret_1d")) else 0.0
+            vol_sma_50 = float(row["vol_sma_50"]) if pd.notna(row.get("vol_sma_50")) and float(row["vol_sma_50"]) > 0 else None
+
+            # S1: vol_ratio = volume / vol_sma_50 only when vol_sma_50 is valid and > 0, else None
+            vol_ratio = None
+            vol_ratio_basis = None
+            if vol_sma_50 is not None:
+                vol_ratio = round(vol / vol_sma_50, 2)
+            elif result_dict.get("screener") == "ipo_base" and stock_up_to_today is not None and len(stock_up_to_today) > 1:
+                # IPO base only: compute vol_ratio against mean volume of available sessions before today
+                prior_sessions = stock_up_to_today.iloc[:-1]
+                mean_vol = float(prior_sessions["volume"].mean())
+                if mean_vol > 0:
+                    vol_ratio = round(vol / mean_vol, 2)
+                    vol_ratio_basis = "listing_avg"
+
+            # S1: pct_from_52w_high = None when high_52w is NaN or <= 0
+            high_52w = float(row["high_52w_incl"]) if pd.notna(row.get("high_52w_incl")) and float(row["high_52w_incl"]) > 0 else None
+            pct_52w = round((float(row["close"]) - high_52w) / high_52w * 100, 2) if high_52w is not None else None
+
+            # S1: ret_1d_pct = None when ret_1d is NaN
+            ret_1d = round(float(row["ret_1d"]) * 100, 2) if pd.notna(row.get("ret_1d")) else None
+
+            extra = {
+                "overlay": result_dict["overlay"],
+                "sort_key": result_dict["sort_key"],
+                "days_ago": result_dict.get("days_ago", 0)
+            }
+            if vol_ratio_basis:
+                extra["vol_ratio_basis"] = vol_ratio_basis
 
             return {
                 "trade_date": target_date_val,
@@ -785,18 +815,14 @@ def run_screeners(
                 "symbol": str(row["symbol"]),
                 "close": round(float(row["close"]), 2),
                 "ret_1d_pct": ret_1d,
-                "vol_ratio": round(vol / max(1.0, vol_sma_50), 2),
+                "vol_ratio": vol_ratio,
                 "pct_from_52w_high": pct_52w,
                 "pivot": result_dict["pivot"],
                 "dist_to_pivot_pct": result_dict["dist_to_pivot_pct"],
                 "rs_rank": int(row["rs_rank"]) if pd.notna(row.get("rs_rank")) else None,
                 "stage": int(row.get("stage_2", 0)),
                 "in_nifty500": in_n500,
-                "extra": {
-                    "overlay": result_dict["overlay"],
-                    "sort_key": result_dict["sort_key"],
-                    "days_ago": result_dict.get("days_ago", 0)
-                }
+                "extra": extra
             }
 
         # 5. Evaluate all stocks across all screeners
@@ -811,31 +837,31 @@ def run_screeners(
             # 5.1 Stage 2 Breakout
             res_s2 = eval_stage2_breakout(row, stock_up_to_today, SCREENER_PARAMS)
             if res_s2:
-                screener_candidates["stage2_breakout"].append(make_candidate_record(row, res_s2, in_nifty500))
+                screener_candidates["stage2_breakout"].append(make_candidate_record(row, res_s2, in_nifty500, stock_up_to_today))
 
             # 5.2 VCP
             res_vcp = eval_vcp(row, stock_up_to_today, SCREENER_PARAMS)
             if res_vcp:
-                screener_candidates["vcp"].append(make_candidate_record(row, res_vcp, in_nifty500))
+                screener_candidates["vcp"].append(make_candidate_record(row, res_vcp, in_nifty500, stock_up_to_today))
 
             # 5.3 Near Pivot
             res_np = eval_near_pivot(row, stock_up_to_today, SCREENER_PARAMS)
             if res_np:
-                screener_candidates["near_pivot"].append(make_candidate_record(row, res_np, in_nifty500))
+                screener_candidates["near_pivot"].append(make_candidate_record(row, res_np, in_nifty500, stock_up_to_today))
 
             # 5.4 IPO Base
             res_ipo = eval_ipo_base(row, stock_up_to_today, earliest_cutoff_date, SCREENER_PARAMS)
             if res_ipo:
-                screener_candidates["ipo_base"].append(make_candidate_record(row, res_ipo, in_nifty500))
+                screener_candidates["ipo_base"].append(make_candidate_record(row, res_ipo, in_nifty500, stock_up_to_today))
 
             # 5.5 50 EMA Pullback
             res_pb = eval_ema50_pullback(row, stock_up_to_today, SCREENER_PARAMS)
             if res_pb:
-                screener_candidates["ema50_pullback"].append(make_candidate_record(row, res_pb, in_nifty500))
+                screener_candidates["ema50_pullback"].append(make_candidate_record(row, res_pb, in_nifty500, stock_up_to_today))
 
         # 6. Sort candidates per spec rules
-        # stage2_breakout: days_ago asc, vol_ratio desc
-        screener_candidates["stage2_breakout"].sort(key=lambda x: (x["extra"]["days_ago"], -x["vol_ratio"]))
+        # stage2_breakout: days_ago asc, vol_ratio desc (nulls last)
+        screener_candidates["stage2_breakout"].sort(key=lambda x: (x["extra"]["days_ago"], -(x["vol_ratio"] if x["vol_ratio"] is not None else -1e9)))
         # vcp: last contraction depth asc
         screener_candidates["vcp"].sort(key=lambda x: x["extra"]["sort_key"], reverse=False)
         # near_pivot: dist_to_pivot asc
