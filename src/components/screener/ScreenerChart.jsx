@@ -522,6 +522,15 @@ export default function ScreenerChart({
             >
               <ExternalLink size={13} />
             </a>
+            <a
+              href={`https://tapetide.com/stocks/${encodeURIComponent(stockData.symbol)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-text-muted hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-bg-hover flex items-center gap-0.5"
+              title="Open fundamentals on Tapetide (external)"
+            >
+              <span>Fundamentals ↗</span>
+            </a>
           </div>
 
           {/* D / W Timeframe Toggle */}
