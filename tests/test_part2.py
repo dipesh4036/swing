@@ -87,6 +87,15 @@ def test_indicators_node_test_suite():
     assert "All Indicators Tests Passed Successfully!" in res.stdout
 
 
+def test_tapetide_node_test_suite():
+    """Execute Tapetide fundamentals node test suite."""
+    node_bin = shutil.which("node") or ("/opt/homebrew/bin/node" if Path("/opt/homebrew/bin/node").exists() else "node")
+    cmd = [node_bin, "tests/test_tapetide.mjs"]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    assert res.returncode == 0, f"Tapetide test failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+    assert "All Tapetide Tests Passed Successfully!" in res.stdout
+
+
 def test_no_highlight_lines_in_pipeline_screeners():
     """Verify highlight_lines key is removed from all pipeline screener overlays."""
     content = Path("pipeline/screeners.py").read_text()
