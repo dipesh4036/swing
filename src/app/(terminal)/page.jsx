@@ -135,6 +135,7 @@ export default function MarketBreadthDashboardPage() {
             history={history}
             performance={performance}
             rebasedSeries={rebasedSeries}
+            capSeries={data?.capSeries}
           />
 
           {/* Bottom Section: Indices Row */}

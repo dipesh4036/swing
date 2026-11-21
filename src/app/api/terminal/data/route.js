@@ -434,6 +434,21 @@ export async function GET(request) {
       benchmark: buildRebased(indexGroups["NIFTY 500"]),
     };
 
+    // 8b. Large / Mid / Small raw cap series for last 260 sessions (R17: independent of dashboard period)
+    const getCapSeries = (rows) => {
+      if (!rows || !Array.isArray(rows)) return [];
+      return rows.slice(-260).map((r) => ({
+        date: r.date,
+        close: r.close,
+      }));
+    };
+
+    const capSeries = {
+      large: getCapSeries(indexGroups["NIFTY 50"]),
+      mid: getCapSeries(indexGroups["NIFTY MIDCAP 150"]),
+      small: getCapSeries(indexGroups["NIFTY SMALLCAP 250"]),
+    };
+
     // 9. Market Regime & Spec 4.8 Read Indicators
     let readIndicators = null;
     if (latest.read_indicators) {
@@ -564,6 +579,7 @@ export async function GET(request) {
         institutionalFlows,
         performance,
         rebasedSeries,
+        capSeries,
       },
       {
         headers: {

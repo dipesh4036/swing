@@ -9,7 +9,7 @@ import LargeMidSmall from "./LargeMidSmall";
 import BreakoutsBreakdowns from "./BreakoutsBreakdowns";
 import ParticipationHistory from "./ParticipationHistory";
 
-export function MarketInternals({ keyMetrics, history = [], performance = {}, rebasedSeries = {} }) {
+export function MarketInternals({ keyMetrics, history = [], performance = {}, rebasedSeries = {}, capSeries = {} }) {
   return (
     <div className="space-y-3">
       {/* Section Header */}
@@ -29,7 +29,7 @@ export function MarketInternals({ keyMetrics, history = [], performance = {}, re
         <NewHighsLows keyMetrics={keyMetrics} history={history} />
         <AdvanceDecline keyMetrics={keyMetrics} history={history} />
         <FourPercentMovers keyMetrics={keyMetrics} history={history} />
-        <LargeMidSmall performance={performance} history={history} rebasedSeries={rebasedSeries} />
+        <LargeMidSmall performance={performance} history={history} rebasedSeries={rebasedSeries} capSeries={capSeries} />
         <BreakoutsBreakdowns keyMetrics={keyMetrics} history={history} />
         <ParticipationHistory keyMetrics={keyMetrics} history={history} />
       </div>

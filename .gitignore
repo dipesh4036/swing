@@ -40,5 +40,7 @@ raw_cache/
 docs/ANTIGRAVITY_*
 **/ANTIGRAVITY_*.md
 docs/newchanges.md
+docs/round*.md
+docs/round 3.md
 .agents/
 skills-lock.json

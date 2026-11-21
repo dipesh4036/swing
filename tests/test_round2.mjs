@@ -284,6 +284,174 @@ async function runTests() {
     assert.equal(computeAvgVol(candles20Valid), 50000, "20 valid volumes should average to 50,000");
   }
 
+  // -------------------------------------------------------------------------
+  // R17: Large · Mid · Small Independent capSeries & 1M/3M/YTD Periods
+  // -------------------------------------------------------------------------
+  console.log("8. Testing R17: LargeMidSmall capSeries independent 1M/3M/YTD slicing...");
+  {
+    // Generate 260 trading dates across 2025 and 2026 (e.g. 100 in 2025, 160 in 2026)
+    const dates = [];
+    for (let i = 0; i < 100; i++) {
+      const month = String(Math.floor(i / 10) + 1).padStart(2, "0");
+      const day = String((i % 28) + 1).padStart(2, "0");
+      dates.push(`2025-${month}-${day}`);
+    }
+    for (let i = 0; i < 160; i++) {
+      const month = String(Math.floor(i / 16) + 1).padStart(2, "0");
+      const day = String((i % 28) + 1).padStart(2, "0");
+      dates.push(`2026-${month}-${day}`);
+    }
+    // Ensure unique and sorted
+    const sortedDates = Array.from(new Set(dates)).sort();
+
+    // Large has 260 sessions with steady return
+    const largeSeries = sortedDates.map((d, i) => ({
+      date: d,
+      close: 20000 + i * 20, // 20000 up to ~25200
+    }));
+
+    // Mid has 260 sessions
+    const midSeries = sortedDates.map((d, i) => ({
+      date: d,
+      close: 15000 + i * 15,
+    }));
+
+    // Small has only 30 sessions (fewer than 63 needed for 3M)
+    const smallSeries = sortedDates.slice(-30).map((d, i) => ({
+      date: d,
+      close: 10000 + i * 10,
+    }));
+
+    const capSeries = {
+      large: largeSeries,
+      mid: midSeries,
+      small: smallSeries,
+    };
+
+    // Dashboard is on 1M period (rebasedSeries has only 21 sessions)
+    const rebasedSeries1M = {
+      large: largeSeries.slice(-21).map((r) => ({ date: r.date, rebased: 100, cumReturnPct: 0 })),
+      mid: midSeries.slice(-21).map((r) => ({ date: r.date, rebased: 100, cumReturnPct: 0 })),
+      small: smallSeries.slice(-21).map((r) => ({ date: r.date, rebased: 100, cumReturnPct: 0 })),
+    };
+
+    // Server performance calculation for 3M (63 sessions)
+    const curClose = largeSeries[largeSeries.length - 1].close;
+    const past63Close = largeSeries[largeSeries.length - 63].close;
+    const serverPerf3MLarge = Math.round(((curClose - past63Close) / past63Close) * 1000) / 10;
+
+    // Component simulation logic
+    const simulateLargeMidSmall = (cardPeriod, caps, rebased) => {
+      const lRows = caps?.large?.length ? caps.large : rebased?.large || [];
+      const mRows = caps?.mid?.length ? caps.mid : rebased?.mid || [];
+      const sRows = caps?.small?.length ? caps.small : rebased?.small || [];
+
+      const dSet = new Set();
+      lRows.forEach((r) => r.date && dSet.add(r.date));
+      mRows.forEach((r) => r.date && dSet.add(r.date));
+      sRows.forEach((r) => r.date && dSet.add(r.date));
+      const sDates = Array.from(dSet).sort();
+
+      let sliceD = [];
+      if (cardPeriod === "1M") {
+        if (sDates.length >= 21) sliceD = sDates.slice(-21);
+      } else if (cardPeriod === "3M") {
+        if (sDates.length >= 63) sliceD = sDates.slice(-63);
+      } else if (cardPeriod === "YTD") {
+        const latestD = sDates[sDates.length - 1];
+        const yr = latestD.split("-")[0];
+        sliceD = sDates.filter((d) => d.startsWith(yr));
+      }
+
+      const lMap = new Map(lRows.map((r) => [r.date, r]));
+      const mMap = new Map(mRows.map((r) => [r.date, r]));
+      const sMap = new Map(sRows.map((r) => [r.date, r]));
+
+      const reqCount = cardPeriod === "1M" ? 21 : cardPeriod === "3M" ? 63 : sliceD.length;
+      const countValid = (map) => {
+        let count = 0;
+        for (const d of sliceD) {
+          const row = map.get(d);
+          const val = row?.close ?? row?.rebased;
+          if (typeof val === "number" && !isNaN(val) && val > 0) count++;
+        }
+        return count;
+      };
+
+      const lAvail = reqCount > 0 && countValid(lMap) >= reqCount;
+      const mAvail = reqCount > 0 && countValid(mMap) >= reqCount;
+      const sAvail = reqCount > 0 && countValid(sMap) >= reqCount;
+
+      const getBase = (map) => {
+        for (const d of sliceD) {
+          const row = map.get(d);
+          const val = row?.close ?? row?.rebased;
+          if (typeof val === "number" && !isNaN(val) && val > 0) return val;
+        }
+        return null;
+      };
+
+      const lBase = lAvail ? getBase(lMap) : null;
+      const mBase = mAvail ? getBase(mMap) : null;
+      const sBase = sAvail ? getBase(sMap) : null;
+
+      const calcRet = (map, base, d) => {
+        if (!base) return null;
+        const row = map.get(d);
+        const val = row?.close ?? row?.rebased;
+        if (typeof val !== "number" || isNaN(val)) return null;
+        return Number((((val - base) / base) * 100).toFixed(2));
+      };
+
+      const chartD = sliceD.map((date) => ({
+        date,
+        large: lAvail ? calcRet(lMap, lBase, date) : null,
+        mid: mAvail ? calcRet(mMap, mBase, date) : null,
+        small: sAvail ? calcRet(sMap, sBase, date) : null,
+      }));
+
+      const lastD = sliceD[sliceD.length - 1];
+      return {
+        chartData: chartD,
+        sliceDates: sliceD,
+        availability: { large: lAvail, mid: mAvail, small: sAvail },
+        lastReturns: {
+          large: lAvail ? calcRet(lMap, lBase, lastD) : null,
+          mid: mAvail ? calcRet(mMap, mBase, lastD) : null,
+          small: sAvail ? calcRet(sMap, sBase, lastD) : null,
+        },
+      };
+    };
+
+    // Test 1: Dashboard period = 1M, Card period = 3M
+    const res3M = simulateLargeMidSmall("3M", capSeries, rebasedSeries1M);
+    assert.equal(res3M.chartData.length, 63, "Chart must have 63 points for 3M even when dashboard is on 1M");
+    assert.equal(res3M.availability.large, true);
+    assert.equal(res3M.availability.mid, true);
+    assert.equal(res3M.availability.small, false, "Smallcap with only 30 sessions must be hidden in 3M");
+    assert.equal(res3M.lastReturns.small, null, "Smallcap pill must be null ('—') in 3M");
+
+    // The last cumulative return of large must equal performance.large["3M"] (within ±0.05)
+    const lastLarge3M = res3M.lastReturns.large;
+    assert.ok(
+      Math.abs(lastLarge3M - serverPerf3MLarge) <= 0.05,
+      `Last cumulative return (${lastLarge3M}) must equal performance.large["3M"] (${serverPerf3MLarge}) within ±0.05`
+    );
+
+    // Test 2: YTD period uses year from data (2026), not browser clock
+    const resYTD = simulateLargeMidSmall("YTD", capSeries, rebasedSeries1M);
+    assert.ok(resYTD.sliceDates.length > 0);
+    assert.ok(
+      resYTD.sliceDates.every((d) => d.startsWith("2026")),
+      "YTD slice must strictly contain sessions from the current data year (2026)"
+    );
+
+    // Test 3: 1M period has 21 sessions
+    const res1M = simulateLargeMidSmall("1M", capSeries, rebasedSeries1M);
+    assert.equal(res1M.chartData.length, 21, "1M period must have 21 sessions");
+    assert.equal(res3M.chartData[res3M.chartData.length - 1].large, res3M.lastReturns.large, "Chart last point must equal pill value");
+  }
+
   console.log("All Round 2 Node Tests Passed Successfully!");
 }
 
