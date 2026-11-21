@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
   Layers,
@@ -123,54 +123,62 @@ export default function ScreenerPage() {
   }, []);
 
   // 1. Fetch Screener Candidate List with AbortController to guard against stale responses (R14)
-  useEffect(() => {
+  const listAbortControllerRef = useRef(null);
+
+  const fetchScreenerList = useCallback(async () => {
+    if (listAbortControllerRef.current) {
+      listAbortControllerRef.current.abort();
+    }
     const controller = new AbortController();
+    listAbortControllerRef.current = controller;
+
     setLoadingList(true);
     setListError(null);
 
-    async function loadList() {
-      try {
-        const res = await fetch(
-          `/api/terminal/screener?screener=${activeScreener}&universe=${universe}`,
-          { signal: controller.signal }
-        );
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || `HTTP error ${res.status}`);
-        }
-        const data = await res.json();
-        setScreenerData(data);
+    try {
+      const res = await fetch(
+        `/api/terminal/screener?screener=${activeScreener}&universe=${universe}`,
+        { signal: controller.signal }
+      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `HTTP error ${res.status}`);
+      }
+      const data = await res.json();
+      setScreenerData(data);
 
-        // Preserve currently selected stock if it exists in new list, else select first
-        if (data.rows && data.rows.length > 0) {
-          setSelectedStock((prev) => {
-            if (prev && data.rows.some((r) => r.token === prev.token)) {
-              return prev;
-            }
-            return data.rows[0];
-          });
-        } else {
-          setSelectedStock(null);
-          setChartData(null);
-        }
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Failed to load screener data:", err);
-          setListError(err.message || "Failed to load screener candidates");
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoadingList(false);
-        }
+      // Preserve currently selected stock if it exists in new list, else select first
+      if (data.rows && data.rows.length > 0) {
+        setSelectedStock((prev) => {
+          if (prev && data.rows.some((r) => r.token === prev.token)) {
+            return prev;
+          }
+          return data.rows[0];
+        });
+      } else {
+        setSelectedStock(null);
+        setChartData(null);
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Failed to load screener data:", err);
+        setListError(err.message || "Failed to load screener candidates");
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setLoadingList(false);
       }
     }
-
-    loadList();
-
-    return () => {
-      controller.abort();
-    };
   }, [activeScreener, universe]);
+
+  useEffect(() => {
+    fetchScreenerList();
+    return () => {
+      if (listAbortControllerRef.current) {
+        listAbortControllerRef.current.abort();
+      }
+    };
+  }, [fetchScreenerList]);
 
   // 2. Fetch Selected Stock Chart Data
   useEffect(() => {
@@ -218,7 +226,7 @@ export default function ScreenerPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedStock, activeScreener]);
+  }, [selectedStock, activeScreener, screenerData?.rows]);
 
   // Filter & Sort Candidate Rows
   const displayedRows = useMemo(() => {
