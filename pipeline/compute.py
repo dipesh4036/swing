@@ -652,6 +652,15 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
         conn.commit()
         logger.info(f"Successfully published {len(all_breadth_records)} rows to daily_market_breadth.")
 
+        # Compute sector breadth & equal-weight metrics (P3 - non-fatal)
+        try:
+            from pipeline.sectors import compute_sector_metrics
+            logger.info("Computing sector breadth metrics...")
+            sec_res = compute_sector_metrics(df_ind, conn=conn, publish_floor_date=publish_floor_date)
+            logger.info(f"Sector breadth computation finished: {sec_res.get('total_published')} rows published.")
+        except Exception as sce:
+            logger.error(f"Sector breadth computation encountered an error: {sce}", exc_info=True)
+
         # Trigger screener calculation for the latest trade date
         try:
             from pipeline.screeners import run_screeners
