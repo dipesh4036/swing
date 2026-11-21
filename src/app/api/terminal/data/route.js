@@ -434,7 +434,7 @@ export async function GET(request) {
       benchmark: buildRebased(indexGroups["NIFTY 500"]),
     };
 
-    // 8b. Large / Mid / Small raw cap series for last 260 sessions (R17: independent of dashboard period)
+    // 8b. Large / Mid / Small raw cap series for last 260 sessions (R17/R18: independent of dashboard period)
     const getCapSeries = (rows) => {
       if (!rows || !Array.isArray(rows)) return [];
       return rows.slice(-260).map((r) => ({
@@ -443,10 +443,18 @@ export async function GET(request) {
       }));
     };
 
+    const capPrevYearClose = {
+      large: prevYearCloses["NIFTY 50"] ?? null,
+      mid: prevYearCloses["NIFTY MIDCAP 150"] ?? null,
+      small: prevYearCloses["NIFTY SMALLCAP 250"] ?? null,
+    };
+
     const capSeries = {
       large: getCapSeries(indexGroups["NIFTY 50"]),
       mid: getCapSeries(indexGroups["NIFTY MIDCAP 150"]),
       small: getCapSeries(indexGroups["NIFTY SMALLCAP 250"]),
+      prevYearClose: capPrevYearClose,
+      prevYearCloses: capPrevYearClose,
     };
 
     // 9. Market Regime & Spec 4.8 Read Indicators

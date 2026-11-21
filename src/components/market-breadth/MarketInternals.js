@@ -29,7 +29,7 @@ export function MarketInternals({ keyMetrics, history = [], performance = {}, re
         <NewHighsLows keyMetrics={keyMetrics} history={history} />
         <AdvanceDecline keyMetrics={keyMetrics} history={history} />
         <FourPercentMovers keyMetrics={keyMetrics} history={history} />
-        <LargeMidSmall performance={performance} history={history} rebasedSeries={rebasedSeries} capSeries={capSeries} />
+        <LargeMidSmall history={history} rebasedSeries={rebasedSeries} capSeries={capSeries} />
         <BreakoutsBreakdowns keyMetrics={keyMetrics} history={history} />
         <ParticipationHistory keyMetrics={keyMetrics} history={history} />
       </div>

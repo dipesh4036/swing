@@ -6,7 +6,7 @@ import SegmentedControl from "@/components/ui/segmented-control";
 import ComparisonChart from "@/components/charts/ComparisonChart";
 import { formatShortDate } from "@/lib/formatters";
 
-export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries = {} }) {
+export function LargeMidSmall({ rebasedSeries = {}, capSeries = {} }) {
   const [period, setPeriod] = useState("3M");
 
   const PERIODS = [
@@ -17,10 +17,27 @@ export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries 
 
   // 1. Process capSeries (or fallback rebasedSeries) for the selected period slice
   const { chartData, activeSeries, lastReturns } = useMemo(() => {
-    // Prefer raw 260-session capSeries independent of dashboard period (R17)
-    const largeRows = capSeries?.large?.length ? capSeries.large : rebasedSeries?.large || [];
-    const midRows = capSeries?.mid?.length ? capSeries.mid : rebasedSeries?.mid || [];
-    const smallRows = capSeries?.small?.length ? capSeries.small : rebasedSeries?.small || [];
+    // Helper to extract series rows from either array or object wrapper
+    const getSeriesRows = (key) => {
+      const val = capSeries?.[key];
+      if (Array.isArray(val)) return val;
+      if (Array.isArray(val?.series)) return val.series;
+      if (Array.isArray(val?.rows)) return val.rows;
+      return rebasedSeries?.[key] || [];
+    };
+
+    // Helper to extract prevYearClose
+    const getPrevYearClose = (key) => {
+      const val = capSeries?.[key];
+      if (typeof val?.prevYearClose === "number") return val.prevYearClose;
+      if (typeof capSeries?.prevYearClose?.[key] === "number") return capSeries.prevYearClose[key];
+      if (typeof capSeries?.prevYearCloses?.[key] === "number") return capSeries.prevYearCloses[key];
+      return null;
+    };
+
+    const largeRows = getSeriesRows("large");
+    const midRows = getSeriesRows("mid");
+    const smallRows = getSeriesRows("small");
 
     // Collect unique dates across all available segments
     const dateSet = new Set();
@@ -37,22 +54,26 @@ export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries 
       };
     }
 
-    // Determine slice range for the chosen period
+    // Determine slice range for the chosen period (R18: N+1 sessions for 1M/3M, full current year for YTD)
     let sliceDates = [];
+    let requiredCount = 0;
+
     if (period === "1M") {
-      if (sortedDates.length >= 21) {
-        sliceDates = sortedDates.slice(-21);
+      requiredCount = 22; // 21 + 1 (base session 21 sessions ago)
+      if (sortedDates.length >= 22) {
+        sliceDates = sortedDates.slice(-22);
       }
     } else if (period === "3M") {
-      if (sortedDates.length >= 63) {
-        sliceDates = sortedDates.slice(-63);
+      requiredCount = 64; // 63 + 1 (base session 63 sessions ago)
+      if (sortedDates.length >= 64) {
+        sliceDates = sortedDates.slice(-64);
       }
     } else if (period === "YTD") {
       // Use session dates from the data, not the browser clock (R17)
       const latestDate = sortedDates[sortedDates.length - 1];
       const currentYear = latestDate.split("-")[0];
-      const ytdDates = sortedDates.filter((d) => d.startsWith(currentYear));
-      sliceDates = ytdDates;
+      sliceDates = sortedDates.filter((d) => d.startsWith(currentYear));
+      requiredCount = sliceDates.length;
     }
 
     if (sliceDates.length === 0) {
@@ -68,9 +89,6 @@ export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries 
     const midMap = new Map(midRows.map((r) => [r.date, r]));
     const smallMap = new Map(smallRows.map((r) => [r.date, r]));
 
-    // Required sessions check: if a series has fewer sessions than needed, hide it and show "—"
-    const requiredSessions = period === "1M" ? 21 : period === "3M" ? 63 : sliceDates.length;
-
     const countValidSessions = (map) => {
       let count = 0;
       for (const d of sliceDates) {
@@ -83,25 +101,34 @@ export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries 
       return count;
     };
 
-    const isLargeValid = requiredSessions > 0 && countValidSessions(largeMap) >= requiredSessions;
-    const isMidValid = requiredSessions > 0 && countValidSessions(midMap) >= requiredSessions;
-    const isSmallValid = requiredSessions > 0 && countValidSessions(smallMap) >= requiredSessions;
-
-    // Find baseline (first valid session in slice) for each series
-    const getBaseVal = (map) => {
-      for (const d of sliceDates) {
-        const row = map.get(d);
-        const val = row?.close ?? row?.rebased;
-        if (typeof val === "number" && !isNaN(val) && val > 0) {
-          return val;
+    // Determine base value for return calculation
+    // 1M/3M: base is the first session in sliceDates (which is N sessions before last)
+    // YTD: base is prevYearClose from capSeries
+    const getBaseVal = (key, map) => {
+      if (period === "YTD") {
+        const prevClose = getPrevYearClose(key);
+        if (typeof prevClose === "number" && !isNaN(prevClose) && prevClose > 0) {
+          return prevClose;
         }
+        return null;
+      }
+      const baseDate = sliceDates[0];
+      const row = map.get(baseDate);
+      const val = row?.close ?? row?.rebased;
+      if (typeof val === "number" && !isNaN(val) && val > 0) {
+        return val;
       }
       return null;
     };
 
-    const largeBase = isLargeValid ? getBaseVal(largeMap) : null;
-    const midBase = isMidValid ? getBaseVal(midMap) : null;
-    const smallBase = isSmallValid ? getBaseVal(smallMap) : null;
+    const largeBase = getBaseVal("large", largeMap);
+    const midBase = getBaseVal("mid", midMap);
+    const smallBase = getBaseVal("small", smallMap);
+
+    // Validity check: series must have requiredCount valid sessions AND a valid base
+    const isLargeValid = requiredCount > 0 && countValidSessions(largeMap) >= requiredCount && largeBase !== null;
+    const isMidValid = requiredCount > 0 && countValidSessions(midMap) >= requiredCount && midBase !== null;
+    const isSmallValid = requiredCount > 0 && countValidSessions(smallMap) >= requiredCount && smallBase !== null;
 
     const calcReturn = (map, baseVal, date) => {
       if (!baseVal) return null;
@@ -122,17 +149,17 @@ export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries 
 
     // Active chart lines: if a series is missing or has fewer sessions than needed, exclude it
     const lines = [];
-    if (isLargeValid && largeBase !== null) {
+    if (isLargeValid) {
       lines.push({ key: "large", name: "Large", color: "#2563EB", strokeWidth: 1.75 });
     }
-    if (isMidValid && midBase !== null) {
+    if (isMidValid) {
       lines.push({ key: "mid", name: "Mid", color: "#F97316", strokeWidth: 1.5 });
     }
-    if (isSmallValid && smallBase !== null) {
+    if (isSmallValid) {
       lines.push({ key: "small", name: "Small", color: "#16A878", strokeWidth: 1.25 });
     }
 
-    // Pills must come from the same slice so the chart's last point equals the pill value (R17)
+    // Pills must come from the same slice so the chart's last point equals the pill value (R17/R18)
     const lastDate = sliceDates[sliceDates.length - 1];
     const lastLarge = isLargeValid ? calcReturn(largeMap, largeBase, lastDate) : null;
     const lastMid = isMidValid ? calcReturn(midMap, midBase, lastDate) : null;
@@ -196,37 +223,28 @@ export function LargeMidSmall({ performance = {}, rebasedSeries = {}, capSeries 
           {segmentStats.map((seg) => (
             <span
               key={seg.id}
-              className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums"
+              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-mono"
+              style={{
+                backgroundColor: `${seg.color}15`,
+                color: seg.color,
+              }}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: seg.color }}
-              />
-              <span className="text-text-secondary">{seg.label}:</span>
-              <span
-                className={
-                  seg.pct === null
-                    ? "text-text-secondary"
-                    : seg.pct >= 0
-                    ? "text-bullish"
-                    : "text-bearish"
-                }
-              >
-                {seg.pct !== null ? `${seg.pct >= 0 ? "+" : ""}${seg.pct.toFixed(1)}%` : "—"}
-              </span>
+              <span className="font-sans mr-1">{seg.label}</span>
+              {seg.pct !== null ? `${seg.pct >= 0 ? "+" : ""}${seg.pct.toFixed(1)}%` : "—"}
             </span>
           ))}
         </div>
-        <span className="text-[10px] sm:text-[11px] font-medium text-text shrink-0 pl-1">{leaderText}</span>
+        <div className="text-xs font-semibold text-text truncate">{leaderText}</div>
       </div>
 
-      {/* Comparison Chart */}
-      <ComparisonChart
-        data={chartData}
-        xKey="date"
-        series={activeSeries}
-        height={145}
-      />
+      {/* Comparison Line Chart */}
+      <div className="pt-1 w-full min-w-0">
+        <ComparisonChart
+          data={chartData}
+          series={activeSeries}
+          height={140}
+        />
+      </div>
     </BaseCard>
   );
 }
