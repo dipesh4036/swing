@@ -112,29 +112,45 @@ function getSmartApiHeaders(jwtToken = null) {
 }
 
 /**
- * Single-flight in-memory session cache
+ * Single-flight in-memory session cache & negative backoff
  */
 let sessionCache = {
   jwtToken: null,
   expiresAt: 0,
 };
 let loginPromise = null;
+let loginFailureCount = 0;
+let loginNegativeCacheUntil = 0;
 
 export function invalidateSmartApiSession() {
   sessionCache = { jwtToken: null, expiresAt: 0 };
+}
+
+export function resetLoginFailureState() {
+  loginFailureCount = 0;
+  loginNegativeCacheUntil = 0;
+}
+
+export function getLoginFailureState() {
+  return { loginFailureCount, loginNegativeCacheUntil };
 }
 
 /**
  * Authenticates with Angel One SmartAPI and returns a valid jwtToken
  * Concurrent requests share one in-flight login promise.
  */
-async function getSmartApiToken() {
+export async function getSmartApiToken() {
   const apiKey = process.env.API_KEY;
   const clientId = process.env.CLIENT_ID;
   const pin = process.env.PIN;
   const totpSecret = process.env.TOTP_SECRET;
 
   if (!apiKey || !clientId || !pin || !totpSecret) {
+    return null;
+  }
+
+  // If negative cache is active after failure, return null immediately
+  if (Date.now() < loginNegativeCacheUntil) {
     return null;
   }
 
@@ -178,10 +194,23 @@ async function getSmartApiToken() {
           jwtToken: data.data.jwtToken,
           expiresAt: Date.now() + 12 * 3600 * 1000,
         };
+        loginFailureCount = 0;
+        loginNegativeCacheUntil = 0;
         return sessionCache.jwtToken;
       }
+
+      // Record failure & negative cache (60s, or 300s after 3 failures)
+      // Never log request body or data containing credentials
+      loginFailureCount++;
+      const backoffSec = loginFailureCount >= 3 ? 300 : 60;
+      loginNegativeCacheUntil = Date.now() + backoffSec * 1000;
+      console.warn(`SmartAPI login failed (count ${loginFailureCount}). Backing off for ${backoffSec}s.`);
       return null;
     } catch {
+      loginFailureCount++;
+      const backoffSec = loginFailureCount >= 3 ? 300 : 60;
+      loginNegativeCacheUntil = Date.now() + backoffSec * 1000;
+      console.warn(`SmartAPI login error (count ${loginFailureCount}). Backing off for ${backoffSec}s.`);
       return null;
     } finally {
       releaseSlot();

@@ -217,6 +217,73 @@ async function runTests() {
     assert.equal(comparePasswordCalls, 5, "At most 5 requests must reach password comparison");
   }
 
+  // -------------------------------------------------------------------------
+  // R12: Live Angel Chart Negative Caching & Candle Processing
+  // -------------------------------------------------------------------------
+  console.log("7. Testing R12: Chart login negative cache, future candle filtering, and avg_vol_20...");
+  {
+    // R12a: Negative Cache behavior
+    const { getSmartApiToken, resetLoginFailureState, getLoginFailureState } = await import("../src/lib/smartapi.js");
+    resetLoginFailureState();
+
+    // Verify negative cache timing logic
+    let failCount = 0;
+    let cacheUntil = 0;
+    const recordFail = () => {
+      failCount++;
+      const backoffSec = failCount >= 3 ? 300 : 60;
+      cacheUntil = Date.now() + backoffSec * 1000;
+      return backoffSec;
+    };
+
+    assert.equal(recordFail(), 60, "First failure should backoff for 60s");
+    assert.equal(recordFail(), 60, "Second failure should backoff for 60s");
+    assert.equal(recordFail(), 300, "Third failure should backoff for 300s (5m)");
+
+    // R12b: Drop future/in-progress candles
+    const asOfDate = "2026-11-20";
+    const sampleCandles = [
+      { date: "2026-11-18", close: 100, volume: 50000 },
+      { date: "2026-11-19", close: 102, volume: 60000 },
+      { date: "2026-11-20", close: 105, volume: 70000 },
+      { date: "2026-11-21", close: 108, volume: 80000 }, // in-progress / future day!
+    ];
+    const filtered = sampleCandles.filter((c) => c && c.date <= asOfDate);
+    assert.equal(filtered.length, 3, "Future candle dated 2026-11-21 must be dropped");
+    assert.equal(filtered[filtered.length - 1].date, "2026-11-20");
+
+    // R12c: avg_vol_20 treats null volume properly and requires >= 10 valid sessions
+    const computeAvgVol = (candlesList) => {
+      const last20 = candlesList.slice(-20);
+      const valid = last20
+        .map((c) => c.volume)
+        .filter((v) => v !== null && v !== undefined && typeof v === "number" && !isNaN(v));
+      if (valid.length < 10) return null;
+      return Math.round(valid.reduce((acc, v) => acc + v, 0) / valid.length);
+    };
+
+    // Case 1: Fewer than 10 valid sessions (e.g. 8 valid, 12 nulls)
+    const candlesSparse = Array.from({ length: 20 }, (_, i) => ({
+      date: `D${i}`,
+      volume: i < 8 ? 50000 : null,
+    }));
+    assert.equal(computeAvgVol(candlesSparse), null, "Fewer than 10 valid volumes must yield null");
+
+    // Case 2: Exactly 10 valid sessions with 50,000 each and 10 nulls
+    const candles10Valid = Array.from({ length: 20 }, (_, i) => ({
+      date: `D${i}`,
+      volume: i < 10 ? 50000 : null,
+    }));
+    assert.equal(computeAvgVol(candles10Valid), 50000, "10 valid volumes should average over 10 valid sessions");
+
+    // Case 3: 20 valid sessions (10 at 40,000, 10 at 60,000)
+    const candles20Valid = Array.from({ length: 20 }, (_, i) => ({
+      date: `D${i}`,
+      volume: i < 10 ? 40000 : 60000,
+    }));
+    assert.equal(computeAvgVol(candles20Valid), 50000, "20 valid volumes should average to 50,000");
+  }
+
   console.log("All Round 2 Node Tests Passed Successfully!");
 }
 

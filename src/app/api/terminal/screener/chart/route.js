@@ -87,7 +87,10 @@ export async function GET(request) {
       }));
     }
 
-    // 4. Attach EMAs (10, 20, 50, 200) using shared indicators helper
+    // 4. Drop any in-progress/future candles after stockRow.trade_date (R12b)
+    rawCandles = rawCandles.filter((c) => c && c.date <= asOfStr);
+
+    // Attach EMAs (10, 20, 50, 200) using shared indicators helper
     const candles = attachEMAs(rawCandles, [10, 20, 50, 200]);
 
     // 5. Compute 1M & 3M returns and 20-session average volume from candles
@@ -112,13 +115,15 @@ export async function GET(request) {
       }
     }
 
-    if (n >= 20) {
-      const last20 = candles.slice(-20);
-      const sumVol = last20.reduce((acc, c) => acc + (c.volume || 0), 0);
-      avgVol20 = Math.round(sumVol / 20);
-    } else if (n > 0) {
-      const sumVol = candles.reduce((acc, c) => acc + (c.volume || 0), 0);
-      avgVol20 = Math.round(sumVol / n);
+    // Compute average over last up to 20 non-null volumes only, returning null if fewer than 10 valid values (R12c)
+    const last20Candles = candles.slice(-20);
+    const validVolumes = last20Candles
+      .map((c) => c.volume)
+      .filter((v) => v !== null && v !== undefined && typeof v === "number" && !isNaN(v));
+
+    if (validVolumes.length >= 10) {
+      const sumVol = validVolumes.reduce((acc, v) => acc + v, 0);
+      avgVol20 = Math.round(sumVol / validVolumes.length);
     }
 
     const overlay = stockRow.extra?.overlay || null;
