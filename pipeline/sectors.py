@@ -354,7 +354,7 @@ def compute_sector_metrics(
             return {"total_published": 0, "status": "no_liquid_constituents"}
 
         # 3. Compute per-stock rolling returns (5d=1w, 22d=1m, 64d=3m) in percentage
-        df_sec.sort_values(by=["symbol", "trade_date"], inplace=True)
+        df_sec = df_sec.sort_values(by=["symbol", "trade_date"])
         df_sec["ret_5d"] = df_sec.groupby("symbol")["close"].transform(lambda s: (s - s.shift(5)) / s.shift(5) * 100.0)
         df_sec["ret_22d"] = df_sec.groupby("symbol")["close"].transform(lambda s: (s - s.shift(22)) / s.shift(22) * 100.0)
         df_sec["ret_64d"] = df_sec.groupby("symbol")["close"].transform(lambda s: (s - s.shift(64)) / s.shift(64) * 100.0)
