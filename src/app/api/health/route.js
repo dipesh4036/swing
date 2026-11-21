@@ -10,18 +10,29 @@ async function sendTelegramAlert(text) {
   }
   try {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const cleanText = `[Pipeline Alert] ${String(text || "").trim()}`.slice(0, 3500);
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text,
-        parse_mode: "Markdown",
+        text: cleanText,
       }),
     });
-    return res.ok;
+    if (!res.ok) {
+      let desc = "";
+      try {
+        const errJson = await res.json();
+        desc = errJson?.description || "";
+      } catch (_) {
+        desc = res.statusText;
+      }
+      console.error(`Telegram alert failed: status=${res.status}, description=${desc}`);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.error("Failed to send Telegram alert from health check:", err);
+    console.error("Failed to send Telegram alert from health check:", err?.message || err);
     return false;
   }
 }
@@ -88,11 +99,13 @@ export async function GET(request) {
       }
     }
 
-    // Check GitHub repo inactivity (GitHub Actions pauses scheduled runs after 60 days without commits)
+    // Check GitHub repo inactivity (GitHub Actions pauses scheduled runs after 60 days without commits - R4)
     let commitDaysOld = null;
     let commitWarning = null;
+    let githubCheck = "ok";
     try {
       const repo = process.env.GITHUB_REPO || "dipesh4036/swing";
+      const branch = process.env.GITHUB_BRANCH || "v1";
       const ghHeaders = {
         "User-Agent": "MarketBreadth-HealthCheck",
         Accept: "application/vnd.github+json",
@@ -100,7 +113,7 @@ export async function GET(request) {
       if (process.env.GITHUB_TOKEN) {
         ghHeaders["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
       }
-      const ghRes = await fetch(`https://api.github.com/repos/${repo}/commits/main`, {
+      const ghRes = await fetch(`https://api.github.com/repos/${repo}/commits/${encodeURIComponent(branch)}`, {
         headers: ghHeaders,
       });
       if (ghRes.ok) {
@@ -116,13 +129,17 @@ export async function GET(request) {
             failureReasons.push(commitWarning);
           }
         }
+      } else {
+        githubCheck = "unavailable";
+        console.warn(`Could not check commit inactivity via GitHub API: status=${ghRes.status}`);
       }
     } catch (ghErr) {
+      githubCheck = "unavailable";
       console.warn("Could not check commit inactivity via GitHub API:", ghErr.message);
     }
 
     let alertSent = false;
-    // 4. Send Telegram alert at most once per calendar day
+    // 4. Send Telegram alert at most once per calendar day (R3: plain text)
     if (isDegraded) {
       // Ensure health_alerts table exists
       await queryWithRetry(`
@@ -138,7 +155,7 @@ export async function GET(request) {
       );
 
       if (alreadyAlerted.rows.length === 0) {
-        const alertMsg = `⚠️ *Market Breadth Pipeline Health Alert*\n\n${failureReasons.map((r) => `• ${r}`).join("\n\n")}`;
+        const alertMsg = failureReasons.map((r) => `• ${r}`).join("\n\n");
         const sent = await sendTelegramAlert(alertMsg);
         if (sent) {
           alertSent = true;
@@ -150,7 +167,7 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({
+    const resJson = {
       status: isDegraded ? "degraded" : "healthy",
       latestBreadthDate: latestDate,
       daysSinceLastBreadth: daysOld,
@@ -166,7 +183,12 @@ export async function GET(request) {
       issues: failureReasons,
       alertSentToday: alertSent,
       timestamp: new Date().toISOString(),
-    });
+    };
+    if (githubCheck !== "ok") {
+      resJson.githubCheck = "unavailable";
+    }
+
+    return NextResponse.json(resJson);
   } catch (error) {
     console.error("Health check error:", error);
     return NextResponse.json(

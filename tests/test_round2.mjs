@@ -132,6 +132,32 @@ async function runTests() {
   assert.equal(parseFlow(null), null, "null must parse to null");
   assert.equal(parseFlow(undefined), null, "undefined must parse to null");
 
+  // -------------------------------------------------------------------------
+  // R3 & R4: Telegram Plain Text & Health Check Branch Check
+  // -------------------------------------------------------------------------
+  console.log("5. Testing R3 & R4: Health route alert & GitHub branch check...");
+  const healthRouteSource = fs.readFileSync("src/app/api/health/route.js", "utf8");
+  assert.ok(
+    !healthRouteSource.includes('parse_mode: "Markdown"'),
+    "health/route.js must not send parse_mode: 'Markdown'"
+  );
+  assert.ok(
+    healthRouteSource.includes("[Pipeline Alert]"),
+    "health/route.js must prefix alerts with [Pipeline Alert]"
+  );
+  assert.ok(
+    !healthRouteSource.includes("commits/main"),
+    "health/route.js must not hardcode commits/main"
+  );
+  assert.ok(
+    healthRouteSource.includes("GITHUB_BRANCH || \"v1\""),
+    "health/route.js must default GITHUB_BRANCH to v1"
+  );
+  assert.ok(
+    healthRouteSource.includes('githubCheck = "unavailable"'),
+    "health/route.js must set githubCheck to unavailable on non-ok GitHub responses"
+  );
+
   console.log("All Round 2 Node Tests Passed Successfully!");
 }
 
