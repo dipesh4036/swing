@@ -565,6 +565,33 @@ async function runTests() {
     assert.equal(resJan1.chartData.length, 1);
     assert.equal(resJan1.chartData[0].large, 1.0, "First session of Jan must return true 1-day move (+1.0%), not 0.0%");
     assert.equal(resJan1.lastReturns.large, 1.0, "First session of Jan pill must return true 1-day move (+1.0%), not 0.0%");
+
+    // Test 6: R19 Segment pills color class logic
+    const getPillColorClass = (pct) => {
+      if (pct === null || pct === undefined) return "text-text-secondary";
+      return pct >= 0 ? "text-bullish" : "text-bearish";
+    };
+
+    assert.equal(getPillColorClass(-2.1), "text-bearish", "pct = -2.1 must use bearish class");
+    assert.equal(getPillColorClass(1.4), "text-bullish", "pct = +1.4 must use bullish class");
+    assert.equal(getPillColorClass(null), "text-text-secondary", "null must use neutral class");
+
+    // Verify LargeMidSmall.js source has removed the segment-color background tint
+    const lmsCode = fs.readFileSync("src/components/market-breadth/LargeMidSmall.js", "utf8");
+    assert.ok(!lmsCode.includes("${seg.color}15"), "LargeMidSmall must not use ${seg.color}15 background tint");
+    assert.ok(lmsCode.includes("text-bullish"), "LargeMidSmall must use text-bullish for positive returns");
+    assert.ok(lmsCode.includes("text-bearish"), "LargeMidSmall must use text-bearish for negative returns");
+
+    // Verify screener/page.jsx chart effect dependency does not include screenerData?.rows
+    const screenerCode = fs.readFileSync("src/app/(terminal)/screener/page.jsx", "utf8");
+    assert.ok(
+      screenerCode.includes("[selectedToken, activeScreener]"),
+      "screener/page.jsx chart effect must depend only on [selectedToken, activeScreener]"
+    );
+    assert.ok(
+      !screenerCode.includes("[selectedStock, activeScreener, screenerData?.rows]"),
+      "screener/page.jsx chart effect must not depend on screenerData?.rows"
+    );
   }
 
   console.log("All Round 2 Node Tests Passed Successfully!");

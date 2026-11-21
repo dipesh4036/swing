@@ -180,15 +180,22 @@ export default function ScreenerPage() {
     };
   }, [fetchScreenerList]);
 
+  // Keep latest screenerData.rows in a ref to guard without re-running chart fetch (R19)
+  const screenerRowsRef = useRef(null);
+  screenerRowsRef.current = screenerData?.rows;
+
+  const selectedToken = selectedStock?.token;
+
   // 2. Fetch Selected Stock Chart Data
   useEffect(() => {
-    if (!selectedStock) {
+    if (!selectedToken) {
       setChartData(null);
       return;
     }
 
     // Guard against race conditions when switching screener tabs or universes
-    if (screenerData?.rows && !screenerData.rows.some((r) => r.token === selectedStock.token)) {
+    const rows = screenerRowsRef.current;
+    if (rows && !rows.some((r) => r.token === selectedToken)) {
       return;
     }
 
@@ -199,7 +206,7 @@ export default function ScreenerPage() {
     async function loadChart() {
       try {
         const res = await fetch(
-          `/api/terminal/screener/chart?token=${selectedStock.token}&screener=${activeScreener}`,
+          `/api/terminal/screener/chart?token=${selectedToken}&screener=${activeScreener}`,
           { cache: "no-store" }
         );
         if (!res.ok) {
@@ -226,7 +233,7 @@ export default function ScreenerPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedStock, activeScreener, screenerData?.rows]);
+  }, [selectedToken, activeScreener]);
 
   // Filter & Sort Candidate Rows
   const displayedRows = useMemo(() => {

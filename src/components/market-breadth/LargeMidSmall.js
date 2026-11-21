@@ -223,18 +223,28 @@ export function LargeMidSmall({ rebasedSeries = {}, capSeries = {} }) {
           {segmentStats.map((seg) => (
             <span
               key={seg.id}
-              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-mono"
-              style={{
-                backgroundColor: `${seg.color}15`,
-                color: seg.color,
-              }}
+              className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums"
             >
-              <span className="font-sans mr-1">{seg.label}</span>
-              {seg.pct !== null ? `${seg.pct >= 0 ? "+" : ""}${seg.pct.toFixed(1)}%` : "—"}
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: seg.color }}
+              />
+              <span className="text-text-secondary">{seg.label}:</span>
+              <span
+                className={
+                  seg.pct === null
+                    ? "text-text-secondary"
+                    : seg.pct >= 0
+                    ? "text-bullish"
+                    : "text-bearish"
+                }
+              >
+                {seg.pct !== null ? `${seg.pct >= 0 ? "+" : ""}${seg.pct.toFixed(1)}%` : "—"}
+              </span>
             </span>
           ))}
         </div>
-        <div className="text-xs font-semibold text-text truncate">{leaderText}</div>
+        <span className="text-[10px] sm:text-[11px] font-medium text-text shrink-0 pl-1">{leaderText}</span>
       </div>
 
       {/* Comparison Line Chart */}
