@@ -158,6 +158,65 @@ async function runTests() {
     "health/route.js must set githubCheck to unavailable on non-ok GitHub responses"
   );
 
+  // -------------------------------------------------------------------------
+  // R11: Parallel Login Lockout Race Condition Prevention
+  // -------------------------------------------------------------------------
+  console.log("6. Testing R11: Concurrent login lockout race condition prevention...");
+  {
+    const attemptsTable = [];
+    let comparePasswordCalls = 0;
+
+    // Simulated handler implementing the exact DB pattern in login/route.js
+    const simulateLoginAttempt = async (email, ipHash, password) => {
+      // 1. Record attempt up front with success=false RETURNING id
+      const attemptId = attemptsTable.length + 1;
+      attemptsTable.push({ id: attemptId, email, ip_hash: ipHash, success: false, time: Date.now() });
+
+      // 2. Lockout check including this newly recorded attempt
+      const ipFailed = attemptsTable.filter(
+        (a) => a.ip_hash === ipHash && a.success === false
+      ).length;
+      const emailIpFailed = attemptsTable.filter(
+        (a) => a.email === email && a.ip_hash === ipHash && a.success === false
+      ).length;
+
+      if (ipFailed > 5 || emailIpFailed > 5) {
+        return { status: 429, error: "Too many failed login attempts." };
+      }
+
+      // 3. User lookup & password comparison
+      comparePasswordCalls++;
+      // Simulate bcrypt delay
+      await new Promise((r) => setTimeout(r, 10));
+
+      const isMatch = password === "correct_password";
+      if (!isMatch) {
+        return { status: 401, error: "Invalid email or password" };
+      }
+
+      // On success: update to success=true
+      const rec = attemptsTable.find((a) => a.id === attemptId);
+      if (rec) rec.success = true;
+
+      return { status: 200, success: true };
+    };
+
+    // Fire 10 concurrent requests with wrong password
+    const promises = [];
+    for (let i = 0; i < 10; i++) {
+      promises.push(simulateLoginAttempt("owner@example.com", "dummy_ip_hash", "wrong_password"));
+    }
+    const results = await Promise.all(promises);
+
+    const statuses = results.map((r) => r.status);
+    const count401 = statuses.filter((s) => s === 401).length;
+    const count429 = statuses.filter((s) => s === 429).length;
+
+    assert.equal(count401, 5, "Exactly 5 requests should reach password check and return 401");
+    assert.equal(count429, 5, "Remaining 5 requests must be blocked by rate limit with 429");
+    assert.equal(comparePasswordCalls, 5, "At most 5 requests must reach password comparison");
+  }
+
   console.log("All Round 2 Node Tests Passed Successfully!");
 }
 

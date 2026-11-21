@@ -124,6 +124,10 @@ node scripts/create-user.mjs owner@example.com
 - Pass `--replace` if you ever need to re-create or overwrite the existing owner account.
 - **Never commit passwords, tokens, or credentials to Git.**
 
+### Rate Limiting & Lockout
+- Failed login attempts are recorded prior to password verification (`INSERT ... success=false RETURNING id`) to prevent parallel brute-force race conditions (maximum 5 attempts per 15 minutes per IP or email+IP).
+- **Per-email lockout note**: An attacker attempting 20 failed logins for the owner's email from an unknown device/IP will trigger a 15-minute 429 lockout for that email on new/unknown IPs by design; previously authenticated IPs with known successful logins remain unaffected.
+
 ---
 
 ## ⚡ CLI Commands
