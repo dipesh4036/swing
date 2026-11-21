@@ -15,7 +15,7 @@ The terminal computes breadth across seven distinct universes:
 | `nifty100` | Nifty 100 | Official NSE Nifty 100 constituents |
 | `midcap150` | Nifty Midcap 150 | Official NSE Nifty Midcap 150 constituents |
 | `smallcap250` | Nifty Smallcap 250 | Official NSE Nifty Smallcap 250 constituents |
-| `liquid` | Liquid Equities | Prior 50-day average volume $\ge 25,000$ shares and close price $\ge ₹20$ |
+| `liquid` | Liquid Equities | Prior 50-day average volume $\ge 25,000$ shares and close price $\ge ₹20$ (strictly excludes stocks with $< 50$ sessions or missing 50-day SMA; single-day volume spikes do not enter) |
 | `all` | All Equities | All active, traded NSE equities with valid history |
 
 ### Point-in-Time Constituent Versioning
@@ -56,6 +56,13 @@ $$\% \text{ Above MA} = \frac{\sum [ \text{Close}_i > \text{MA}_i ]}{\text{Total
 
 ### Dynamic Cumulative A-D Line
 - Per spec 4.2, raw cumulative A-D line numbers are not permanently stored in the database. Instead, the API dynamically cumulates net advances $(\text{Advances} - \text{Declines})$ starting from $0$ at the first session of the requested view window (1M, 3M, or 1Y).
+
+### Zweig Breadth Thrust
+- **Mathematical Definition:** The 10-day exponential moving average (EMA) of advancing stocks divided by the sum of advancing and declining stocks:
+  $$\text{AdvRatio}_t = \frac{\text{Advances}_t}{\text{Advances}_t + \text{Declines}_t}$$
+  $$\text{ThrustEMA10}_t = \text{EMA}_{10}(\text{AdvRatio}_t)$$
+- **Trigger Condition:** A Zweig Breadth Thrust is triggered when the 10-day EMA rises above $0.615$ after having been below $0.40$ at any point within the preceding 10-session rolling window (including the current session):
+  $$\text{ThrustEMA10}_t > 0.615 \quad \text{AND} \quad \min_{k=0 \dots 9}(\text{ThrustEMA10}_{t-k}) < 0.40$$
 
 ---
 

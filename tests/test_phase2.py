@@ -192,26 +192,30 @@ def test_constituents_point_in_time_versioning():
     assert computed_dates == ["2024-03-27"]
 
 def test_liquid_universe_filtering():
-    """Verify liquid universe correctly includes stocks with close >= 20 and volume >= 25000."""
-    records = [
+    """Verify liquid universe correctly includes stocks with close >= 20 and vol_sma_50 >= 25000."""
+    records = []
+    # 60 sessions for 3 stocks (needs >= 51 sessions for 50-day rolling mean on shift(1))
+    for i in range(60):
         # Stock 1: close=50, vol=30000 -> Liquid
-        {"token": 1, "isin": "INE1", "symbol": "LIQUID_1", "series": "EQ", "trade_date": "2024-01-02", "open": 50, "high": 52, "low": 49, "close": 50, "volume": 30000, "turnover_cr_est": 0.15, "adj_factor": 1.0},
+        records.append({"token": 1, "isin": "INE1", "symbol": "LIQUID_1", "series": "EQ", "trade_date": f"2024-{(i//28)+1:02d}-{(i%28)+1:02d}", "open": 50, "high": 52, "low": 49, "close": 50, "volume": 30000, "turnover_cr_est": 0.15, "adj_factor": 1.0})
         # Stock 2: close=10 (< 20) -> Excluded
-        {"token": 2, "isin": "INE2", "symbol": "PENNY", "series": "EQ", "trade_date": "2024-01-02", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 50000, "turnover_cr_est": 0.05, "adj_factor": 1.0},
+        records.append({"token": 2, "isin": "INE2", "symbol": "PENNY", "series": "EQ", "trade_date": f"2024-{(i//28)+1:02d}-{(i%28)+1:02d}", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 50000, "turnover_cr_est": 0.05, "adj_factor": 1.0})
         # Stock 3: close=100, vol=5000 (< 25000) -> Excluded
-        {"token": 3, "isin": "INE3", "symbol": "ILLIQUID", "series": "EQ", "trade_date": "2024-01-02", "open": 100, "high": 101, "low": 99, "close": 100, "volume": 5000, "turnover_cr_est": 0.05, "adj_factor": 1.0},
-    ]
+        records.append({"token": 3, "isin": "INE3", "symbol": "ILLIQUID", "series": "EQ", "trade_date": f"2024-{(i//28)+1:02d}-{(i%28)+1:02d}", "open": 100, "high": 101, "low": 99, "close": 100, "volume": 5000, "turnover_cr_est": 0.05, "adj_factor": 1.0})
+
     df_raw = pd.DataFrame(records)
     df_ind = compute_stock_indicators(df_raw)
-    dist_days = pd.Series(0, index=["2024-01-02"])
+    last_date = df_raw["trade_date"].max()
+    dist_days = pd.Series(0, index=[last_date])
 
     breadth = compute_breadth_for_universe(
         df_ind=df_ind,
         universe="liquid",
         dist_days_series=dist_days
     )
-    assert len(breadth) == 1
-    assert breadth[0]["total_stocks"] == 1
+    assert len(breadth) >= 1
+    last_breadth = [b for b in breadth if b["trade_date"] == last_date][0]
+    assert last_breadth["total_stocks"] == 1
 
 # ==========================================
 # 4. SmartAPIClient Re-auth Cap & Skipping

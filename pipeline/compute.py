@@ -117,10 +117,17 @@ def compute_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     logger.info("Computing per-stock indicators with spec 4.6 & strict windows...")
     df = df.sort_values(by=["token", "trade_date"]).copy()
+    market_dates = sorted(df["trade_date"].unique())
+    date_to_idx = {d: i for i, d in enumerate(market_dates)}
+    df["date_idx"] = df["trade_date"].map(date_to_idx)
     grouped = df.groupby("token")
 
-    # 1. Previous close & 1-day return
-    df["prev_close"] = grouped["close"].shift(1)
+    # 1. Previous close & 1-day return (market calendar adjacency check)
+    is_adjacent_session = (df["date_idx"] - grouped["date_idx"].shift(1)) == 1
+    df["prev_close"] = grouped["close"].shift(1).where(is_adjacent_session, np.nan)
+    df = df.drop(columns=["date_idx"])
+    grouped = df.groupby("token")
+
     df["ret_1d"] = (df["close"] - df["prev_close"]) / df["prev_close"]
     df["advance"] = ((df["close"] > df["prev_close"]) & df["prev_close"].notna()).astype(int)
     df["decline"] = ((df["close"] < df["prev_close"]) & df["prev_close"].notna()).astype(int)
@@ -149,6 +156,7 @@ def compute_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     df["high_52w"] = grouped["high"].transform(lambda s: s.shift(1).rolling(252, min_periods=252).max())
     df["low_52w"] = grouped["low"].transform(lambda s: s.shift(1).rolling(252, min_periods=252).min())
+    df["has_valid_52w"] = df["high_52w"].notna().astype(int)
     df["is_high_52w"] = ((df["close"] >= df["high_52w"]) & df["high_52w"].notna()).astype(int)
     df["is_low_52w"] = ((df["close"] <= df["low_52w"]) & df["low_52w"].notna()).astype(int)
 
@@ -246,9 +254,9 @@ def compute_breadth_for_universe(
         return []
 
     if universe == "liquid":
-        # Liquid universe: close >= 20 and 50-day average volume >= 25,000 (or volume >= 25,000)
+        # Liquid universe: close >= 20 and prior 50-day average volume >= 25,000 (no OR, NaN excluded)
         vol_col = "vol_sma_50" if "vol_sma_50" in df_ind.columns else "volume"
-        df_sub = df_ind[(df_ind["close"] >= 20) & ((df_ind[vol_col] >= 25000) | (df_ind["volume"] >= 25000))].copy()
+        df_sub = df_ind[(df_ind["close"] >= 20) & (df_ind[vol_col] >= 25000) & df_ind[vol_col].notna()].copy()
     elif constituents_df is not None and not constituents_df.empty:
         # Point-in-time constituent filtering
         merged = pd.merge(df_ind, constituents_df[["symbol", "effective_from", "effective_to"]], on="symbol", how="inner")
@@ -279,6 +287,7 @@ def compute_breadth_for_universe(
         "count_above_200sma": grouped_date["above_200sma"].sum(),
         "highs_20d": grouped_date["is_high_20d"].sum(),
         "lows_20d": grouped_date["is_low_20d"].sum(),
+        "valid_52w": grouped_date["has_valid_52w"].sum() if "has_valid_52w" in df_sub.columns else 0,
         "highs_52w": grouped_date["is_high_52w"].sum(),
         "lows_52w": grouped_date["is_low_52w"].sum(),
         "valid_movers": grouped_date["mover_eligible"].sum(),
@@ -310,7 +319,7 @@ def compute_breadth_for_universe(
 
     # Spec 4.4: Highs & Lows net
     agg_df["net_highs_20d"] = agg_df["highs_20d"] - agg_df["lows_20d"]
-    agg_df["net_52w"] = agg_df["highs_52w"] - agg_df["lows_52w"]
+    agg_df["net_52w"] = np.where(agg_df["valid_52w"] > 0, agg_df["highs_52w"] - agg_df["lows_52w"], np.nan)
 
     # Spec 4.4b: 4% Movers percentage & ratios
     agg_df["pct_movers_up_4pct"] = np.where(agg_df["valid_movers"] > 0, (agg_df["movers_up"] / agg_df["valid_movers"]) * 100.0, np.nan)
@@ -335,7 +344,7 @@ def compute_breadth_for_universe(
     total_adv_dec = agg_df["advances"] + agg_df["declines"]
     adv_ratio_raw = np.where(total_adv_dec > 0, agg_df["advances"] / total_adv_dec, 0.5)
     thrust_ema = pd.Series(adv_ratio_raw, index=agg_df.index).ewm(span=10, adjust=False).mean()
-    agg_df["breadth_thrust"] = (thrust_ema > 0.615) & (thrust_ema.shift(10) < 0.40)
+    agg_df["breadth_thrust"] = (thrust_ema > 0.615) & (thrust_ema.rolling(10, min_periods=1).min() < 0.40)
 
     # Spec 4.8 Distribution Sessions (breadth-based: Nifty 500 chg <= -0.5% and declines >= 1.5 * advances)
     if dist_days_series is not None and not dist_days_series.empty:
@@ -363,13 +372,16 @@ def compute_breadth_for_universe(
             up_3 = bool(n_row["up_last_3"])
 
             b50 = row["pct_above_50sma"]
-            nh52 = int(row["net_52w"])
+            valid_52w = int(row["valid_52w"]) if "valid_52w" in row and pd.notna(row["valid_52w"]) else 0
+            h52 = int(row["highs_52w"]) if pd.notna(row["highs_52w"]) and valid_52w > 0 else None
+            l52 = int(row["lows_52w"]) if pd.notna(row["lows_52w"]) and valid_52w > 0 else None
+            nh52 = int(row["net_52w"]) if pd.notna(row["net_52w"]) and valid_52w > 0 else None
             dist10 = int(row["distribution_days"])
             ad20 = row["ad_ratio_20d"]
 
             # Regime (first match wins):
             if (n_sma50 and n_ema20 and n_close > n_sma50 and n_close > n_ema20 and
-                pd.notna(b50) and b50 >= 50 and nh52 > 0 and dist10 < 3):
+                pd.notna(b50) and b50 >= 50 and nh52 is not None and nh52 > 0 and dist10 < 3):
                 regime = "CONFIRMED_UPTREND"
             elif n_sma50 and n_close > n_sma50:
                 regime = "UPTREND_UNDER_PRESSURE"
@@ -415,9 +427,10 @@ def compute_breadth_for_universe(
             })
 
             # 5. highs_vs_lows: highs_52w > lows_52w Positive, < Negative, equal Neutral
-            h52 = int(row["highs_52w"])
-            l52 = int(row["lows_52w"])
-            hvl_status = "Positive" if h52 > l52 else ("Negative" if h52 < l52 else "Neutral")
+            if h52 is not None and l52 is not None:
+                hvl_status = "Positive" if h52 > l52 else ("Negative" if h52 < l52 else "Neutral")
+            else:
+                hvl_status = "Neutral"
             read_indicators.append({
                 "id": "highs_vs_lows",
                 "status": hvl_status,
@@ -435,6 +448,11 @@ def compute_breadth_for_universe(
                 "value": round(float(b50), 2) if pd.notna(b50) else None
             })
 
+        valid_52w_val = int(row["valid_52w"]) if "valid_52w" in row and pd.notna(row["valid_52w"]) else 0
+        h52_val = int(row["highs_52w"]) if pd.notna(row["highs_52w"]) and valid_52w_val > 0 else None
+        l52_val = int(row["lows_52w"]) if pd.notna(row["lows_52w"]) and valid_52w_val > 0 else None
+        nh52_val = int(row["net_52w"]) if pd.notna(row["net_52w"]) and valid_52w_val > 0 else None
+
         records.append({
             "trade_date": trade_date,
             "universe": universe,
@@ -451,9 +469,9 @@ def compute_breadth_for_universe(
             "highs_20d": int(row["highs_20d"]),
             "lows_20d": int(row["lows_20d"]),
             "net_highs_20d": int(row["net_highs_20d"]),
-            "highs_52w": int(row["highs_52w"]),
-            "lows_52w": int(row["lows_52w"]),
-            "net_52w": int(row["net_52w"]),
+            "highs_52w": h52_val,
+            "lows_52w": l52_val,
+            "net_52w": nh52_val,
             "pct_movers_up_4pct": round(float(row["pct_movers_up_4pct"]), 2) if pd.notna(row["pct_movers_up_4pct"]) else None,
             "pct_movers_down_4pct": round(float(row["pct_movers_down_4pct"]), 2) if pd.notna(row["pct_movers_down_4pct"]) else None,
             "movers_ratio_5d": round(float(row["movers_ratio_5d"]), 4) if pd.notna(row["movers_ratio_5d"]) else None,
@@ -526,7 +544,7 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
 
         # Spec 4.12 / 7: Publish breadth rows only for dates at least 252 sessions after history start
         all_trade_dates = sorted(df_ind["trade_date"].unique())
-        publish_floor_date = all_trade_dates[251] if len(all_trade_dates) >= 252 else all_trade_dates[0]
+        publish_floor_date = all_trade_dates[252] if len(all_trade_dates) >= 253 else all_trade_dates[0]
         logger.info(f"Publish floor date: {publish_floor_date} (sessions total: {len(all_trade_dates)}).")
 
         all_breadth_records = []
