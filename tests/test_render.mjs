@@ -140,8 +140,93 @@ const ScreenerPage = compileAndLoadComponent(
 assert.doesNotThrow(() => {
   const html = renderToString(React.createElement(ScreenerPage));
   assert.ok(typeof html === "string" && html.length > 0);
+  assert.ok(html.includes("All Stocks"), "ScreenerPage must contain 'All Stocks'");
+  assert.ok(html.includes("Chart View"), "ScreenerPage must contain 'Chart View' instead of Nifty 500");
 }, "ScreenerPage must render without throwing");
-console.log("✓ ScreenerPage rendered successfully");
+console.log("✓ ScreenerPage rendered successfully with 'All Stocks' and 'Chart View'");
+
+// -----------------------------------------------------------------------------
+// 3. ScreenerGrid Smoke Test
+// -----------------------------------------------------------------------------
+console.log("3. Testing ScreenerGrid renderToString...");
+
+const gridMockRequire = (id) => {
+  if (id === "react") return React;
+  if (id === "lightweight-charts") {
+    return {
+      createChart: () => ({
+        addSeries: () => ({ setData: () => {}, applyOptions: () => {} }),
+        priceScale: () => ({ applyOptions: () => {} }),
+        timeScale: () => ({ fitContent: () => {}, applyOptions: () => {} }),
+        applyOptions: () => {},
+        remove: () => {},
+      }),
+      CandlestickSeries: {},
+      LineSeries: {},
+      HistogramSeries: {},
+    };
+  }
+  if (id === "lucide-react") {
+    return {
+      ExternalLink: () => React.createElement("span", null, "[↗]"),
+    };
+  }
+  return {
+    default: mockComponent(id),
+    __esModule: true,
+  };
+};
+
+const ScreenerGridComponent = compileAndLoadComponent(
+  "src/components/screener/ScreenerGrid.jsx",
+  gridMockRequire
+);
+
+const sampleStocks = [
+  {
+    token: 101,
+    symbol: "TESTSTK1",
+    close: 450.5,
+    ret_1d_pct: 3.2,
+    rs_rank: 85,
+    vol_ratio: 2.1,
+    dist_to_pivot_pct: -0.015,
+  },
+  {
+    token: 102,
+    symbol: "TESTSTK2",
+    close: 1200.0,
+    ret_1d_pct: -1.5,
+    rs_rank: 72,
+    vol_ratio: 1.4,
+    stage: 2,
+  },
+];
+
+const sampleCandles = {
+  101: [
+    { date: "2026-11-18", open: 430, high: 440, low: 425, close: 435, volume: 10000, ema_10: 432 },
+    { date: "2026-11-19", open: 435, high: 452, low: 434, close: 450.5, volume: 25000, ema_10: 435 },
+  ],
+  102: [],
+};
+
+assert.doesNotThrow(() => {
+  const gridHtml = renderToString(
+    React.createElement(ScreenerGridComponent, {
+      stocks: sampleStocks,
+      candlesByToken: sampleCandles,
+      loading: false,
+      activeScreener: "stage2_breakout",
+      onSelectStock: () => {},
+    })
+  );
+  assert.ok(typeof gridHtml === "string" && gridHtml.length > 0);
+  assert.ok(gridHtml.includes("TESTSTK1"));
+  assert.ok(gridHtml.includes("TESTSTK2"));
+  assert.ok(gridHtml.includes("Chart View (Fast Scan)"));
+}, "ScreenerGrid must render candidate stock cards without throwing");
+console.log("✓ ScreenerGrid rendered successfully with fast scan candidate cards");
 
 // Restore fetch
 globalThis.fetch = originalFetch;

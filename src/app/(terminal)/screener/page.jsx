@@ -27,6 +27,20 @@ const ScreenerChart = dynamic(
   }
 );
 
+// Load grid view of charts via dynamic import with ssr: false
+const ScreenerGrid = dynamic(
+  () => import("@/components/screener/ScreenerGrid"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-col items-center justify-center h-full min-h-[420px] bg-surface text-text-secondary text-sm">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
+        <span>Loading chart grid view...</span>
+      </div>
+    ),
+  }
+);
+
 import FundamentalsPanel from "@/components/screener/FundamentalsPanel";
 
 const SCREENER_INFO = {
@@ -100,7 +114,10 @@ const SCREENERS_LIST = [
 ];
 
 export default function ScreenerPage() {
-  const [universe, setUniverse] = useState("all"); // "all" | "nifty500"
+  const [universe] = useState("all");
+  const [viewMode, setViewMode] = useState("list"); // "list" (All Stocks) | "chart" (Chart View)
+  const [gridCandles, setGridCandles] = useState({});
+  const [loadingGrid, setLoadingGrid] = useState(false);
   const [activeScreener, setActiveScreener] = useState("stage2_breakout");
   const [screenerData, setScreenerData] = useState(null);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -179,6 +196,48 @@ export default function ScreenerPage() {
       }
     };
   }, [fetchScreenerList]);
+
+  // 1b. Fetch Grid Candles for Chart View (Database data only)
+  const gridAbortControllerRef = useRef(null);
+
+  const fetchGridCandles = useCallback(async () => {
+    if (gridAbortControllerRef.current) {
+      gridAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    gridAbortControllerRef.current = controller;
+
+    setLoadingGrid(true);
+    try {
+      const res = await fetch(
+        `/api/terminal/screener/candles?screener=${activeScreener}`,
+        { signal: controller.signal }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setGridCandles(data.candles || {});
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Failed to load grid candles from database:", err);
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setLoadingGrid(false);
+      }
+    }
+  }, [activeScreener]);
+
+  useEffect(() => {
+    if (viewMode === "chart") {
+      fetchGridCandles();
+    }
+    return () => {
+      if (gridAbortControllerRef.current) {
+        gridAbortControllerRef.current.abort();
+      }
+    };
+  }, [viewMode, activeScreener, fetchGridCandles]);
 
   // Keep latest screenerData.rows in a ref to guard without re-running chart fetch (R19)
   const screenerRowsRef = useRef(null);
@@ -315,20 +374,14 @@ export default function ScreenerPage() {
             </div>
           </div>
 
-          {/* Right Controls: All / 500 toggle, Refresh, Rules & Details */}
+          {/* Right Controls: All / Chart View toggle, Refresh, Rules & Details */}
           <div className="flex items-center gap-2">
             <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => {
-                  if (universe !== "all") {
-                    setSelectedStock(null);
-                    setChartData(null);
-                    setUniverse("all");
-                  }
-                }}
+                onClick={() => setViewMode("list")}
                 className={`px-2.5 py-1 rounded-[4px] transition-colors ${
-                  universe === "all"
+                  viewMode === "list"
                     ? "bg-primary text-text-inverse font-semibold"
                     : "text-text-secondary hover:text-text"
                 }`}
@@ -337,30 +390,29 @@ export default function ScreenerPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (universe !== "nifty500") {
-                    setSelectedStock(null);
-                    setChartData(null);
-                    setUniverse("nifty500");
-                  }
-                }}
+                onClick={() => setViewMode("chart")}
                 className={`px-2.5 py-1 rounded-[4px] transition-colors ${
-                  universe === "nifty500"
+                  viewMode === "chart"
                     ? "bg-primary text-text-inverse font-semibold"
                     : "text-text-secondary hover:text-text"
                 }`}
               >
-                Nifty 500
+                Chart View
               </button>
             </div>
 
             <button
               type="button"
-              onClick={fetchScreenerList}
+              onClick={() => {
+                fetchScreenerList();
+                if (viewMode === "chart") {
+                  fetchGridCandles();
+                }
+              }}
               className="p-1.5 rounded-md border border-border text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
               title="Refresh screener data"
             >
-              <RefreshCw size={14} className={loadingList ? "animate-spin" : ""} />
+              <RefreshCw size={14} className={loadingList || loadingGrid ? "animate-spin" : ""} />
             </button>
 
             <button
@@ -482,9 +534,22 @@ export default function ScreenerPage() {
         </div>
       )}
 
-      {/* ── Main Workspace: Two-Column Full-Height Layout ───────────── */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-        {/* LEFT COLUMN: Stock Candidate List (Fixed 320px on Desktop) */}
+      {/* ── Main Workspace: Chart Grid View vs Two-Column Full-Height Layout ───────────── */}
+      {viewMode === "chart" ? (
+        <ScreenerGrid
+          stocks={displayedRows}
+          candlesByToken={gridCandles}
+          loading={loadingGrid}
+          activeScreener={activeScreener}
+          onSelectStock={(stock) => {
+            setSelectedStock(stock);
+            setViewMode("list");
+            setMobileView("chart");
+          }}
+        />
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+          {/* LEFT COLUMN: Stock Candidate List (Fixed 320px on Desktop) */}
         <div
           className={`w-full lg:w-[320px] lg:shrink-0 flex flex-col border-r border-border bg-surface h-full overflow-hidden ${
             mobileView === "chart" ? "hidden lg:flex" : "flex"
@@ -672,6 +737,7 @@ export default function ScreenerPage() {
           />
         )}
       </div>
+      )}
     </div>
   );
 }
