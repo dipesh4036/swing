@@ -133,6 +133,39 @@ node scripts/create-user.mjs owner@example.com
 
 ---
 
+## 🧭 Tab 3: Sector Rotation
+
+The **Sector Rotation** dashboard answers the institutional question: *"Where is money moving?"* by tracking the flow of capital across 12 canonical NSE sectors against the NIFTY 500 benchmark.
+
+### 1. Canonical Taxonomy & Assignment
+- Stocks are mapped to sectors using official NSE index constituent lists fetched directly from `niftyindices.com`.
+- **Assignment Priority:** Specific sectors precede broad ones (e.g., Bank takes priority over Financial Services).
+- **Matching:** ISIN-first matching prevents missing symbols across symbol rename events.
+- **Minimum Stock Threshold (`MIN_SECTOR_STOCKS = 8`):** If a sector has fewer than 8 liquid constituents with valid indicators (e.g. Healthcare), breadth percentages (>50 DMA, >200 DMA, >20 EMA) and equal-weight returns are kept as `NULL` (rendered as `—`) to prevent statistical distortion from tiny sample sizes. Counts (advances, declines) remain recorded.
+
+### 2. Relative Strength & RS Trend Quadrants
+- **Relative Strength (RS):** Aligned on common trading dates:
+  $$\text{RS}_t = \frac{\text{Sector Close}_t}{\text{NIFTY 500 Close}_t}$$
+- **RS Trend Quadrants (Simplified RRG):**
+  - **x-axis (RS vs 50 DMA %):** $\left(\frac{\text{RS}_t}{\text{SMA}_{50}(\text{RS})} - 1\right) \times 100$
+  - **y-axis (10-Session RS Momentum %):** $\left(\frac{\text{RS}_t}{\text{RS}_{t-10}} - 1\right) \times 100$
+  - **Leading:** $x > 0, y > 0$ (strong trend, strong momentum)
+  - **Weakening:** $x > 0, y \le 0$ (above 50-day RS mean, but losing short-term momentum)
+  - **Lagging:** $x \le 0, y \le 0$ (underperforming benchmark and decelerating)
+  - **Improving:** $x \le 0, y > 0$ (below 50-day RS mean, but gaining short-term momentum)
+  - Minimum 60 common sessions required to compute quadrant; sectors with insufficient history are listed in the footer and omitted from the scatter plot.
+
+### 3. Official Indices vs. Equal-Weight Fallback
+- For sectors with official spot index tokens on Angel One (`NIFTY BANK`, `NIFTY IT`, `NIFTY PHARMA`, `NIFTY AUTO`, `NIFTY FMCG`, `NIFTY METAL`, `NIFTY REALTY`, `NIFTY MEDIA`, `NIFTY FINANCIAL SERVICES`), official 3-year daily candles are synchronized into `daily_index_ohlcv`.
+- For sectors without official spot index tokens on Angel One (`NIFTY HEALTHCARE`, `NIFTY CONSUMER DURABLES`, `NIFTY OIL & GAS`), an equal-weight index series is synthesized from constituent daily returns compounded from base 100.
+- In the UI, equal-weight sectors display an amber **EW** badge with the tooltip: *"Equal-weight of constituents, not the official NSE index"*. Official index sectors show no badge.
+
+### 4. Screener Integration
+- Every sector in the ranking table and detail panel provides a 1-click **"View in Screener"** action (`/screener?sector=<key>`).
+- The Screener page reads the query parameter, displays a removable active filter chip (`Sector: <Label> [x]`), and displays the sector tag alongside RS rank in candidate cards.
+
+---
+
 ## ⚡ CLI Commands
 
 The pipeline CLI (`pipeline/cli.py`) provides commands for maintenance and automated cron execution:

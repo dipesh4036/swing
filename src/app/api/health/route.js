@@ -117,6 +117,18 @@ export async function GET(request) {
     }
     const macroStaleDays = getWeekdayDifference(macroLatestDate);
 
+    let sectorLatestDate = null;
+    try {
+      const sectorRes = await queryWithRetry(
+        "SELECT MAX(trade_date) as latest_date FROM daily_sector_breadth;"
+      );
+      const rawSector = sectorRes.rows[0]?.latest_date;
+      sectorLatestDate = rawSector ? new Date(rawSector).toISOString().split("T")[0] : null;
+    } catch (secErr) {
+      console.warn("Could not query daily_sector_breadth latest date:", secErr.message);
+    }
+    const sectorStaleDays = getWeekdayDifference(sectorLatestDate);
+
     let isDegraded = false;
     const failureReasons = [];
 
@@ -132,6 +144,13 @@ export async function GET(request) {
       isDegraded = true;
       failureReasons.push(
         `Macro rates data is ${macroStaleDays} weekdays stale (latest: ${macroLatestDate}).`
+      );
+    }
+
+    if (sectorStaleDays !== null && sectorStaleDays > 3) {
+      isDegraded = true;
+      failureReasons.push(
+        `Sector breadth data is ${sectorStaleDays} weekdays stale (latest: ${sectorLatestDate}).`
       );
     }
 
@@ -237,6 +256,8 @@ export async function GET(request) {
       daysSinceLastCommit: commitDaysOld,
       fiiDiiStaleDays,
       macroStaleDays,
+      sectorStaleDays,
+      sectorLatestDate,
       latestIngestRun: latestIngest
         ? {
             runId: latestIngest.run_id,
