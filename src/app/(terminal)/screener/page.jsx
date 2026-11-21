@@ -12,6 +12,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { isDataStale } from "@/lib/freshness";
+import { SECTORS, SECTOR_KEYS } from "@/lib/sector-math";
 
 // Load lightweight-charts chart via dynamic import with ssr: false
 const ScreenerChart = dynamic(
@@ -115,6 +116,7 @@ const SCREENERS_LIST = [
 
 export default function ScreenerPage() {
   const [universe] = useState("all");
+  const [sectorFilter, setSectorFilter] = useState("all");
   const [viewMode, setViewMode] = useState("list"); // "list" (List View) | "chart" (Chart View)
   const [gridCandles, setGridCandles] = useState({});
   const [staleTokens, setStaleTokens] = useState([]);
@@ -133,6 +135,17 @@ export default function ScreenerPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileView, setMobileView] = useState("list"); // "list" | "chart"
   const [showFundamentals, setShowFundamentals] = useState(true);
+
+  // Read optional ?sector= query param on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const s = params.get("sector");
+      if (s && SECTOR_KEYS.includes(s.toLowerCase())) {
+        setSectorFilter(s.toLowerCase());
+      }
+    }
+  }, []);
 
   // Default closed on mobile (<1024px) after mount to prevent hydration mismatch (R13d)
   useEffect(() => {
@@ -155,8 +168,9 @@ export default function ScreenerPage() {
     setListError(null);
 
     try {
+      const sectorQuery = sectorFilter !== "all" ? `&sector=${sectorFilter}` : "";
       const res = await fetch(
-        `/api/terminal/screener?screener=${activeScreener}&universe=${universe}`,
+        `/api/terminal/screener?screener=${activeScreener}&universe=${universe}${sectorQuery}`,
         { signal: controller.signal }
       );
       if (!res.ok) {
@@ -192,7 +206,7 @@ export default function ScreenerPage() {
         setLoadingList(false);
       }
     }
-  }, [activeScreener, universe]);
+  }, [activeScreener, universe, sectorFilter]);
 
   useEffect(() => {
     fetchScreenerList();
@@ -456,6 +470,31 @@ export default function ScreenerPage() {
           </div>
         )}
 
+        {/* Active Sector Filter Chip */}
+        {sectorFilter !== "all" && (
+          <div className="mx-4 mb-2 flex items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-semibold">
+              <span>Sector: {SECTORS.find((s) => s.key === sectorFilter)?.label || sectorFilter}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSectorFilter("all");
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("sector");
+                    window.history.replaceState({}, "", url.pathname);
+                  }
+                }}
+                className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                title="Clear sector filter"
+              >
+                <X size={12} />
+              </button>
+            </div>
+            <span className="text-text-muted text-[11px]">Filtering candidates to {sectorFilter}</span>
+          </div>
+        )}
+
         {/* Screener Tabs Bar */}
         <div className="px-4 flex items-center gap-1 overflow-x-auto no-scrollbar pb-2">
           {SCREENERS_LIST.map((id) => {
@@ -665,6 +704,11 @@ export default function ScreenerPage() {
                           </span>
                         ) : (
                           <span className="text-[9px] text-text-muted font-mono">—</span>
+                        )}
+                        {row.sector && (
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded-[3px] bg-bg-secondary text-text-muted border border-border">
+                            {row.sector}
+                          </span>
                         )}
                       </div>
                       <span className="font-mono text-xs font-semibold text-text">

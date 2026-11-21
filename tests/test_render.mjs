@@ -234,6 +234,44 @@ assert.doesNotThrow(() => {
 }, "ScreenerGrid must render candidate stock cards without throwing");
 console.log("✓ ScreenerGrid rendered successfully with fast scan candidate cards");
 
+// -----------------------------------------------------------------------------
+// 4. SectorRotationPage Smoke Test
+// -----------------------------------------------------------------------------
+console.log("4. Testing SectorRotationPage renderToString...");
+
+const sectorMockRequire = (id) => {
+  if (id === "react") return React;
+  if (id === "next/dynamic") return (importer) => mockComponent("DynamicComponent");
+  if (id === "next/link") {
+    return ({ href, children, ...props }) => React.createElement("a", { href, ...props }, children);
+  }
+  if (id === "@/components/sectors/SectorScatterPlot") {
+    return ({ sectors }) => React.createElement("div", { id: "mock-scatter" }, `Scatter with ${sectors?.length || 0} sectors`);
+  }
+  if (id === "lucide-react") {
+    return new Proxy({}, {
+      get: (_, prop) => () => React.createElement("span", { "data-icon": String(prop) })
+    });
+  }
+  return {
+    default: mockComponent(id),
+    __esModule: true,
+  };
+};
+
+const SectorRotationPage = compileAndLoadComponent(
+  "src/app/(terminal)/sectors/page.jsx",
+  sectorMockRequire
+);
+
+assert.doesNotThrow(() => {
+  const html = renderToString(React.createElement(SectorRotationPage));
+  assert.ok(typeof html === "string" && html.length > 0);
+  assert.ok(html.includes("Sector Rotation"));
+  assert.ok(html.includes("Where is money moving?"));
+}, "SectorRotationPage must render without throwing");
+console.log("✓ SectorRotationPage rendered successfully with 'Sector Rotation' and 'Where is money moving?'");
+
 // Restore fetch
 globalThis.fetch = originalFetch;
 

@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Landmark,
   Layers,
+  Compass,
   Bookmark,
   Briefcase,
   Database,
@@ -31,6 +32,13 @@ const NAV_ITEMS = [
         name: "Market Breadth",
         href: "/",
         icon: Activity,
+        active: true,
+      },
+      {
+        id: "sectors",
+        name: "Sector Rotation",
+        href: "/sectors",
+        icon: Compass,
         active: true,
       },
       {
