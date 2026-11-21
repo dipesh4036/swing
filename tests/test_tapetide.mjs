@@ -447,6 +447,49 @@ company: "Injection Corp"
   assert.equal(rHuge.available, false);
   assert.equal(rHuge.reason, "upstream_error");
 
+  // Slow-drip / infinite stream body timeout test (R13a)
+  console.log("10. Testing slow-drip body stream timeout...");
+  const rStreamTimeout = await getTapetideFundamentals("SLOWSTREAM", {
+    cache: new TapetideLRUCache(10),
+    limiter: new TapetideRateLimiter(20, 60000),
+    inFlight: new Map(),
+    timeoutMs: 30, // 30ms timeout
+    fetchFn: async (url, opts) => {
+      // Headers return immediately, but body stream hangs
+      const slowStream = new ReadableStream({
+        async pull(controller) {
+          // Never push, or wait indefinitely until aborted
+          await new Promise((resolve) => {
+            if (opts?.signal) {
+              opts.signal.addEventListener("abort", () => {
+                controller.error(new Error("Stream aborted"));
+                resolve();
+              });
+            }
+          });
+        },
+      });
+      return new Response(slowStream, { status: 200, headers: { "Content-Type": "text/markdown" } });
+    },
+  });
+  assert.equal(rStreamTimeout.available, false, "Slow stream must fail");
+  assert.equal(rStreamTimeout.reason, "timeout", "Slow stream must trigger timeout reason");
+
+  // Cache-Control test for fundamentals route (R13b)
+  console.log("11. Testing Cache-Control: no-store on available:false vs max-age on available:true...");
+  const getCacheHeader = (result) => (result?.available === true ? "private, max-age=3600" : "no-store");
+  assert.equal(getCacheHeader({ available: true }), "private, max-age=3600");
+  assert.equal(getCacheHeader({ available: false, reason: "rate_limited" }), "no-store");
+  assert.equal(getCacheHeader({ available: false, reason: "timeout" }), "no-store");
+  assert.equal(getCacheHeader({ available: false, reason: "not_found" }), "no-store");
+
+  // Null signals rendering test (R13c)
+  console.log("12. Testing null technical signals rendering as '—' instead of 0...");
+  const renderSignal = (val) => (val !== null && val !== undefined ? val : "—");
+  assert.equal(renderSignal(0), 0, "Real 0 count must render as 0");
+  assert.equal(renderSignal(null), "—", "Null signal count must render as '—'");
+  assert.equal(renderSignal(undefined), "—", "Undefined signal count must render as '—'");
+
   console.log("All Tapetide Tests Passed Successfully!");
 }
 

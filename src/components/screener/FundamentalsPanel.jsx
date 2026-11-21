@@ -27,43 +27,56 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
     }
 
     const controller = new AbortController();
-    setLoading(true);
-    setErrorReason(null);
-    setData(null);
+    let isAborted = false;
 
-    async function fetchFundamentals() {
-      try {
-        const res = await fetch(
-          `/api/terminal/screener/fundamentals?symbol=${encodeURIComponent(symbol)}`,
-          { signal: controller.signal }
-        );
+    // Debounce fundamentals fetch 400ms after stock selection settles (R13d)
+    const timerId = setTimeout(() => {
+      setLoading(true);
+      setErrorReason(null);
+      setData(null);
 
-        if (!res.ok) {
-          setErrorReason("upstream_error");
-          setLoading(false);
-          return;
-        }
+      async function fetchFundamentals() {
+        try {
+          const res = await fetch(
+            `/api/terminal/screener/fundamentals?symbol=${encodeURIComponent(symbol)}`,
+            { signal: controller.signal }
+          );
 
-        const json = await res.json();
-        if (json.available) {
-          setData(json);
-          setErrorReason(null);
-        } else {
-          setData(null);
-          setErrorReason(json.reason || "upstream_error");
+          if (!res.ok) {
+            if (!isAborted) {
+              setErrorReason("upstream_error");
+              setLoading(false);
+            }
+            return;
+          }
+
+          const json = await res.json();
+          if (!isAborted) {
+            if (json.available) {
+              setData(json);
+              setErrorReason(null);
+            } else {
+              setData(null);
+              setErrorReason(json.reason || "upstream_error");
+            }
+          }
+        } catch (err) {
+          if (!isAborted && err.name !== "AbortError") {
+            setErrorReason("upstream_error");
+          }
+        } finally {
+          if (!isAborted) {
+            setLoading(false);
+          }
         }
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          setErrorReason("upstream_error");
-        }
-      } finally {
-        setLoading(false);
       }
-    }
 
-    fetchFundamentals();
+      fetchFundamentals();
+    }, 400);
 
     return () => {
+      isAborted = true;
+      clearTimeout(timerId);
       controller.abort();
     };
   }, [isOpen, symbol]);
@@ -332,21 +345,21 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] text-text-muted font-medium">Overall Bias</span>
                         <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-primary-subtle text-primary border border-primary/30">
-                          {data.signals.overall || "Neutral"}
+                          {data.signals.overall || "—"}
                         </span>
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[11px]">
                         <div className="bg-bullish-bg/50 border border-bullish-border/60 rounded py-1 px-1.5">
                           <span className="block text-[9px] text-bullish uppercase font-sans">Bullish</span>
-                          <span className="font-bold text-bullish">{data.signals.bullish ?? 0}</span>
+                          <span className="font-bold text-bullish">{data.signals.bullish !== null && data.signals.bullish !== undefined ? data.signals.bullish : "—"}</span>
                         </div>
                         <div className="bg-neutral-bg border border-border rounded py-1 px-1.5">
                           <span className="block text-[9px] text-text-muted uppercase font-sans">Neutral</span>
-                          <span className="font-bold text-text-secondary">{data.signals.neutral ?? 0}</span>
+                          <span className="font-bold text-text-secondary">{data.signals.neutral !== null && data.signals.neutral !== undefined ? data.signals.neutral : "—"}</span>
                         </div>
                         <div className="bg-bearish-bg/50 border border-bearish-border/60 rounded py-1 px-1.5">
                           <span className="block text-[9px] text-bearish uppercase font-sans">Bearish</span>
-                          <span className="font-bold text-bearish">{data.signals.bearish ?? 0}</span>
+                          <span className="font-bold text-bearish">{data.signals.bearish !== null && data.signals.bearish !== undefined ? data.signals.bearish : "—"}</span>
                         </div>
                       </div>
                       {(data.signals.oscillators || data.signals.moving_averages) && (

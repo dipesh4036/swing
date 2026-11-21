@@ -55,7 +55,7 @@ export async function GET(request) {
     return NextResponse.json(result, {
       status: 200,
       headers: {
-        "Cache-Control": "private, max-age=3600",
+        "Cache-Control": result?.available === true ? "private, max-age=3600" : "no-store",
       },
     });
   } catch (err) {
@@ -68,7 +68,7 @@ export async function GET(request) {
       },
       {
         status: 200,
-        headers: { "Cache-Control": "private, max-age=3600" },
+        headers: { "Cache-Control": "no-store" },
       }
     );
   }

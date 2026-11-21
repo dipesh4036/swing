@@ -601,8 +601,6 @@ export async function getTapetideFundamentals(
         redirect: "manual",
       });
 
-      clearTimeout(timeoutId);
-
       // Check redirects: manual redirect causes opaqueredirect or 3xx status
       if (
         response.status >= 300 &&
@@ -672,7 +670,6 @@ export async function getTapetideFundamentals(
       cache.set(cleanSymbol, parsed, TTL_SUCCESS_MS, false);
       return parsed;
     } catch (err) {
-      clearTimeout(timeoutId);
       let reason = "upstream_error";
       if (isTimeout || err.name === "AbortError") {
         reason = isTimeout ? "timeout" : "upstream_error";
@@ -681,6 +678,7 @@ export async function getTapetideFundamentals(
       cache.set(cleanSymbol, errData, TTL_NEGATIVE_MS, true);
       return errData;
     } finally {
+      clearTimeout(timeoutId);
       inFlight.delete(cleanSymbol);
     }
   })();
