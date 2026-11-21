@@ -115,7 +115,7 @@ const SCREENERS_LIST = [
 
 export default function ScreenerPage() {
   const [universe] = useState("all");
-  const [viewMode, setViewMode] = useState("list"); // "list" (All Stocks) | "chart" (Chart View)
+  const [viewMode, setViewMode] = useState("list"); // "list" (List View) | "chart" (Chart View)
   const [gridCandles, setGridCandles] = useState({});
   const [staleTokens, setStaleTokens] = useState([]);
   const [loadingGrid, setLoadingGrid] = useState(false);
@@ -392,7 +392,7 @@ export default function ScreenerPage() {
             </div>
           </div>
 
-          {/* Right Controls: All / Chart View toggle, Refresh, Rules & Details */}
+          {/* Right Controls: List / Chart View toggle, Refresh, Rules & Details */}
           <div className="flex items-center gap-2">
             <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-xs font-semibold">
               <button
@@ -404,7 +404,7 @@ export default function ScreenerPage() {
                     : "text-text-secondary hover:text-text"
                 }`}
               >
-                All Stocks
+                List View
               </button>
               <button
                 type="button"

@@ -140,10 +140,10 @@ const ScreenerPage = compileAndLoadComponent(
 assert.doesNotThrow(() => {
   const html = renderToString(React.createElement(ScreenerPage));
   assert.ok(typeof html === "string" && html.length > 0);
-  assert.ok(html.includes("All Stocks"), "ScreenerPage must contain 'All Stocks'");
+  assert.ok(html.includes("List View"), "ScreenerPage must contain 'List View'");
   assert.ok(html.includes("Chart View"), "ScreenerPage must contain 'Chart View' instead of Nifty 500");
 }, "ScreenerPage must render without throwing");
-console.log("✓ ScreenerPage rendered successfully with 'All Stocks' and 'Chart View'");
+console.log("✓ ScreenerPage rendered successfully with 'List View' and 'Chart View'");
 
 // -----------------------------------------------------------------------------
 // 3. ScreenerGrid Smoke Test
