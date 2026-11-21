@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { SECTOR_KEYS } from "@/lib/sector-math";
 
 const VALID_SCREENERS = [
   "stage2_breakout",
@@ -23,6 +24,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const screener = searchParams.get("screener") || "stage2_breakout";
     const universe = (searchParams.get("universe") || "all").toLowerCase();
+    const sector = (searchParams.get("sector") || "all").toLowerCase();
 
     if (!VALID_SCREENERS.includes(screener)) {
       return NextResponse.json(
@@ -34,6 +36,13 @@ export async function GET(request) {
     if (!VALID_UNIVERSES.includes(universe)) {
       return NextResponse.json(
         { error: `Invalid universe '${universe}'. Allowed: ${VALID_UNIVERSES.join(", ")}` },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (sector !== "all" && !SECTOR_KEYS.includes(sector)) {
+      return NextResponse.json(
+        { error: `Invalid sector '${sector}'. Allowed: all, ${SECTOR_KEYS.join(", ")}` },
         { status: 400, headers: { "Cache-Control": "no-store" } }
       );
     }
@@ -69,17 +78,25 @@ export async function GET(request) {
     );
     const latestRegime = regimeRes.rows[0]?.regime || null;
 
-    // 3. Fetch screener counts for the as-of date (filtered by universe if nifty500)
+    // 3. Fetch screener counts for the as-of date (filtered by universe and sector)
     let countsQuery = `
-      SELECT screener, COUNT(*)::int as count
-      FROM daily_screener_results
-      WHERE trade_date = $1
+      SELECT sr.screener, COUNT(*)::int as count
+      FROM daily_screener_results sr
+      LEFT JOIN stock_sector ss ON sr.symbol = ss.symbol
+      WHERE sr.trade_date = $1
     `;
     const countsParams = [asOfStr];
+    let pIdx = 2;
+
     if (universe === "nifty500") {
-      countsQuery += " AND in_nifty500 = TRUE";
+      countsQuery += " AND sr.in_nifty500 = TRUE";
     }
-    countsQuery += " GROUP BY screener;";
+    if (sector !== "all") {
+      countsQuery += ` AND ss.sector = $${pIdx}`;
+      countsParams.push(sector);
+      pIdx++;
+    }
+    countsQuery += " GROUP BY sr.screener;";
 
     const countsRes = await queryWithRetry(countsQuery, countsParams);
     const counts = { ...zeroCounts };
@@ -92,29 +109,38 @@ export async function GET(request) {
     // 4. Fetch rows for the active screener
     let rowsQuery = `
       SELECT
-        trade_date, screener, token, symbol, close, ret_1d_pct, vol_ratio,
-        pct_from_52w_high, pivot, dist_to_pivot_pct, rs_rank, stage, in_nifty500, extra
-      FROM daily_screener_results
-      WHERE trade_date = $1 AND screener = $2
+        sr.trade_date, sr.screener, sr.token, sr.symbol, sr.close, sr.ret_1d_pct, sr.vol_ratio,
+        sr.pct_from_52w_high, sr.pivot, sr.dist_to_pivot_pct, sr.rs_rank, sr.stage, sr.in_nifty500, sr.extra,
+        ss.sector
+      FROM daily_screener_results sr
+      LEFT JOIN stock_sector ss ON sr.symbol = ss.symbol
+      WHERE sr.trade_date = $1 AND sr.screener = $2
     `;
     const rowsParams = [asOfStr, screener];
+    let rowPIdx = 3;
+
     if (universe === "nifty500") {
-      rowsQuery += " AND in_nifty500 = TRUE";
+      rowsQuery += " AND sr.in_nifty500 = TRUE";
+    }
+    if (sector !== "all") {
+      rowsQuery += ` AND ss.sector = $${rowPIdx}`;
+      rowsParams.push(sector);
+      rowPIdx++;
     }
 
     // Ordering rules per spec:
     if (screener === "stage2_breakout") {
-      rowsQuery += " ORDER BY vol_ratio DESC NULLS LAST, symbol ASC;";
+      rowsQuery += " ORDER BY sr.vol_ratio DESC NULLS LAST, sr.symbol ASC;";
     } else if (screener === "vcp") {
-      rowsQuery += " ORDER BY (extra->>'sort_key')::numeric ASC NULLS LAST, symbol ASC;";
+      rowsQuery += " ORDER BY (sr.extra->>'sort_key')::numeric ASC NULLS LAST, sr.symbol ASC;";
     } else if (screener === "near_pivot") {
-      rowsQuery += " ORDER BY dist_to_pivot_pct ASC NULLS LAST, symbol ASC;";
+      rowsQuery += " ORDER BY sr.dist_to_pivot_pct ASC NULLS LAST, sr.symbol ASC;";
     } else if (screener === "ipo_base") {
-      rowsQuery += " ORDER BY dist_to_pivot_pct ASC NULLS LAST, symbol ASC;";
+      rowsQuery += " ORDER BY sr.dist_to_pivot_pct ASC NULLS LAST, sr.symbol ASC;";
     } else if (screener === "ema50_pullback") {
-      rowsQuery += " ORDER BY rs_rank DESC NULLS LAST, symbol ASC;";
+      rowsQuery += " ORDER BY sr.rs_rank DESC NULLS LAST, sr.symbol ASC;";
     } else {
-      rowsQuery += " ORDER BY symbol ASC;";
+      rowsQuery += " ORDER BY sr.symbol ASC;";
     }
 
     const rowsRes = await queryWithRetry(rowsQuery, rowsParams);
@@ -124,6 +150,7 @@ export async function GET(request) {
       screener: row.screener,
       token: row.token,
       symbol: row.symbol,
+      sector: row.sector || null,
       close: row.close !== null ? Number(row.close) : null,
       ret_1d_pct: row.ret_1d_pct !== null ? Number(row.ret_1d_pct) : null,
       vol_ratio: row.vol_ratio !== null ? Number(row.vol_ratio) : null,
