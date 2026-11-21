@@ -33,15 +33,14 @@ export default function MarketBreadthDashboardPage() {
     highsLows,
     formattedIndices,
     performance,
+    rebasedSeries,
   } = useMarketBreadth(selectedUniverse, selectedPeriod);
 
-  // Compute data freshness per Phase 5 spec
+  // Compute data freshness: real timestamp from ingest_runs, or "—" if not available (R2)
   const updatedAgoText = React.useMemo(() => {
-    if (!asOfDate) return null;
-    let targetTime = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : null;
-    if (!targetTime || isNaN(targetTime)) {
-      targetTime = new Date(`${asOfDate}T10:00:00Z`).getTime();
-    }
+    if (!asOfDate || !lastUpdatedAt) return "—";
+    const targetTime = new Date(lastUpdatedAt).getTime();
+    if (!targetTime || isNaN(targetTime)) return "—";
     const diffHours = Math.max(0, Math.floor((Date.now() - targetTime) / (1000 * 60 * 60)));
     if (diffHours === 0) return "just now";
     if (diffHours === 1) return "1 hour ago";
@@ -135,6 +134,7 @@ export default function MarketBreadthDashboardPage() {
             keyMetrics={keyMetrics}
             history={history}
             performance={performance}
+            rebasedSeries={rebasedSeries}
           />
 
           {/* Bottom Section: Indices Row */}

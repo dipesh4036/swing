@@ -46,11 +46,15 @@ export function DashboardHeader({
             {coverage && (
               <span
                 className="hidden md:inline-flex items-center gap-1 text-[11px] text-text-secondary bg-bg-secondary border border-border rounded-md px-2 py-0.5 cursor-help"
-                title={coverage.excludedReason || `${coverage.valid} of ${coverage.total} covered (${coverage.pct}%)`}
+                title={coverage.excludedReason || (coverage.total !== null ? `${coverage.valid} of ${coverage.total} covered (${coverage.pct}%)` : `${coverage.valid ?? "—"} stocks`)}
               >
                 <span className="text-text-muted">Coverage:</span>
-                <span className="font-semibold text-text">{coverage.valid}/{coverage.total}</span>
-                <span className="text-primary font-semibold">({coverage.pct}%)</span>
+                <span className="font-semibold text-text">
+                  {coverage.total !== null ? `${coverage.valid}/${coverage.total}` : (coverage.valid ?? "—")}
+                </span>
+                {coverage.pct !== null && (
+                  <span className="text-primary font-semibold">({coverage.pct}%)</span>
+                )}
               </span>
             )}
           </div>

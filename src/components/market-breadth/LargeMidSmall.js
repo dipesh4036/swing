@@ -6,7 +6,7 @@ import SegmentedControl from "@/components/ui/segmented-control";
 import ComparisonChart from "@/components/charts/ComparisonChart";
 import { formatShortDate } from "@/lib/formatters";
 
-export function LargeMidSmall({ performance = {}, history = [] }) {
+export function LargeMidSmall({ performance = {}, rebasedSeries = {} }) {
   const [period, setPeriod] = useState("3M");
 
   const PERIODS = [
@@ -15,9 +15,109 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
     { id: "YTD", label: "YTD" },
   ];
 
-  const largePerf = performance?.large?.[period] ?? null;
-  const midPerf = performance?.mid?.[period] ?? null;
-  const smallPerf = performance?.small?.[period] ?? null;
+  // 1. Process rebasedSeries for the selected period slice
+  const { chartData, activeSeries, availability } = useMemo(() => {
+    const largeRows = rebasedSeries?.large || [];
+    const midRows = rebasedSeries?.mid || [];
+    const smallRows = rebasedSeries?.small || [];
+
+    // Collect unique dates across all available segments
+    const dateSet = new Set();
+    largeRows.forEach((r) => r.date && dateSet.add(r.date));
+    midRows.forEach((r) => r.date && dateSet.add(r.date));
+    smallRows.forEach((r) => r.date && dateSet.add(r.date));
+
+    const sortedDates = Array.from(dateSet).sort();
+    if (sortedDates.length === 0) {
+      return {
+        chartData: [],
+        activeSeries: [],
+        availability: { large: false, mid: false, small: false },
+      };
+    }
+
+    // Determine slice range for the chosen period
+    let sliceDates = sortedDates;
+    if (period === "1M") {
+      sliceDates = sortedDates.slice(-21);
+    } else if (period === "3M") {
+      sliceDates = sortedDates.slice(-63);
+    } else if (period === "YTD") {
+      const currentYear = new Date().getFullYear().toString();
+      const ytdDates = sortedDates.filter((d) => d.startsWith(currentYear));
+      sliceDates = ytdDates.length > 0 ? ytdDates : sortedDates.slice(-63);
+    }
+
+    if (sliceDates.length === 0) {
+      return {
+        chartData: [],
+        activeSeries: [],
+        availability: { large: false, mid: false, small: false },
+      };
+    }
+
+    // Map dates to row entries
+    const largeMap = new Map(largeRows.map((r) => [r.date, r]));
+    const midMap = new Map(midRows.map((r) => [r.date, r]));
+    const smallMap = new Map(smallRows.map((r) => [r.date, r]));
+
+    // Find baseline (first valid session in slice) for each series
+    const getBaseVal = (map) => {
+      for (const d of sliceDates) {
+        const row = map.get(d);
+        if (row && typeof row.rebased === "number" && row.rebased > 0) {
+          return row.rebased;
+        }
+      }
+      return null;
+    };
+
+    const largeBase = getBaseVal(largeMap);
+    const midBase = getBaseVal(midMap);
+    const smallBase = getBaseVal(smallMap);
+
+    const calcReturn = (map, baseVal, date) => {
+      if (!baseVal) return null;
+      const row = map.get(date);
+      if (!row || typeof row.rebased !== "number" || isNaN(row.rebased)) {
+        return null;
+      }
+      return Number((((row.rebased - baseVal) / baseVal) * 100).toFixed(2));
+    };
+
+    const data = sliceDates.map((date) => ({
+      date: formatShortDate(date),
+      large: calcReturn(largeMap, largeBase, date),
+      mid: calcReturn(midMap, midBase, date),
+      small: calcReturn(smallMap, smallBase, date),
+    }));
+
+    // Active chart lines: if a series is missing, exclude it
+    const lines = [];
+    if (largeBase !== null) {
+      lines.push({ key: "large", name: "Large", color: "#2563EB", strokeWidth: 1.75 });
+    }
+    if (midBase !== null) {
+      lines.push({ key: "mid", name: "Mid", color: "#F97316", strokeWidth: 1.5 });
+    }
+    if (smallBase !== null) {
+      lines.push({ key: "small", name: "Small", color: "#16A878", strokeWidth: 1.25 });
+    }
+
+    return {
+      chartData: data,
+      activeSeries: lines,
+      availability: {
+        large: largeBase !== null,
+        mid: midBase !== null,
+        small: smallBase !== null,
+      },
+    };
+  }, [rebasedSeries, period]);
+
+  const largePerf = availability.large ? (performance?.large?.[period] ?? null) : null;
+  const midPerf = availability.mid ? (performance?.mid?.[period] ?? null) : null;
+  const smallPerf = availability.small ? (performance?.small?.[period] ?? null) : null;
 
   const segmentStats = useMemo(() => {
     return [
@@ -41,19 +141,6 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
     if (period === "YTD") return "Nifty 50 vs Midcap 150 vs Smallcap 250, return YTD";
     return "Nifty 50 vs Midcap 150 vs Smallcap 250, return over 3 months";
   }, [period]);
-
-  const chartData = useMemo(() => {
-    if (history.length === 0) return [];
-    const sliceCount = period === "1M" ? 21 : period === "3M" ? 63 : 120;
-    const slice = history.slice(-sliceCount);
-    
-    return slice.map((h) => ({
-      date: formatShortDate(h.date),
-      large: h.pctAbove20ema !== null ? +(h.pctAbove20ema - 50).toFixed(1) : 0,
-      mid: h.pctAbove50sma !== null ? +(h.pctAbove50sma - 50).toFixed(1) : 0,
-      small: h.pctAbove200sma !== null ? +(h.pctAbove200sma - 50).toFixed(1) : 0,
-    }));
-  }, [history, period]);
 
   return (
     <BaseCard padding="p-3.5" className="flex flex-col justify-between space-y-2 w-full min-w-0">
@@ -107,11 +194,7 @@ export function LargeMidSmall({ performance = {}, history = [] }) {
       <ComparisonChart
         data={chartData}
         xKey="date"
-        series={[
-          { key: "large", name: "Large", color: "var(--color-primary, #4F46E5)", strokeWidth: 1.75 },
-          { key: "mid", name: "Mid", color: "#F97316", strokeWidth: 1.5 },
-          { key: "small", name: "Small", color: "var(--color-bullish, #059669)", strokeWidth: 1.25 },
-        ]}
+        series={activeSeries}
         height={145}
       />
     </BaseCard>

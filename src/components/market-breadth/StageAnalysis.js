@@ -20,7 +20,11 @@ export function StageAnalysis({ data }) {
           <span>
             Coverage:{" "}
             <strong className="text-text font-semibold">
-              {coverage ? `${coverage.valid}/${coverage.total} (${coverage.pct}%)` : `${totalStocks} stocks`}
+              {coverage
+                ? coverage.total !== null
+                  ? `${coverage.valid}/${coverage.total} (${coverage.pct}%)`
+                  : `${coverage.valid ?? totalStocks} stocks`
+                : `${totalStocks} stocks`}
             </strong>
           </span>
           {coverage?.excludedReason && (

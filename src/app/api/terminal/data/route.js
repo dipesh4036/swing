@@ -121,11 +121,11 @@ export async function GET(request) {
       ? new Date(latest.trade_date).toISOString().split("T")[0]
       : null;
 
-    // Fetch latest completed run timestamp from ingest_runs for data freshness tracking
+    // Fetch latest completed run timestamp from ingest_runs for data freshness tracking (R2)
     let lastUpdatedAt = null;
     try {
       const lastRunRes = await queryWithRetry(
-        "SELECT completed_at FROM ingest_runs WHERE status = 'completed' ORDER BY run_id DESC LIMIT 1;"
+        "SELECT completed_at FROM ingest_runs WHERE status IN ('success', 'partial') ORDER BY run_id DESC LIMIT 1;"
       );
       if (lastRunRes.rows[0]?.completed_at) {
         lastUpdatedAt = new Date(lastRunRes.rows[0].completed_at).toISOString();
@@ -179,32 +179,41 @@ export async function GET(request) {
       };
     });
 
-    // 3. Coverage metadata
-    const UNIVERSE_COVERAGE = {
-      nifty500: {
-        total: 501,
-        excludedReason:
-          "3 REIT units (EMBASSY, BIRET, BAGMANE) and 1 corporate demerger placeholder (DUMMYHEG) are excluded from equity OHLCV as non-equity/non-traded instruments.",
-      },
-      nifty200: { total: 200, excludedReason: "" },
-      nifty100: { total: 100, excludedReason: "" },
-      nifty_midcap150: { total: 150, excludedReason: "" },
-      nifty_smallcap250: { total: 251, excludedReason: "1 non-trading unit excluded" },
-      liquid: { total: latest.total_stocks || 500, excludedReason: "Stocks below close ₹20 or 50D volume 25k excluded" },
-      all: { total: 2599, excludedReason: "SME and debt instruments excluded" },
-    };
-    const universeMeta = UNIVERSE_COVERAGE[universe] || {
-      total: latest.total_stocks || 500,
-      excludedReason: "",
-    };
+    // 3. Universe Coverage metadata (queried live from database, never fabricated - R9)
+    let universeTotal = null;
+    let excludedReason = null;
+
+    try {
+      if (universe === "all") {
+        const instRes = await queryWithRetry(
+          "SELECT COUNT(DISTINCT isin)::int as total FROM instruments WHERE is_active = TRUE;"
+        );
+        universeTotal = instRes.rows[0]?.total ? Number(instRes.rows[0].total) : null;
+      } else if (universe !== "liquid") {
+        const constRes = await queryWithRetry(
+          "SELECT COUNT(DISTINCT symbol)::int as total FROM index_constituents WHERE index_name = $1 AND (effective_to IS NULL OR effective_to >= $2) AND is_active = TRUE;",
+          [universe, asOfDate]
+        );
+        universeTotal = constRes.rows[0]?.total ? Number(constRes.rows[0].total) : null;
+      }
+    } catch (e) {
+      console.warn("Could not query universe total from database:", e.message);
+    }
+
+    const validCount = latest.total_stocks !== null ? Number(latest.total_stocks) : null;
+    let coveragePct = null;
+    if (universeTotal !== null && universeTotal > 0 && validCount !== null) {
+      coveragePct = Math.min(100, Math.round((validCount / universeTotal) * 1000) / 10);
+      if (universeTotal > validCount) {
+        excludedReason = `${universeTotal - validCount} non-traded or inactive instruments excluded`;
+      }
+    }
+
     const coverage = {
-      valid: latest.total_stocks || historyRows.length,
-      total: universeMeta.total,
-      pct:
-        universeMeta.total > 0 && latest.total_stocks
-          ? Math.round((latest.total_stocks / universeMeta.total) * 1000) / 10
-          : 100,
-      excludedReason: universeMeta.excludedReason,
+      valid: validCount,
+      total: universeTotal,
+      pct: coveragePct,
+      excludedReason,
     };
 
     // 4. Fetch index history (past 280 days for sparklines and 52W high calculation)
@@ -343,23 +352,27 @@ export async function GET(request) {
       fiiDiiSessionsAvailable: flowRows.length,
       sessions: flowRows.map((r) => ({
         date: new Date(r.trade_date).toISOString().split("T")[0],
-        fiiBuy: r.fii_buy ? parseFloat(r.fii_buy) : null,
-        fiiSell: r.fii_sell ? parseFloat(r.fii_sell) : null,
-        fiiNet: r.fii_net ? parseFloat(r.fii_net) : null,
-        diiBuy: r.dii_buy ? parseFloat(r.dii_buy) : null,
-        diiSell: r.dii_sell ? parseFloat(r.dii_sell) : null,
-        diiNet: r.dii_net ? parseFloat(r.dii_net) : null,
+        fiiBuy: r.fii_buy !== null && r.fii_buy !== undefined ? parseFloat(r.fii_buy) : null,
+        fiiSell: r.fii_sell !== null && r.fii_sell !== undefined ? parseFloat(r.fii_sell) : null,
+        fiiNet: r.fii_net !== null && r.fii_net !== undefined ? parseFloat(r.fii_net) : null,
+        diiBuy: r.dii_buy !== null && r.dii_buy !== undefined ? parseFloat(r.dii_buy) : null,
+        diiSell: r.dii_sell !== null && r.dii_sell !== undefined ? parseFloat(r.dii_sell) : null,
+        diiNet: r.dii_net !== null && r.dii_net !== undefined ? parseFloat(r.dii_net) : null,
       })),
       latest:
         flowRows.length > 0
           ? {
               date: new Date(flowRows[flowRows.length - 1].trade_date).toISOString().split("T")[0],
-              fiiNet: flowRows[flowRows.length - 1].fii_net
-                ? parseFloat(flowRows[flowRows.length - 1].fii_net)
-                : null,
-              diiNet: flowRows[flowRows.length - 1].dii_net
-                ? parseFloat(flowRows[flowRows.length - 1].dii_net)
-                : null,
+              fiiNet:
+                flowRows[flowRows.length - 1].fii_net !== null &&
+                flowRows[flowRows.length - 1].fii_net !== undefined
+                  ? parseFloat(flowRows[flowRows.length - 1].fii_net)
+                  : null,
+              diiNet:
+                flowRows[flowRows.length - 1].dii_net !== null &&
+                flowRows[flowRows.length - 1].dii_net !== undefined
+                  ? parseFloat(flowRows[flowRows.length - 1].dii_net)
+                  : null,
             }
           : null,
     };
