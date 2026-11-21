@@ -18,6 +18,8 @@ export default function MarketBreadthDashboardPage() {
   const [selectedPeriod, setSelectedPeriod] = useState("1M");
 
   const {
+    data,
+    capSeries,
     isLoading,
     error,
     asOfDate,
@@ -135,7 +137,7 @@ export default function MarketBreadthDashboardPage() {
             history={history}
             performance={performance}
             rebasedSeries={rebasedSeries}
-            capSeries={data?.capSeries}
+            capSeries={capSeries || data?.capSeries}
           />
 
           {/* Bottom Section: Indices Row */}

@@ -51,6 +51,7 @@ export function useMarketBreadth(universe = "all", period = "1Y") {
   const marketRegime = useMemo(() => data?.marketRegime || null, [data]);
   const coverage = useMemo(() => data?.coverage || null, [data]);
   const rebasedSeries = useMemo(() => data?.rebasedSeries || {}, [data]);
+  const capSeries = useMemo(() => data?.capSeries || {}, [data]);
 
   // 1. Format Market Read Six Indicators & Weinstein Stage Analysis (Spec 4.6 & 4.8)
   const marketRead = useMemo(() => {
@@ -383,6 +384,7 @@ export function useMarketBreadth(universe = "all", period = "1Y") {
 
   return {
     data,
+    capSeries,
     isLoading,
     error,
     asOfDate,
