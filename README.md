@@ -4,6 +4,9 @@ An institutional-grade Market Breadth and Market Internals analytics terminal fo
 
 **Zero Mock Data Guarantee:** Zero mock data, zero synthetic fallback numbers, zero invented multipliers, and zero hardcoded dates. Every metric, chart series, and indicator traces directly to verified market data stored in Neon PostgreSQL and Parquet.
 
+### Known advisories
+- Next.js 16 major upgrade is deferred to maintain production stability on Next.js 15. All nested PostCSS vulnerabilities (`GHSA-qx2v-qp2m-jg93`, `GHSA-6g55-p6wh-862q`, `GHSA-fxqj-rqcc-2cmp`, `GHSA-r28c-9q8g-f849`) are patched via `overrides`: `postcss: >=8.5.23`, achieving 0 audit vulnerabilities on production dependencies (`npm audit --omit=dev`).
+
 ---
 
 ## 🏛️ System Architecture
