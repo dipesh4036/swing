@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from datetime import datetime, timedelta, date
 from typing import Dict, List, Any, Optional
@@ -242,6 +243,158 @@ def sync_fii_dii(conn=None) -> int:
         msg = f"FII/DII cash flow fetch failure: {e}"
         logger.error(msg)
         raise RuntimeError(msg)
+    finally:
+        if should_close:
+            conn.close()
+
+SECTOR_INDEX_FALLBACK_TOKENS = {
+    "bank": {"token": "99926009", "angel_name": "BANKNIFTY", "index_name": "NIFTY BANK"},
+    "financial_services": {"token": "99926037", "angel_name": "FINNIFTY", "index_name": "NIFTY FINANCIAL SERVICES"},
+    "it": {"token": "99926008", "angel_name": "NIFTY IT", "index_name": "NIFTY IT"},
+    "pharma": {"token": "99926023", "angel_name": "NIFTY PHARMA", "index_name": "NIFTY PHARMA"},
+    "auto": {"token": "99926029", "angel_name": "NIFTY AUTO", "index_name": "NIFTY AUTO"},
+    "fmcg": {"token": "99926021", "angel_name": "NIFTY FMCG", "index_name": "NIFTY FMCG"},
+    "metal": {"token": "99926030", "angel_name": "NIFTY METAL", "index_name": "NIFTY METAL"},
+    "realty": {"token": "99926018", "angel_name": "NIFTY REALTY", "index_name": "NIFTY REALTY"},
+    "media": {"token": "99926031", "angel_name": "NIFTY MEDIA", "index_name": "NIFTY MEDIA"},
+}
+
+def resolve_sector_angel_tokens(scrip_master: Optional[List[dict]] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Dynamically resolves Angel One tokens for canonical sectors.
+    If scrip_master is provided, inspects AMXIDX / index records on NSE.
+    Falls back to verified tokens in SECTOR_INDEX_FALLBACK_TOKENS.
+    Sectors without an official spot token (healthcare, consumer_durables, oil_gas)
+    are designated with source='equal_weight'.
+    """
+    from pipeline.sectors import SECTORS
+
+    lookup = {}
+    if scrip_master:
+        for item in scrip_master:
+            if item.get("exch_seg") == "NSE":
+                sym = (item.get("symbol") or "").strip().upper()
+                nm = (item.get("name") or "").strip().upper()
+                token = item.get("token")
+                itype = (item.get("instrumenttype") or "").strip()
+                if token and (str(token).startswith("999") or itype == "AMXIDX"):
+                    if nm:
+                        lookup[nm] = str(token)
+                    if sym:
+                        lookup[sym] = str(token)
+
+    resolved = {}
+    for sec in SECTORS:
+        key = sec["key"]
+        angel_name = (sec.get("angel_name") or "").strip().upper()
+        index_name = (sec.get("index_name") or "").strip().upper()
+
+        token = None
+        if lookup:
+            token = lookup.get(angel_name) or lookup.get(index_name)
+
+        if not token and key in SECTOR_INDEX_FALLBACK_TOKENS:
+            token = SECTOR_INDEX_FALLBACK_TOKENS[key]["token"]
+
+        if token:
+            resolved[key] = {
+                "key": key,
+                "index_name": sec["index_name"],
+                "token": token,
+                "source": "official"
+            }
+        else:
+            resolved[key] = {
+                "key": key,
+                "index_name": sec["index_name"],
+                "token": None,
+                "source": "equal_weight"
+            }
+    return resolved
+
+def sync_sector_indices(client: Optional[SmartAPIClient] = None, years: int = 3, conn=None, scrip_master=None) -> Dict[str, Any]:
+    """
+    Fetches daily OHLCV for official sector indices from SmartAPI and upserts into `daily_index_ohlcv`.
+    Respects Angel One 3 req/sec rate limit.
+    Equal-weight sectors are recorded with source='equal_weight' and 0 rows (handled in Phase 3).
+    """
+    tokens_map = resolve_sector_angel_tokens(scrip_master)
+
+    should_close = False
+    if conn is None:
+        conn = get_connection()
+        should_close = True
+
+    if client is None:
+        client = SmartAPIClient()
+
+    results = {}
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=years * 365 + 30)
+    from_str = start_date.strftime("%Y-%m-%d 00:00")
+    to_str = end_date.strftime("%Y-%m-%d 23:59")
+
+    try:
+        with conn.cursor() as cur:
+            for key, info in tokens_map.items():
+                if info["source"] == "equal_weight" or not info["token"]:
+                    logger.info(f"Sector '{key}' ({info['index_name']}) has no official spot index; marked for equal_weight synthesis.")
+                    results[key] = {"rows": 0, "source": "equal_weight", "index_name": info["index_name"]}
+                    continue
+
+                token = info["token"]
+                idx_name = info["index_name"]
+                logger.info(f"Fetching {years}y candles for sector index {idx_name} (token {token})...")
+
+                try:
+                    candles = client.get_candle_data(
+                        exchange="NSE",
+                        symbol_token=token,
+                        interval="ONE_DAY",
+                        from_date=from_str,
+                        to_date=to_str
+                    )
+                except Exception as ex:
+                    logger.warning(f"Failed to fetch candles for sector index {idx_name} ({token}): {ex}")
+                    candles = None
+
+                # Sleep to respect SmartAPI rate limit (<= 3 req/sec)
+                time.sleep(0.35)
+
+                if not candles:
+                    logger.warning(f"No candles returned for sector index {idx_name}.")
+                    results[key] = {"rows": 0, "source": "official", "index_name": idx_name}
+                    continue
+
+                records = []
+                for c in candles:
+                    t_date = c[0].split("T")[0]
+                    records.append((
+                        t_date,
+                        idx_name,
+                        float(c[1]),
+                        float(c[2]),
+                        float(c[3]),
+                        float(c[4]),
+                        int(c[5]) if len(c) > 5 and c[5] is not None else 0
+                    ))
+
+                insert_sql = """
+                INSERT INTO daily_index_ohlcv (trade_date, index_name, open, high, low, close, volume)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (trade_date, index_name) DO UPDATE SET
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    close = EXCLUDED.close,
+                    volume = EXCLUDED.volume;
+                """
+                execute_batch(cur, insert_sql, records, page_size=1000)
+                results[key] = {"rows": len(records), "source": "official", "index_name": idx_name}
+                logger.info(f"Upserted {len(records)} rows for sector index {idx_name}.")
+
+        conn.commit()
+        return results
     finally:
         if should_close:
             conn.close()
