@@ -155,7 +155,11 @@ const gridMockRequire = (id) => {
   if (id === "lightweight-charts") {
     return {
       createChart: () => ({
-        addSeries: () => ({ setData: () => {}, applyOptions: () => {} }),
+        addSeries: () => ({
+          setData: () => {},
+          applyOptions: () => {},
+          createPriceLine: () => ({ applyOptions: () => {} }),
+        }),
         priceScale: () => ({ applyOptions: () => {} }),
         timeScale: () => ({ fitContent: () => {}, applyOptions: () => {} }),
         applyOptions: () => {},
@@ -164,6 +168,7 @@ const gridMockRequire = (id) => {
       CandlestickSeries: {},
       LineSeries: {},
       HistogramSeries: {},
+      LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
     };
   }
   if (id === "lucide-react") {

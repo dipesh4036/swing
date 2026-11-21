@@ -1,20 +1,36 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
+  LineStyle,
 } from "lightweight-charts";
 import { ExternalLink } from "lucide-react";
 
 /**
  * Individual Mini Chart Card for Fast Scan Grid
  */
-function GridChartCard({ stock, candles = [], onSelectStock }) {
+function GridChartCard({ stock, candles = [], chartHeight = 260, onSelectStock }) {
   const chartContainerRef = useRef(null);
   const chartInstanceRef = useRef(null);
+
+  // Compute Support level from recent consolidation swing low (lookback 30 sessions)
+  const supportPrice = useMemo(() => {
+    if (!candles || candles.length === 0) return null;
+    const lookback = Math.min(candles.length, 30);
+    const recent = candles.slice(-lookback);
+    let minLow = null;
+    for (const c of recent) {
+      const low = c.low ?? c.close;
+      if (typeof low === "number" && !isNaN(low)) {
+        if (minLow === null || low < minLow) minLow = low;
+      }
+    }
+    return minLow !== null ? Number(minLow.toFixed(2)) : null;
+  }, [candles]);
 
   useEffect(() => {
     if (!chartContainerRef.current || !candles || candles.length === 0) return;
@@ -31,7 +47,7 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
 
     const chart = createChart(container, {
       width: container.clientWidth || 340,
-      height: 200,
+      height: chartHeight,
       layout: {
         background: { color: isDark ? "#18181B" : "#FFFFFF" },
         textColor: isDark ? "#A1A1AA" : "#71717A",
@@ -45,18 +61,38 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
         },
       },
       crosshair: {
-        mode: 0, // Crosshair disabled for fast scan performance
+        mode: 1, // Crosshair mode normal for interactive scanning
+        vertLine: {
+          color: isDark ? "#52525B" : "#A1A1AA",
+          width: 1,
+          style: LineStyle.Dashed,
+        },
+        horzLine: {
+          color: isDark ? "#52525B" : "#A1A1AA",
+          width: 1,
+          style: LineStyle.Dashed,
+        },
       },
-      handleScroll: false,
-      handleScale: false,
+      // Allow moving/panning and scaling candles across time
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
+      },
       rightPriceScale: {
         borderColor: isDark ? "#27272A" : "#E4E4E7",
         scaleMargins: { top: 0.1, bottom: 0.25 },
       },
       timeScale: {
         borderColor: isDark ? "#27272A" : "#E4E4E7",
-        barSpacing: 4.5,
-        rightOffset: 2,
+        barSpacing: 5.5,
+        rightOffset: 3,
       },
     });
 
@@ -82,7 +118,32 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
     }));
     candleSeries.setData(candleData);
 
-    // 2. Volume Series (Histogram at bottom)
+    // 2. Support Price Line
+    if (supportPrice !== null) {
+      candleSeries.createPriceLine({
+        price: supportPrice,
+        color: isDark ? "#10B981" : "#059669",
+        lineWidth: 1.5,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "Support",
+      });
+    }
+
+    // 3. Pivot Price Line (if available and distinct from support)
+    const pivotPrice = stock.pivot ? Number(Number(stock.pivot).toFixed(2)) : null;
+    if (pivotPrice && Math.abs(pivotPrice - (supportPrice || 0)) > 0.05) {
+      candleSeries.createPriceLine({
+        price: pivotPrice,
+        color: isDark ? "#60A5FA" : "#2563EB",
+        lineWidth: 1.5,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "Pivot",
+      });
+    }
+
+    // 4. Volume Series (Histogram at bottom)
     const volumeSeries = chart.addSeries(HistogramSeries, {
       color: isDark ? "#3F3F46" : "#D4D4D8",
       priceFormat: { type: "volume" },
@@ -107,7 +168,7 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
     });
     volumeSeries.setData(volumeData);
 
-    // 3. Moving Average Lines (EMA 10, 20, 50, 200)
+    // 5. Moving Average Lines (EMA 10, 20, 50, 200)
     const addEMALine = (key, color) => {
       const lineData = candles
         .filter((c) => typeof c[key] === "number" && !isNaN(c[key]))
@@ -179,7 +240,7 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
         chartInstanceRef.current = null;
       }
     };
-  }, [candles]);
+  }, [candles, chartHeight, supportPrice, stock.pivot]);
 
   const hasCandles = candles && candles.length > 0;
 
@@ -235,9 +296,16 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
 
       {/* Meta Bar */}
       <div className="px-2.5 py-1 text-[10px] font-mono text-text-muted border-b border-border/50 flex items-center justify-between bg-surface">
-        <span title={stock.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}>
-          Vol {stock.vol_ratio !== null && stock.vol_ratio !== undefined ? `${stock.vol_ratio}x` : "—"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span title={stock.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}>
+            Vol {stock.vol_ratio !== null && stock.vol_ratio !== undefined ? `${stock.vol_ratio}x` : "—"}
+          </span>
+          {supportPrice !== null && (
+            <span className="text-bullish font-medium" title="Support price level">
+              Supp: ₹{supportPrice.toLocaleString("en-IN")}
+            </span>
+          )}
+        </div>
         {stock.dist_to_pivot_pct !== null && stock.dist_to_pivot_pct !== undefined ? (
           <span>Pivot: {(stock.dist_to_pivot_pct * 100).toFixed(1)}%</span>
         ) : stock.stage ? (
@@ -248,9 +316,12 @@ function GridChartCard({ stock, candles = [], onSelectStock }) {
       </div>
 
       {/* Chart Canvas Area */}
-      <div className="relative w-full h-[200px] bg-surface">
+      <div
+        className="relative w-full bg-surface"
+        style={{ height: `${chartHeight}px` }}
+      >
         {hasCandles ? (
-          <div ref={chartContainerRef} className="w-full h-full" />
+          <div ref={chartContainerRef} className="w-full h-full cursor-crosshair" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-text-muted text-xs p-4 text-center">
             <span>No candle data in database</span>
@@ -281,6 +352,24 @@ export function ScreenerGrid({
   activeScreener = "",
   onSelectStock,
 }) {
+  const [gridMode, setGridMode] = useState("2x2");
+
+  const gridConfigs = {
+    "2x2": {
+      colsClass: "grid-cols-1 md:grid-cols-2",
+      chartHeight: 260,
+    },
+    "3x3": {
+      colsClass: "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
+      chartHeight: 210,
+    },
+    "4x4": {
+      colsClass: "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+      chartHeight: 180,
+    },
+  };
+  const activeConfig = gridConfigs[gridMode] || gridConfigs["2x2"];
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg">
       {/* Legend & Summary Sub-Header */}
@@ -294,23 +383,51 @@ export function ScreenerGrid({
           </span>
         </div>
 
-        {/* Moving Average Color Legend */}
-        <div className="flex items-center gap-3 text-[11px] font-mono">
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-0.5 rounded-full bg-[#06B6D4]" />
-            <span className="text-text-muted">10 EMA</span>
+        <div className="flex items-center gap-4">
+          {/* Layout Switcher (2x2 default) */}
+          <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-[11px] font-semibold">
+            {["2x2", "3x3", "4x4"].map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setGridMode(mode)}
+                className={`px-2 py-0.5 rounded-[4px] transition-colors ${
+                  gridMode === mode
+                    ? "bg-primary text-text-inverse font-semibold"
+                    : "text-text-secondary hover:text-text"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
           </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-0.5 rounded-full bg-[#3B82F6]" />
-            <span className="text-text-muted">20 EMA</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-0.5 rounded-full bg-[#EAB308]" />
-            <span className="text-text-muted">50 EMA</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-0.5 rounded-full bg-[#9333EA]" />
-            <span className="text-text-muted">200 EMA</span>
+
+          {/* Indicator & Moving Average Color Legend */}
+          <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono">
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 border-t border-dashed border-[#10B981]" />
+              <span className="text-text-muted">Support</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 border-t border-dashed border-[#60A5FA]" />
+              <span className="text-text-muted">Pivot</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 rounded-full bg-[#06B6D4]" />
+              <span className="text-text-muted">10 EMA</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 rounded-full bg-[#3B82F6]" />
+              <span className="text-text-muted">20 EMA</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 rounded-full bg-[#EAB308]" />
+              <span className="text-text-muted">50 EMA</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-0.5 rounded-full bg-[#9333EA]" />
+              <span className="text-text-muted">200 EMA</span>
+            </div>
           </div>
         </div>
       </div>
@@ -318,14 +435,15 @@ export function ScreenerGrid({
       {/* Grid Container */}
       <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {Array.from({ length: Math.min(stocks.length || 8, 12) }).map((_, i) => (
+          <div className={`grid ${activeConfig.colsClass} gap-3`}>
+            {Array.from({ length: Math.min(stocks.length || 4, 8) }).map((_, i) => (
               <div
                 key={i}
-                className="bg-surface rounded-lg border border-border h-[280px] p-3 animate-pulse flex flex-col justify-between"
+                className="bg-surface rounded-lg border border-border p-3 animate-pulse flex flex-col justify-between"
+                style={{ height: `${activeConfig.chartHeight + 80}px` }}
               >
                 <div className="h-4 bg-bg-secondary rounded w-1/3" />
-                <div className="h-44 bg-bg-secondary rounded" />
+                <div className="flex-1 my-2 bg-bg-secondary rounded" />
                 <div className="h-4 bg-bg-secondary rounded w-1/2" />
               </div>
             ))}
@@ -335,12 +453,13 @@ export function ScreenerGrid({
             <span>No candidate stocks match the current filter.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className={`grid ${activeConfig.colsClass} gap-3`}>
             {stocks.map((stock) => (
               <GridChartCard
                 key={stock.token}
                 stock={stock}
                 candles={candlesByToken[stock.token] || []}
+                chartHeight={activeConfig.chartHeight}
                 onSelectStock={onSelectStock}
               />
             ))}
