@@ -53,3 +53,8 @@ jobs:
 
       - name: Run JavaScript test suite
         run: npm run test:js
+
+      - name: Run Next.js build (smoke check with dummy secrets)
+        env:
+          AUTH_SECRET: ci-dummy-secret-32chars-minimum-xxxx
+        run: npx next build

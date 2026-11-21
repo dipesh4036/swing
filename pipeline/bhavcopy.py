@@ -415,7 +415,7 @@ def ingest_bhavcopy(
                         p_tot = len(expected_set) if expected_set else len(latest_tokens)
                         p_succ = len(latest_tokens & expected_set) if expected_set else len(latest_tokens)
                         p_fail = max(0, p_tot - p_succ)
-                        log_ingest_run(
+                        run_id = log_ingest_run(
                             run_type="equities",
                             status="partial",
                             total=p_tot,
@@ -426,9 +426,9 @@ def ingest_bhavcopy(
                             quality_gate_passed=True,
                             conn=conn
                         )
-                        return {"status": "partial", "dates_ingested": dates_ingested, "error": fail_msg}
+                        return {"status": "partial", "run_id": run_id, "dates_ingested": dates_ingested, "error": fail_msg}
                     else:
-                        log_ingest_run(
+                        run_id = log_ingest_run(
                             run_type="equities",
                             status="failed",
                             total=len(active_instruments),
@@ -439,7 +439,7 @@ def ingest_bhavcopy(
                             quality_gate_passed=False,
                             conn=conn
                         )
-                        return {"status": "failed", "error": fail_msg}
+                        return {"status": "failed", "run_id": run_id, "error": fail_msg}
 
         # Parse & Validate
         try:
@@ -641,7 +641,7 @@ def ingest_bhavcopy(
         )
 
     logger.info(f"Bhavcopy ingest completed: {summary_msg}")
-    log_ingest_run(
+    run_id = log_ingest_run(
         run_type="equities",
         status=run_status,
         total=total_count,
@@ -655,6 +655,7 @@ def ingest_bhavcopy(
 
     return {
         "status": run_status,
+        "run_id": run_id,
         "dates_ingested": dates_ingested,
         "rows": total_new_rows,
         "refetched": len(all_refetched_tokens),

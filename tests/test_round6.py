@@ -285,3 +285,50 @@ def test_r20_constituents_empty_and_failure_is_fatal():
             assert not mock_trim.called
             assert mock_alert.called
 
+# ============================================================================
+# R24: Degraded status updates exact run_id and closes connection
+# ============================================================================
+
+def test_r24_degraded_status_updates_exact_run_id():
+    """R24: Ingest run update uses exact run_id from step 6, not latest subquery, and closes conn."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pq_path = os.path.join(tmpdir, "test_equity.parquet")
+        pd.DataFrame([{"token": 1, "symbol": "S1", "trade_date": "2026-11-18", "close": 100.0}]).to_parquet(pq_path, index=False)
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+        with patch("pipeline.workflow.check_storage_guard_and_prune"), \
+             patch("pipeline.workflow.check_workflow_branch", return_value={"branch": "full_workflow"}), \
+             patch("pipeline.workflow.send_telegram_alert"), \
+             patch("pipeline.db.get_connection", return_value=mock_conn):
+
+            res = run_daily_workflow(
+                sync_instruments_fn=lambda: 2000,
+                sync_constituents_fn=lambda: {"nifty500": 501},
+                sync_indices_fn=lambda: True,
+                sync_macro_fn=lambda: True,
+                sync_fii_dii_fn=lambda: (_ for _ in ()).throw(RuntimeError("FII/DII failed")),
+                ingest_equities_fn=lambda **kw: {"status": "success", "run_id": 42},
+                adjust_fn=lambda **kw: True,
+                quality_gate_fn=lambda **kw: True,
+                compute_fn=lambda **kw: True,
+                trim_fn=lambda **kw: {"trimmed": True},
+                parquet_path=pq_path,
+            )
+
+            assert res["status"] == "partial"
+            assert mock_cur.execute.called
+
+            update_calls = [
+                call for call in mock_cur.execute.call_args_list
+                if "UPDATE ingest_runs" in str(call)
+            ]
+            assert len(update_calls) == 1
+            query, params = update_calls[0][0]
+            assert "WHERE run_id = %s" in query
+            assert params[2] == 42
+            # Verify connection was explicitly closed
+            assert mock_conn.close.called
+

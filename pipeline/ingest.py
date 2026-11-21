@@ -510,10 +510,11 @@ def ingest_equities(
             logger.warning(alert_msg)
             send_telegram_alert(alert_msg)
 
-        log_ingest_run("equities", status, expected_total, expected_success, expected_failed, started_at, error_msg=summary_msg)
+        run_id = log_ingest_run("equities", status, expected_total, expected_success, expected_failed, started_at, error_msg=summary_msg)
 
         return {
             "status": status,
+            "run_id": run_id,
             "total": total_inst,
             "success": success_count,
             "failed": failed_count,

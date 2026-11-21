@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:js": "node tests/test_auth.mjs && node tests/test_indicators.mjs && node tests/test_tapetide.mjs && node tests/test_round2.mjs"
+    "test:js": "node tests/test_auth.mjs && node tests/test_indicators.mjs && node tests/test_tapetide.mjs && node tests/test_round2.mjs && node tests/test_render.mjs"
   },
   "dependencies": {
     "@types/pg": "^8.23.1",

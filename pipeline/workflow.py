@@ -116,30 +116,37 @@ def check_storage_guard_and_prune() -> Dict[str, Any]:
     db_size = 0
     pruned_count = 0
     exceeded = False
+    conn = None
     try:
         from pipeline.db import get_connection
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT pg_database_size(current_database());")
-                row = cur.fetchone()
-                if row:
-                    db_size = row[0]
-                size_mb = db_size / (1024 * 1024)
-                logger.info(f"Neon database size check: {size_mb:.2f} MB (threshold: 700 MB)")
-                if db_size > threshold_bytes:
-                    exceeded = True
-                    msg = (
-                        f"⚠️ Neon DB size warning: Current database size is {size_mb:.1f} MB, "
-                        f"exceeding safe threshold of 700 MB. Pruning ingest_runs older than 90 days."
-                    )
-                    logger.warning(msg)
-                    send_telegram_alert(msg)
-                    cur.execute("DELETE FROM ingest_runs WHERE started_at < NOW() - INTERVAL '90 days';")
-                    pruned_count = cur.rowcount
-                    conn.commit()
-                    logger.info(f"Pruned {pruned_count} old records from ingest_runs.")
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_database_size(current_database());")
+            row = cur.fetchone()
+            if row:
+                db_size = row[0]
+            size_mb = db_size / (1024 * 1024)
+            logger.info(f"Neon database size check: {size_mb:.2f} MB (threshold: 700 MB)")
+            if db_size > threshold_bytes:
+                exceeded = True
+                msg = (
+                    f"⚠️ Neon DB size warning: Current database size is {size_mb:.1f} MB, "
+                    f"exceeding safe threshold of 700 MB. Pruning ingest_runs older than 90 days."
+                )
+                logger.warning(msg)
+                send_telegram_alert(msg)
+                cur.execute("DELETE FROM ingest_runs WHERE started_at < NOW() - INTERVAL '90 days';")
+                pruned_count = cur.rowcount
+                conn.commit()
+                logger.info(f"Pruned {pruned_count} old records from ingest_runs.")
     except Exception as e:
         logger.error(f"Storage guard check failed: {e}")
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return {"db_size_bytes": db_size, "exceeded": exceeded, "pruned_count": pruned_count}
 
 def run_daily_workflow(
@@ -205,6 +212,7 @@ def run_daily_workflow(
         )
 
     res6 = None
+    equities_run_id = None
     degraded_steps = []
     if branch != "compute_only":
         # 1. sync_instruments
@@ -316,8 +324,10 @@ def run_daily_workflow(
                     from pipeline.ingest import ingest_equities
                     fn6 = ingest_equities
             res6 = fn6(parquet_path=pq_path, tokens_limit=tokens_limit)
-            if isinstance(res6, dict) and res6.get("status") == "failed":
-                raise RuntimeError(f"Ingest reported failure: {res6}")
+            if isinstance(res6, dict):
+                equities_run_id = res6.get("run_id")
+                if res6.get("status") == "failed":
+                    raise RuntimeError(f"Ingest reported failure: {res6}")
             logger.info(f"Step 6 complete: equities ingested ({res6}). Step 6/9 done in {time.time() - t0:.1f}s")
 
             # A4. Early save: upload immediately if step 6 succeeded and latest date has >= 1,500 tokens
@@ -441,10 +451,12 @@ def run_daily_workflow(
         alert_msg = f"[Pipeline Alert] Non-core step(s) degraded: {', '.join(degraded_steps)}"
         logger.warning(alert_msg)
         send_telegram_alert(alert_msg)
+        conn = None
         try:
             from pipeline.db import get_connection
-            with get_connection() as conn:
-                with conn.cursor() as cur:
+            conn = get_connection()
+            with conn.cursor() as cur:
+                if equities_run_id is not None:
                     cur.execute("""
                         UPDATE ingest_runs
                         SET status = 'partial',
@@ -452,11 +464,30 @@ def run_daily_workflow(
                                 WHEN error_message IS NULL OR error_message = '' THEN %s
                                 ELSE error_message || ' | ' || %s
                             END
-                        WHERE run_id = (SELECT run_id FROM ingest_runs ORDER BY run_id DESC LIMIT 1);
-                    """, (f"degraded_steps: {degraded_steps}", f"degraded_steps: {degraded_steps}"))
-                conn.commit()
+                        WHERE run_id = %s;
+                    """, (f"degraded_steps: {degraded_steps}", f"degraded_steps: {degraded_steps}", equities_run_id))
+                else:
+                    from pipeline.ingest import log_ingest_run
+                    log_ingest_run(
+                        run_type="daily_workflow",
+                        status="partial",
+                        total=0,
+                        success=0,
+                        failed=0,
+                        started_at=datetime.fromtimestamp(workflow_start_time),
+                        error_msg=f"degraded_steps: {degraded_steps}",
+                        quality_gate_passed=True,
+                        conn=conn
+                    )
+            conn.commit()
         except Exception as _e:
             logger.warning(f"Could not update ingest_runs for degraded status: {_e}")
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     status = "partial" if degraded_steps else "success"
     result_payload = {
