@@ -8,17 +8,17 @@ import {
   HistogramSeries,
   LineStyle,
 } from "lightweight-charts";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 
 /**
  * Individual Mini Chart Card for Fast Scan Grid
  */
-function GridChartCard({ stock, candles = [], chartHeight = 260, onSelectStock }) {
+function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false, onSelectStock }) {
   const chartContainerRef = useRef(null);
   const chartInstanceRef = useRef(null);
 
-  // Compute Support level from recent consolidation swing low (lookback 30 sessions)
-  const supportPrice = useMemo(() => {
+  // Compute 30-day low from recent consolidation swing low (lookback 30 sessions, R27)
+  const low30dPrice = useMemo(() => {
     if (!candles || candles.length === 0) return null;
     const lookback = Math.min(candles.length, 30);
     const recent = candles.slice(-lookback);
@@ -118,21 +118,21 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, onSelectStock }
     }));
     candleSeries.setData(candleData);
 
-    // 2. Support Price Line
-    if (supportPrice !== null) {
+    // 2. 30-Day Low Price Line (R27: labelled honestly as 30D low)
+    if (low30dPrice !== null) {
       candleSeries.createPriceLine({
-        price: supportPrice,
+        price: low30dPrice,
         color: isDark ? "#10B981" : "#059669",
         lineWidth: 1.5,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: "Support",
+        title: "30D low",
       });
     }
 
-    // 3. Pivot Price Line (if available and distinct from support)
+    // 3. Pivot Price Line (if available and distinct from 30D low)
     const pivotPrice = stock.pivot ? Number(Number(stock.pivot).toFixed(2)) : null;
-    if (pivotPrice && Math.abs(pivotPrice - (supportPrice || 0)) > 0.05) {
+    if (pivotPrice && Math.abs(pivotPrice - (low30dPrice || 0)) > 0.05) {
       candleSeries.createPriceLine({
         price: pivotPrice,
         color: isDark ? "#60A5FA" : "#2563EB",
@@ -240,7 +240,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, onSelectStock }
         chartInstanceRef.current = null;
       }
     };
-  }, [candles, chartHeight, supportPrice, stock.pivot]);
+  }, [candles, chartHeight, low30dPrice, stock.pivot]);
 
   const hasCandles = candles && candles.length > 0;
 
@@ -300,9 +300,14 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, onSelectStock }
           <span title={stock.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}>
             Vol {stock.vol_ratio !== null && stock.vol_ratio !== undefined ? `${stock.vol_ratio}x` : "—"}
           </span>
-          {supportPrice !== null && (
-            <span className="text-bullish font-medium" title="Support price level">
-              Supp: ₹{supportPrice.toLocaleString("en-IN")}
+          {low30dPrice !== null && (
+            <span className="text-bullish font-medium" title="30-day low price level">
+              30D low: ₹{low30dPrice.toLocaleString("en-IN")}
+            </span>
+          )}
+          {isStale && (
+            <span className="text-amber-500 dark:text-amber-400 font-semibold" title="Last candle is earlier than as-of date">
+              Stale data
             </span>
           )}
         </div>
@@ -348,9 +353,12 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, onSelectStock }
 export function ScreenerGrid({
   stocks = [],
   candlesByToken = {},
+  staleTokens = [],
   loading = false,
+  error = null,
   activeScreener = "",
   onSelectStock,
+  onRetry,
 }) {
   const [gridMode, setGridMode] = useState("2x2");
 
@@ -406,7 +414,7 @@ export function ScreenerGrid({
           <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono">
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 border-t border-dashed border-[#10B981]" />
-              <span className="text-text-muted">Support</span>
+              <span className="text-text-muted">30D low</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 border-t border-dashed border-[#60A5FA]" />
@@ -434,7 +442,21 @@ export function ScreenerGrid({
 
       {/* Grid Container */}
       <div className="flex-1 overflow-y-auto p-3">
-        {loading ? (
+        {error ? (
+          <div className="flex flex-col items-center justify-center h-64 p-6 bg-surface border border-bearish-border rounded-lg text-center m-4">
+            <div className="text-bearish font-medium text-sm mb-3">{error}</div>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="px-3.5 py-1.5 bg-primary text-text-inverse text-xs font-semibold rounded hover:bg-primary-hover transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw size={12} />
+                <span>Retry</span>
+              </button>
+            )}
+          </div>
+        ) : loading ? (
           <div className={`grid ${activeConfig.colsClass} gap-3`}>
             {Array.from({ length: Math.min(stocks.length || 4, 8) }).map((_, i) => (
               <div
@@ -460,6 +482,7 @@ export function ScreenerGrid({
                 stock={stock}
                 candles={candlesByToken[stock.token] || []}
                 chartHeight={activeConfig.chartHeight}
+                isStale={Array.isArray(staleTokens) && staleTokens.includes(stock.token)}
                 onSelectStock={onSelectStock}
               />
             ))}

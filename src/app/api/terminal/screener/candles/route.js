@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { attachEMAs } from "@/lib/indicators";
+import { attachEMAs, sliceLast } from "@/lib/indicators";
 
 export const maxDuration = 30;
+
+const GRID_MAX_BARS = 150;
 
 const VALID_SCREENERS = [
   "stage2_breakout",
@@ -38,7 +40,7 @@ export async function GET(request) {
     const asOfStr = dateRes.rows[0]?.max_date;
     if (!asOfStr) {
       return NextResponse.json(
-        { asOf: null, screener, candles: {} },
+        { asOf: null, screener, candles: {}, staleTokens: [] },
         { headers: { "Cache-Control": "private, max-age=300" } }
       );
     }
@@ -54,15 +56,15 @@ export async function GET(request) {
     const tokens = tokensRes.rows.map((r) => r.token);
     if (tokens.length === 0) {
       return NextResponse.json(
-        { asOf: asOfStr, screener, candles: {} },
+        { asOf: asOfStr, screener, candles: {}, staleTokens: [] },
         { headers: { "Cache-Control": "private, max-age=300" } }
       );
     }
 
     // 4. Fetch daily OHLCV candles strictly from screener_candles table in Neon DB
+    // Drop sma_50, sma_150, sma_200 to optimize payload size (R25)
     const candlesRes = await queryWithRetry(
-      `SELECT token, trade_date::text as trade_date, open, high, low, close, volume,
-              sma_50, sma_150, sma_200
+      `SELECT token, trade_date::text as trade_date, open, high, low, close, volume
        FROM screener_candles
        WHERE token = ANY($1::int[])
        ORDER BY token, trade_date ASC;`,
@@ -86,25 +88,32 @@ export async function GET(request) {
         low: r.low !== null ? Number(r.low) : null,
         close: Number(r.close),
         volume: r.volume !== null ? Number(r.volume) : null,
-        sma_50: r.sma_50 !== null ? Number(r.sma_50) : null,
-        sma_150: r.sma_150 !== null ? Number(r.sma_150) : null,
-        sma_200: r.sma_200 !== null ? Number(r.sma_200) : null,
       });
     }
 
-    // 5. Attach EMAs (10, 20, 50, 200)
+    // 5. Attach EMAs (10, 20, 50, 200) on full history, then slice to GRID_MAX_BARS (R25)
     const processedCandles = {};
+    const staleTokens = [];
+
     for (const t of tokens) {
       const raw = candlesByToken[t] || [];
       if (raw.length > 0) {
-        processedCandles[t] = attachEMAs(raw, [10, 20, 50, 200]);
+        // Staleness guard: if token's last candle date is earlier than asOfStr
+        const lastCandle = raw[raw.length - 1];
+        if (lastCandle && lastCandle.date < asOfStr) {
+          staleTokens.push(t);
+        }
+
+        const withEMAs = attachEMAs(raw, [10, 20, 50, 200]);
+        processedCandles[t] = sliceLast(withEMAs, GRID_MAX_BARS);
       } else {
         processedCandles[t] = [];
+        staleTokens.push(t);
       }
     }
 
     return NextResponse.json(
-      { asOf: asOfStr, screener, candles: processedCandles },
+      { asOf: asOfStr, screener, candles: processedCandles, staleTokens },
       { headers: { "Cache-Control": "private, max-age=300" } }
     );
   } catch (error) {

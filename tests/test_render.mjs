@@ -174,6 +174,7 @@ const gridMockRequire = (id) => {
   if (id === "lucide-react") {
     return {
       ExternalLink: () => React.createElement("span", null, "[↗]"),
+      RefreshCw: () => React.createElement("span", null, "[↻]"),
     };
   }
   return {

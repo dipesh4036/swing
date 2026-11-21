@@ -117,7 +117,9 @@ export default function ScreenerPage() {
   const [universe] = useState("all");
   const [viewMode, setViewMode] = useState("list"); // "list" (All Stocks) | "chart" (Chart View)
   const [gridCandles, setGridCandles] = useState({});
+  const [staleTokens, setStaleTokens] = useState([]);
   const [loadingGrid, setLoadingGrid] = useState(false);
+  const [gridError, setGridError] = useState(null);
   const [activeScreener, setActiveScreener] = useState("stage2_breakout");
   const [screenerData, setScreenerData] = useState(null);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -158,6 +160,10 @@ export default function ScreenerPage() {
         { signal: controller.signal }
       );
       if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || `HTTP error ${res.status}`);
       }
@@ -197,7 +203,7 @@ export default function ScreenerPage() {
     };
   }, [fetchScreenerList]);
 
-  // 1b. Fetch Grid Candles for Chart View (Database data only)
+  // 1b. Fetch Grid Candles for Chart View (Database data only, R26 error & staleness handling)
   const gridAbortControllerRef = useRef(null);
 
   const fetchGridCandles = useCallback(async () => {
@@ -208,18 +214,30 @@ export default function ScreenerPage() {
     gridAbortControllerRef.current = controller;
 
     setLoadingGrid(true);
+    setGridError(null);
+    setGridCandles({}); // Clear on new fetch start so candles don't mismatch
+    setStaleTokens([]);
+
     try {
       const res = await fetch(
         `/api/terminal/screener/candles?screener=${activeScreener}`,
         { signal: controller.signal }
       );
-      if (res.ok) {
-        const data = await res.json();
-        setGridCandles(data.candles || {});
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+        setGridError(`Could not load candles (HTTP ${res.status})`);
+        return;
       }
+      const data = await res.json();
+      setGridCandles(data.candles || {});
+      setStaleTokens(data.staleTokens || []);
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error("Failed to load grid candles from database:", err);
+        setGridError("Could not load candles (network error)");
       }
     } finally {
       if (!controller.signal.aborted) {
@@ -539,13 +557,16 @@ export default function ScreenerPage() {
         <ScreenerGrid
           stocks={displayedRows}
           candlesByToken={gridCandles}
+          staleTokens={staleTokens}
           loading={loadingGrid}
+          error={gridError}
           activeScreener={activeScreener}
           onSelectStock={(stock) => {
             setSelectedStock(stock);
             setViewMode("list");
             setMobileView("chart");
           }}
+          onRetry={fetchGridCandles}
         />
       ) : (
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">

@@ -134,3 +134,20 @@ export function aggregateWeekly(dailyCandles) {
   return weeks;
 }
 
+/**
+ * Slices an array of candles to the last `n` items.
+ *
+ * @param {Array<Object>} candles - Array of chronological candles.
+ * @param {number} n - Maximum number of trailing candles to return.
+ * @returns {Array<Object>} Sliced array of candles.
+ */
+export function sliceLast(candles, n) {
+  if (!Array.isArray(candles) || candles.length === 0 || n <= 0) {
+    return [];
+  }
+  if (candles.length <= n) {
+    return candles;
+  }
+  return candles.slice(-n);
+}
+
