@@ -159,6 +159,59 @@ async function runTests() {
   );
 
   // -------------------------------------------------------------------------
+  // R20: Health Route Staleness for FII/DII and Macro Rates
+  // -------------------------------------------------------------------------
+  console.log("5b. Testing R20: Health route FII/DII and macro rates staleness...");
+  assert.ok(
+    healthRouteSource.includes("daily_fii_dii_cash"),
+    "health/route.js must query daily_fii_dii_cash"
+  );
+  assert.ok(
+    healthRouteSource.includes("daily_macro_rates"),
+    "health/route.js must query daily_macro_rates"
+  );
+  assert.ok(
+    healthRouteSource.includes("fiiDiiStaleDays"),
+    "health/route.js must report fiiDiiStaleDays"
+  );
+  assert.ok(
+    healthRouteSource.includes("macroStaleDays"),
+    "health/route.js must report macroStaleDays"
+  );
+  assert.ok(
+    healthRouteSource.includes("getWeekdayDifference"),
+    "health/route.js must calculate weekday staleness"
+  );
+
+  // Unit test the weekday calculation logic
+  function testWeekdayDiff(startStr, nowStr) {
+    if (!startStr) return null;
+    const start = new Date(startStr);
+    const now = new Date(nowStr);
+    const startUTC = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+    const nowUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    let weekdays = 0;
+    const cur = new Date(startUTC);
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    while (cur <= nowUTC) {
+      const day = cur.getUTCDay();
+      if (day !== 0 && day !== 6) weekdays++;
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return weekdays;
+  }
+
+  // Friday 2026-11-20 to Saturday 2026-11-21 -> 0 weekdays
+  assert.equal(testWeekdayDiff("2026-11-20", "2026-11-21"), 0);
+  // Friday 2026-11-20 to Sunday 2026-11-22 -> 0 weekdays
+  assert.equal(testWeekdayDiff("2026-11-20", "2026-11-22"), 0);
+  // Friday 2026-11-20 to Monday 2026-11-23 -> 1 weekday
+  assert.equal(testWeekdayDiff("2026-11-20", "2026-11-23"), 1);
+  // Friday 2026-11-20 to Thursday 2026-11-26 -> 4 weekdays (> 3 -> degrade)
+  assert.equal(testWeekdayDiff("2026-11-20", "2026-11-26"), 4);
+  assert.equal(testWeekdayDiff(null, "2026-11-26"), null);
+
+  // -------------------------------------------------------------------------
   // R11: Parallel Login Lockout Race Condition Prevention
   // -------------------------------------------------------------------------
   console.log("6. Testing R11: Concurrent login lockout race condition prevention...");

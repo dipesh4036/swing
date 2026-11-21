@@ -1,6 +1,29 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
 
+function getWeekdayDifference(startDateStr) {
+  if (!startDateStr) return null;
+  const start = new Date(startDateStr);
+  const now = new Date();
+
+  // Normalize dates to midnight UTC to compare calendar days
+  const startUTC = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const nowUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  let weekdays = 0;
+  const cur = new Date(startUTC);
+  cur.setUTCDate(cur.getUTCDate() + 1);
+
+  while (cur <= nowUTC) {
+    const day = cur.getUTCDay();
+    if (day !== 0 && day !== 6) { // not Sunday (0) or Saturday (6)
+      weekdays++;
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return weekdays;
+}
+
 async function sendTelegramAlert(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -69,8 +92,48 @@ export async function GET(request) {
     `);
     const latestIngest = ingestRes.rows[0] || null;
 
+    // 4. Query latest trade_date from daily_fii_dii_cash and daily_macro_rates (R20)
+    let fiiDiiLatestDate = null;
+    try {
+      const fiiDiiRes = await queryWithRetry(
+        "SELECT MAX(trade_date) as latest_date FROM daily_fii_dii_cash;"
+      );
+      const rawFiiDii = fiiDiiRes.rows[0]?.latest_date;
+      fiiDiiLatestDate = rawFiiDii ? new Date(rawFiiDii).toISOString().split("T")[0] : null;
+    } catch (fiiErr) {
+      console.warn("Could not query daily_fii_dii_cash latest date:", fiiErr.message);
+    }
+    const fiiDiiStaleDays = getWeekdayDifference(fiiDiiLatestDate);
+
+    let macroLatestDate = null;
+    try {
+      const macroRes = await queryWithRetry(
+        "SELECT MAX(trade_date) as latest_date FROM daily_macro_rates;"
+      );
+      const rawMacro = macroRes.rows[0]?.latest_date;
+      macroLatestDate = rawMacro ? new Date(rawMacro).toISOString().split("T")[0] : null;
+    } catch (macroErr) {
+      console.warn("Could not query daily_macro_rates latest date:", macroErr.message);
+    }
+    const macroStaleDays = getWeekdayDifference(macroLatestDate);
+
     let isDegraded = false;
     const failureReasons = [];
+
+    // Check weekday staleness (> 3 weekdays stale degrades health)
+    if (fiiDiiStaleDays !== null && fiiDiiStaleDays > 3) {
+      isDegraded = true;
+      failureReasons.push(
+        `FII/DII cash flow data is ${fiiDiiStaleDays} weekdays stale (latest: ${fiiDiiLatestDate}).`
+      );
+    }
+
+    if (macroStaleDays !== null && macroStaleDays > 3) {
+      isDegraded = true;
+      failureReasons.push(
+        `Macro rates data is ${macroStaleDays} weekdays stale (latest: ${macroLatestDate}).`
+      );
+    }
 
     // Check calendar age of latest breadth data
     let daysOld = null;
@@ -172,6 +235,8 @@ export async function GET(request) {
       latestBreadthDate: latestDate,
       daysSinceLastBreadth: daysOld,
       daysSinceLastCommit: commitDaysOld,
+      fiiDiiStaleDays,
+      macroStaleDays,
       latestIngestRun: latestIngest
         ? {
             runId: latestIngest.run_id,

@@ -232,6 +232,39 @@ def sync_constituents(effective_date: Optional[date] = None, conn=None) -> Dict[
         if should_close:
             conn.close()
 
+def check_stored_constituents_exist(conn=None) -> bool:
+    """
+    Checks if index_constituents has active rows for every universe in NIFTY_INDICES (R20).
+    """
+    should_close = False
+    if conn is None:
+        try:
+            from pipeline.db import get_connection
+            conn = get_connection()
+            should_close = True
+        except Exception:
+            return False
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT index_name, COUNT(*)
+                FROM index_constituents
+                WHERE is_active = TRUE OR effective_to IS NULL
+                GROUP BY index_name;
+            """)
+            counts = {r[0]: r[1] for r in cur.fetchall()}
+            for idx in NIFTY_INDICES.keys():
+                if counts.get(idx, 0) == 0:
+                    return False
+            return True
+    except Exception as e:
+        logger.warning(f"Failed to check stored constituents: {e}")
+        return False
+    finally:
+        if should_close and conn:
+            conn.close()
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     sync_instruments()

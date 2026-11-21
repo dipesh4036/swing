@@ -39,8 +39,9 @@ def run_adjustments(
 
     large_moves_detected = []
     try:
-        df_sorted = df.sort_values(by=["token", "trade_date"])
-        df_sorted["prev_close"] = df_sorted.groupby("token")["close"].shift(1)
+        from pipeline.compute import attach_adjacent_prev_close
+        df_sorted = df.sort_values(by=["token", "trade_date"]).copy()
+        df_sorted = attach_adjacent_prev_close(df_sorted)
         df_sorted["move_pct"] = (df_sorted["close"] - df_sorted["prev_close"]).abs() / df_sorted["prev_close"]
         large_move_rows = df_sorted[df_sorted["move_pct"] >= 0.20]
         if not large_move_rows.empty:
@@ -48,13 +49,14 @@ def run_adjustments(
             for _, r in large_move_rows.iterrows():
                 prev_c = float(r["prev_close"])
                 curr_c = float(r["close"])
-                large_moves_detected.append({
-                    "token": int(r["token"]),
-                    "symbol": str(r["symbol"]),
-                    "ex_date": str(r["trade_date"]),
-                    "action_type": "LARGE_MOVE_20PCT",
-                    "ratio": round(curr_c / prev_c, 4) if prev_c > 0 else 1.0
-                })
+                if prev_c > 0:
+                    large_moves_detected.append({
+                        "token": int(r["token"]),
+                        "symbol": str(r["symbol"]),
+                        "ex_date": str(r["trade_date"]),
+                        "action_type": "LARGE_MOVE_20PCT",
+                        "ratio": round(curr_c / prev_c, 4)
+                    })
     except Exception as e:
         logger.warning(f"Warning during 20% move scan: {e}")
 

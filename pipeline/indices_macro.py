@@ -145,6 +145,21 @@ def sync_macro(years: int = 3, conn=None) -> Dict[str, int]:
         if should_close:
             conn.close()
 
+def _parse_fii_dii_val(val: Any) -> Optional[float]:
+    """
+    Parses FII/DII numeric string. Returns None for missing/empty/'-' values.
+    Never invents 0 for absent fields (R21).
+    """
+    if val is None:
+        return None
+    val_str = str(val).strip().replace(",", "")
+    if not val_str or val_str in ("-", "—", "null", "none", "nan", "NA", "N/A"):
+        return None
+    try:
+        return float(val_str)
+    except (ValueError, TypeError):
+        return None
+
 def sync_fii_dii(conn=None) -> int:
     """
     Fetches latest FII/DII cash flow data from NSE and upserts into `daily_fii_dii_cash`.
@@ -175,18 +190,25 @@ def sync_fii_dii(conn=None) -> int:
             if not date_str:
                 continue
             parsed_date = datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
-            cat = item.get("category", "").upper()
+            cat = str(item.get("category", "")).upper()
             if parsed_date not in data_by_date:
-                data_by_date[parsed_date] = {}
+                data_by_date[parsed_date] = {
+                    "fii_buy": None,
+                    "fii_sell": None,
+                    "fii_net": None,
+                    "dii_buy": None,
+                    "dii_sell": None,
+                    "dii_net": None,
+                }
 
             if "DII" in cat:
-                data_by_date[parsed_date]["dii_buy"] = float(item.get("buyValue", 0))
-                data_by_date[parsed_date]["dii_sell"] = float(item.get("sellValue", 0))
-                data_by_date[parsed_date]["dii_net"] = float(item.get("netValue", 0))
+                data_by_date[parsed_date]["dii_buy"] = _parse_fii_dii_val(item.get("buyValue"))
+                data_by_date[parsed_date]["dii_sell"] = _parse_fii_dii_val(item.get("sellValue"))
+                data_by_date[parsed_date]["dii_net"] = _parse_fii_dii_val(item.get("netValue"))
             elif "FII" in cat or "FPI" in cat:
-                data_by_date[parsed_date]["fii_buy"] = float(item.get("buyValue", 0))
-                data_by_date[parsed_date]["fii_sell"] = float(item.get("sellValue", 0))
-                data_by_date[parsed_date]["fii_net"] = float(item.get("netValue", 0))
+                data_by_date[parsed_date]["fii_buy"] = _parse_fii_dii_val(item.get("buyValue"))
+                data_by_date[parsed_date]["fii_sell"] = _parse_fii_dii_val(item.get("sellValue"))
+                data_by_date[parsed_date]["fii_net"] = _parse_fii_dii_val(item.get("netValue"))
 
         records = []
         for d, vals in data_by_date.items():
@@ -219,8 +241,6 @@ def sync_fii_dii(conn=None) -> int:
     except Exception as e:
         msg = f"FII/DII cash flow fetch failure: {e}"
         logger.error(msg)
-        from pipeline.alerts import send_telegram_alert
-        send_telegram_alert(msg)
         raise RuntimeError(msg)
     finally:
         if should_close:

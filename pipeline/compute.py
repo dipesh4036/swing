@@ -111,21 +111,28 @@ def compute_weinstein_stages(
         "stage_unclass": unclass,
     }
 
+def attach_adjacent_prev_close(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Computes prev_close for each token such that it is valid (not NaN)
+    only if the token's previous row is the immediately preceding market calendar session (R5, R22).
+    """
+    df = df.copy()
+    market_dates = sorted(df["trade_date"].unique())
+    date_to_idx = {d: i for i, d in enumerate(market_dates)}
+    df["date_idx"] = df["trade_date"].map(date_to_idx)
+    grouped = df.groupby("token")
+
+    is_adjacent_session = (df["date_idx"] - grouped["date_idx"].shift(1)) == 1
+    df["prev_close"] = grouped["close"].shift(1).where(is_adjacent_session, np.nan)
+    return df.drop(columns=["date_idx"])
+
 def compute_stock_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Computes per-stock indicators across OHLCV history with strict window floors.
     """
     logger.info("Computing per-stock indicators with spec 4.6 & strict windows...")
     df = df.sort_values(by=["token", "trade_date"]).copy()
-    market_dates = sorted(df["trade_date"].unique())
-    date_to_idx = {d: i for i, d in enumerate(market_dates)}
-    df["date_idx"] = df["trade_date"].map(date_to_idx)
-    grouped = df.groupby("token")
-
-    # 1. Previous close & 1-day return (market calendar adjacency check)
-    is_adjacent_session = (df["date_idx"] - grouped["date_idx"].shift(1)) == 1
-    df["prev_close"] = grouped["close"].shift(1).where(is_adjacent_session, np.nan)
-    df = df.drop(columns=["date_idx"])
+    df = attach_adjacent_prev_close(df)
     grouped = df.groupby("token")
 
     df["ret_1d"] = (df["close"] - df["prev_close"]) / df["prev_close"]

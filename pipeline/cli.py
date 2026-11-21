@@ -87,7 +87,7 @@ def main():
         download_parquet_store(args.path)
         try:
             result = run_daily_workflow(parquet_path=args.path, tokens_limit=args.tokens_limit)
-            success = (result.get("status") == "success")
+            success = (result.get("status") in ("success", "partial"))
             upload_parquet_store(args.path, job_succeeded=success)
             print(json.dumps(result, indent=2))
             if not success:
@@ -109,7 +109,7 @@ def main():
         download_parquet_store(args.path)
         try:
             result = run_weekly_refetch(retention_years=args.years, parquet_path=args.path, tokens_limit=args.tokens_limit)
-            success = (result.get("status") == "success")
+            success = (result.get("status") in ("success", "partial"))
             upload_parquet_store(args.path, job_succeeded=success)
             print(json.dumps(result, indent=2))
             if not success:

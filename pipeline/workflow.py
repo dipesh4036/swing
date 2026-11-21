@@ -5,6 +5,7 @@ from datetime import datetime, date, timedelta, timezone
 from typing import Dict, Any, Callable, Optional
 from pipeline.config import RETENTION_YEARS, EQUITY_PARQUET_PATH
 from pipeline.alerts import send_telegram_alert
+from pipeline.db import get_connection
 
 logger = logging.getLogger("pipeline.workflow")
 
@@ -204,6 +205,7 @@ def run_daily_workflow(
         )
 
     res6 = None
+    degraded_steps = []
     if branch != "compute_only":
         # 1. sync_instruments
         logger.info("Step 1/9: sync_instruments")
@@ -221,7 +223,7 @@ def run_daily_workflow(
             send_telegram_alert(msg)
             return {"status": "failed", "step": "sync_instruments", "error": str(e), "trimmed": False}
 
-        # 2. sync_constituents
+        # 2. sync_constituents (non-core: degraded if stored constituents exist)
         logger.info("Step 2/9: sync_constituents")
         t0 = time.time()
         try:
@@ -232,10 +234,15 @@ def run_daily_workflow(
             res2 = fn2()
             logger.info(f"Step 2 complete: constituents synced ({res2}). Step 2/9 done in {time.time() - t0:.1f}s")
         except Exception as e:
-            msg = f"Step 2 (sync_constituents) failed: {e}"
-            logger.error(msg)
-            send_telegram_alert(msg)
-            return {"status": "failed", "step": "sync_constituents", "error": str(e), "trimmed": False}
+            from pipeline.instruments import check_stored_constituents_exist
+            if check_stored_constituents_exist():
+                logger.warning(f"Using stored constituents because sync_constituents failed: {e}")
+                degraded_steps.append("sync_constituents")
+            else:
+                msg = f"Step 2 (sync_constituents) failed and index_constituents is missing or incomplete: {e}"
+                logger.error(msg)
+                send_telegram_alert(msg)
+                return {"status": "failed", "step": "sync_constituents", "error": str(e), "trimmed": False}
 
         # 3. sync_indices
         logger.info("Step 3/9: sync_indices")
@@ -253,7 +260,7 @@ def run_daily_workflow(
             send_telegram_alert(msg)
             return {"status": "failed", "step": "sync_indices", "error": str(e), "trimmed": False}
 
-        # 4. sync_macro
+        # 4. sync_macro (non-core: degraded)
         logger.info("Step 4/9: sync_macro")
         t0 = time.time()
         try:
@@ -264,12 +271,10 @@ def run_daily_workflow(
             res4 = fn4()
             logger.info(f"Step 4 complete: macro synced ({res4}). Step 4/9 done in {time.time() - t0:.1f}s")
         except Exception as e:
-            msg = f"Step 4 (sync_macro) failed: {e}"
-            logger.error(msg)
-            send_telegram_alert(msg)
-            return {"status": "failed", "step": "sync_macro", "error": str(e), "trimmed": False}
+            logger.warning(f"Step 4 (sync_macro) failed, continuing in degraded mode: {e}")
+            degraded_steps.append("sync_macro")
 
-        # 5. sync_fii_dii
+        # 5. sync_fii_dii (non-core: degraded)
         logger.info("Step 5/9: sync_fii_dii")
         t0 = time.time()
         try:
@@ -280,10 +285,8 @@ def run_daily_workflow(
             res5 = fn5()
             logger.info(f"Step 5 complete: FII/DII synced ({res5}). Step 5/9 done in {time.time() - t0:.1f}s")
         except Exception as e:
-            msg = f"Step 5 (sync_fii_dii) failed: {e}"
-            logger.error(msg)
-            send_telegram_alert(msg)
-            return {"status": "failed", "step": "sync_fii_dii", "error": str(e), "trimmed": False}
+            logger.warning(f"Step 5 (sync_fii_dii) failed, continuing in degraded mode: {e}")
+            degraded_steps.append("sync_fii_dii")
 
         # 6. ingest_equities
         logger.info("Step 6/9: ingest_equities")
@@ -434,12 +437,38 @@ def run_daily_workflow(
         f"Angel calls: {angel_calls} | Throttles: {throttle_count} | End rate: {rate_at_end:.2f} req/s"
     )
 
-    return {
-        "status": "success",
+    if degraded_steps:
+        alert_msg = f"[Pipeline Alert] Non-core step(s) degraded: {', '.join(degraded_steps)}"
+        logger.warning(alert_msg)
+        send_telegram_alert(alert_msg)
+        try:
+            from pipeline.db import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE ingest_runs
+                        SET status = 'partial',
+                            error_message = CASE
+                                WHEN error_message IS NULL OR error_message = '' THEN %s
+                                ELSE error_message || ' | ' || %s
+                            END
+                        WHERE run_id = (SELECT run_id FROM ingest_runs ORDER BY run_id DESC LIMIT 1);
+                    """, (f"degraded_steps: {degraded_steps}", f"degraded_steps: {degraded_steps}"))
+                conn.commit()
+        except Exception as _e:
+            logger.warning(f"Could not update ingest_runs for degraded status: {_e}")
+
+    status = "partial" if degraded_steps else "success"
+    result_payload = {
+        "status": status,
         "branch": branch,
         "trimmed": True,
         "trim_result": trim_res,
     }
+    if degraded_steps:
+        result_payload["degraded_steps"] = degraded_steps
+
+    return result_payload
 
 def run_weekly_refetch(
     retention_years: int = RETENTION_YEARS,
