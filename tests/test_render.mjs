@@ -177,6 +177,16 @@ const gridMockRequire = (id) => {
       RefreshCw: () => React.createElement("span", null, "[↻]"),
     };
   }
+  if (id === "@/lib/patterns") {
+    return {
+      detectPatterns: () => ({ patterns: [] }),
+    };
+  }
+  if (id === "@/components/charts/patternLayers") {
+    return {
+      PatternSeriesPrimitive: class MockPatternPrimitive {},
+    };
+  }
   return {
     default: mockComponent(id),
     __esModule: true,

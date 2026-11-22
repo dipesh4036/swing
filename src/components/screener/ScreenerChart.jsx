@@ -11,6 +11,10 @@ import {
 } from "lightweight-charts";
 import { ExternalLink } from "lucide-react";
 import { attachEMAs, aggregateWeekly } from "@/lib/indicators";
+import { detectPatterns } from "@/lib/patterns";
+import { PatternSeriesPrimitive } from "@/components/charts/patternLayers";
+import { PatternLayersBar } from "@/components/charts/PatternLayersBar";
+import { PatternDetailPanel } from "@/components/charts/PatternDetailPanel";
 
 /**
  * Format volume into readable units: K, M, Cr
@@ -42,6 +46,48 @@ export default function ScreenerChart({
     ema_200: true,
   });
   const [hoveredCandle, setHoveredCandle] = useState(null);
+
+  // Auto Chart Pattern Layer States
+  const [focusedPatternId, setFocusedPatternId] = useState(null);
+  const [patternLayers, setPatternLayers] = useState({
+    patternLines: true,
+    breakoutRetest: true,
+    basePivot: true,
+    ema_21: false,
+  });
+
+  // Pure JavaScript pattern detection on daily candles
+  const patternResult = useMemo(() => {
+    if (timeframe !== "D" || !stockData?.candles || stockData.candles.length === 0) {
+      return {
+        patterns: [],
+        reason: timeframe !== "D" ? "Patterns are daily only" : "insufficient_history",
+      };
+    }
+    return detectPatterns(stockData.candles);
+  }, [stockData?.candles, timeframe]);
+
+  // Default: top 3 patterns on
+  const activePatterns = useMemo(() => {
+    return patternResult.patterns.slice(0, 3);
+  }, [patternResult.patterns]);
+
+  // Pattern counts for chip row
+  const patternCounts = useMemo(() => {
+    return {
+      patternLines: activePatterns.reduce((acc, p) => acc + (p.lines?.length || 1), 0),
+      breakoutRetest: activePatterns.reduce((acc, p) => acc + (p.events?.length || 0), 0),
+      basePivot: activePatterns.filter((p) => p.type === "base_pivot").length,
+    };
+  }, [activePatterns]);
+
+  // Count patterns whose anchors begin off-screen
+  const offscreenCount = useMemo(() => {
+    if (!candles || candles.length === 0 || activePatterns.length === 0) return 0;
+    // Consider anchors in the earliest 10% of history as potentially off-screen initially
+    const cutoff = Math.floor(candles.length * 0.1);
+    return activePatterns.filter((p) => (p.lines[0]?.idx1 ?? 0) <= cutoff).length;
+  }, [candles, activePatterns]);
 
   // EMA configs (Only EMAs: 10, 20, 50, 200 - SMA 150 removed)
   const maConfigs = useMemo(() => [
@@ -172,6 +218,34 @@ export default function ScreenerChart({
       close: c.close,
     }));
     candleSeries.setData(candleData);
+
+    // Auto Chart Patterns Primitive (Daily only)
+    if (timeframe === "D" && activePatterns.length > 0) {
+      const patternPrimitive = new PatternSeriesPrimitive({
+        patterns: activePatterns,
+        focusedPatternId: focusedPatternId || activePatterns[0]?.id,
+        layers: patternLayers,
+        isDark,
+      });
+      candleSeries.attachPrimitive(patternPrimitive);
+    }
+
+    // 21 EMA Line (Toggleable pattern layer)
+    if (patternLayers.ema_21 && candles.length > 0) {
+      const candlesWith21 = attachEMAs(candles, [21]);
+      const ema21Series = chart.addSeries(LineSeries, {
+        color: "#3B82F6",
+        lineWidth: 1.5,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      }, 0);
+      ema21Series.setData(
+        candlesWith21
+          .filter((c) => c.ema_21 !== null && c.ema_21 !== undefined)
+          .map((c) => ({ time: c.date, value: c.ema_21 }))
+      );
+    }
 
     // 2. Volume Series (Pane 1)
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -478,7 +552,7 @@ export default function ScreenerChart({
         chartInstanceRef.current = null;
       }
     };
-  }, [candles, visibleMAs, showRulesOverlay, maConfigs, stockData?.overlay, timeframe]);
+  }, [candles, visibleMAs, showRulesOverlay, maConfigs, stockData?.overlay, timeframe, activePatterns, focusedPatternId, patternLayers]);
 
   if (loading) {
     return (
@@ -638,6 +712,15 @@ export default function ScreenerChart({
         </div>
       </div>
 
+      {/* ── Pattern Layers Bar (Daily Only) ───────────────────────── */}
+      <PatternLayersBar
+        layers={patternLayers}
+        onToggleLayer={(layerKey) => setPatternLayers((prev) => ({ ...prev, [layerKey]: !prev[layerKey] }))}
+        counts={patternCounts}
+        timeframe={timeframe}
+        offscreenCount={offscreenCount}
+      />
+
       {/* ── Chart Container with Absolute Overlays ────────────────── */}
       <div className="flex-1 w-full min-h-0 relative overflow-hidden bg-surface">
         {/* Top-Left MA Legend Inside the Chart Canvas (EMAs only) */}
@@ -681,6 +764,16 @@ export default function ScreenerChart({
         {/* Lightweight Charts Canvas Root */}
         <div ref={chartContainerRef} className="absolute inset-0 w-full h-full" />
       </div>
+
+      {/* ── Auto Chart Pattern Detail Panel (Daily Only) ─────────── */}
+      {timeframe === "D" && (
+        <PatternDetailPanel
+          patterns={activePatterns}
+          focusedPatternId={focusedPatternId || activePatterns[0]?.id}
+          onSelectPattern={setFocusedPatternId}
+          reason={patternResult.reason}
+        />
+      )}
 
       {/* ── Legend Footer ─────────────────────────────────────────── */}
       <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-text-muted bg-bg-secondary shrink-0">

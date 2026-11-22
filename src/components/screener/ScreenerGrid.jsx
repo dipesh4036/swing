@@ -9,6 +9,8 @@ import {
   LineStyle,
 } from "lightweight-charts";
 import { ExternalLink, RefreshCw } from "lucide-react";
+import { detectPatterns } from "@/lib/patterns";
+import { PatternSeriesPrimitive } from "@/components/charts/patternLayers";
 
 /**
  * Individual Mini Chart Card for Fast Scan Grid
@@ -31,6 +33,14 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
     }
     return minLow !== null ? Number(minLow.toFixed(2)) : null;
   }, [candles]);
+
+  // Pure JavaScript pattern detection on grid candles (detect once per tile with useMemo, P3)
+  const patternResult = useMemo(() => {
+    if (!candles || candles.length === 0) return { patterns: [] };
+    return detectPatterns(candles);
+  }, [candles]);
+
+  const topPattern = patternResult.patterns[0] || null;
 
   useEffect(() => {
     if (!chartContainerRef.current || !candles || candles.length === 0) return;
@@ -117,6 +127,16 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
       close: c.close,
     }));
     candleSeries.setData(candleData);
+
+    // Auto Chart Pattern (Top pattern main line + band, P3)
+    if (topPattern) {
+      const patternPrimitive = new PatternSeriesPrimitive({
+        patterns: [topPattern],
+        layers: { patternLines: true, breakoutRetest: true, basePivot: true },
+        isDark,
+      });
+      candleSeries.attachPrimitive(patternPrimitive);
+    }
 
     // 2. 30-Day Low Price Line (R27: labelled honestly as 30D low)
     if (low30dPrice !== null) {
@@ -240,7 +260,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
         chartInstanceRef.current = null;
       }
     };
-  }, [candles, chartHeight, low30dPrice, stock.pivot]);
+  }, [candles, chartHeight, low30dPrice, stock.pivot, topPattern]);
 
   const hasCandles = candles && candles.length > 0;
 
@@ -248,7 +268,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
     <div className="bg-surface rounded-lg border border-border flex flex-col overflow-hidden hover:border-primary/50 transition-colors shadow-sm">
       {/* Card Header */}
       <div className="p-2.5 border-b border-border bg-bg-secondary/40 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
           <button
             type="button"
             onClick={() => onSelectStock(stock)}
@@ -268,6 +288,14 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
               }`}
             >
               RS {stock.rs_rank}
+            </span>
+          )}
+          {topPattern && (
+            <span
+              className="text-[9px] font-mono px-1 py-0.2 rounded-[3px] bg-muted text-muted-foreground border border-border shrink-0 max-w-[140px] truncate"
+              title={`${topPattern.title} · ${topPattern.status === "at_line" ? "Testing" : topPattern.status.replace("_", " ")}`}
+            >
+              {topPattern.title} · {topPattern.status === "at_line" ? "Testing" : topPattern.status.replace("_", " ")}
             </span>
           )}
         </div>

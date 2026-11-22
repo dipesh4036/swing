@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { X, ExternalLink, RefreshCw, Star } from "lucide-react";
 import {
   createChart,
   CandlestickSeries,
   LineSeries,
-  HistogramSeries,
-  LineStyle,
 } from "lightweight-charts";
+import { detectPatterns } from "@/lib/patterns";
+import { PatternSeriesPrimitive } from "@/components/charts/patternLayers";
+import { PatternLayersBar } from "@/components/charts/PatternLayersBar";
+import { PatternDetailPanel as PatternDetailView } from "@/components/charts/PatternDetailPanel";
 
 /**
  * StockDetailPanel: Side drawer / bottom sheet for selected sector stock (T10.6)
@@ -24,6 +26,34 @@ export function StockDetailPanel({
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState(null);
   const [chartCandles, setChartCandles] = useState([]);
+
+  // Auto Chart Pattern Layer States
+  const [focusedPatternId, setFocusedPatternId] = useState(null);
+  const [patternLayers, setPatternLayers] = useState({
+    patternLines: true,
+    breakoutRetest: true,
+    basePivot: true,
+    ema_21: false,
+  });
+
+  const patternResult = useMemo(() => {
+    if (!chartCandles || chartCandles.length === 0) {
+      return { patterns: [], reason: "insufficient_history" };
+    }
+    return detectPatterns(chartCandles);
+  }, [chartCandles]);
+
+  const activePatterns = useMemo(() => {
+    return patternResult.patterns.slice(0, 3);
+  }, [patternResult.patterns]);
+
+  const patternCounts = useMemo(() => {
+    return {
+      patternLines: activePatterns.reduce((acc, p) => acc + (p.lines?.length || 1), 0),
+      breakoutRetest: activePatterns.reduce((acc, p) => acc + (p.events?.length || 0), 0),
+      basePivot: activePatterns.filter((p) => p.type === "base_pivot").length,
+    };
+  }, [activePatterns]);
 
   // Close on Esc key
   useEffect(() => {
@@ -123,6 +153,17 @@ export function StockDetailPanel({
       }))
     );
 
+    // Auto Chart Pattern Series Primitive
+    if (activePatterns.length > 0) {
+      const patternPrimitive = new PatternSeriesPrimitive({
+        patterns: activePatterns,
+        focusedPatternId: focusedPatternId || activePatterns[0]?.id,
+        layers: patternLayers,
+        isDark,
+      });
+      candleSeries.attachPrimitive(patternPrimitive);
+    }
+
     // EMAs 20 & 50
     const addLine = (key, color) => {
       const data = chartCandles
@@ -154,7 +195,7 @@ export function StockDetailPanel({
         chartInstanceRef.current = null;
       }
     };
-  }, [chartCandles, isDark]);
+  }, [chartCandles, isDark, activePatterns, focusedPatternId, patternLayers]);
 
   if (!stock) return null;
 
@@ -302,10 +343,19 @@ export function StockDetailPanel({
       )}
 
       {/* Chart Section */}
-      <div className="p-4 flex-1 flex flex-col">
-        <span className="text-[11px] font-semibold text-text uppercase tracking-wider block mb-2">
+      <div className="p-4 flex-1 flex flex-col gap-2">
+        <span className="text-[11px] font-semibold text-text uppercase tracking-wider block">
           Daily Price Chart
         </span>
+
+        {/* Pattern Layers Bar */}
+        <PatternLayersBar
+          layers={patternLayers}
+          onToggleLayer={(k) => setPatternLayers((prev) => ({ ...prev, [k]: !prev[k] }))}
+          counts={patternCounts}
+          timeframe="D"
+        />
+
         <div className="relative w-full h-[220px] bg-bg-secondary/40 rounded border border-border flex items-center justify-center overflow-hidden">
           {loadingChart ? (
             <div className="flex items-center gap-2 text-xs text-text-muted">
@@ -320,6 +370,14 @@ export function StockDetailPanel({
             <div ref={chartContainerRef} className="w-full h-full" />
           )}
         </div>
+
+        {/* Pattern Detail View */}
+        <PatternDetailView
+          patterns={activePatterns}
+          focusedPatternId={focusedPatternId || activePatterns[0]?.id}
+          onSelectPattern={setFocusedPatternId}
+          reason={patternResult.reason}
+        />
       </div>
 
       {/* Action Buttons */}
