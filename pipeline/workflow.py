@@ -428,6 +428,9 @@ def run_daily_workflow(
         res8 = fn8(parquet_path=pq_path)
         if res8 is False:
             raise RuntimeError("Compute and publish failed")
+        if isinstance(res8, dict) and res8.get("sector_degraded"):
+            logger.warning("compute_sector_metrics reported degradation in Step 8.")
+            degraded_steps.append("compute_sector_metrics")
         logger.info(f"Step 8 complete: breadth computed and published. Step 8/9 done in {time.time() - t0:.1f}s")
     except Exception as e:
         msg = f"Step 8 (compute_and_publish_all) failed: {e}"

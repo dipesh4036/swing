@@ -36,13 +36,5 @@ raw_cache/
 !.vscode/settings.json
 *.log
 
-# Antigravity prompts & reviews
-docs/ANTIGRAVITY_*
-**/ANTIGRAVITY_*.md
-docs/newchanges.md
-docs/round*
-docs/round*.md
-docs/round *.md
-
 .agents/    
 skills-lock.json

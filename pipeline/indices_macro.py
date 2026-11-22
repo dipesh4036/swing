@@ -247,24 +247,11 @@ def sync_fii_dii(conn=None) -> int:
         if should_close:
             conn.close()
 
-SECTOR_INDEX_FALLBACK_TOKENS = {
-    "bank": {"token": "99926009", "angel_name": "BANKNIFTY", "index_name": "NIFTY BANK"},
-    "financial_services": {"token": "99926037", "angel_name": "FINNIFTY", "index_name": "NIFTY FINANCIAL SERVICES"},
-    "it": {"token": "99926008", "angel_name": "NIFTY IT", "index_name": "NIFTY IT"},
-    "pharma": {"token": "99926023", "angel_name": "NIFTY PHARMA", "index_name": "NIFTY PHARMA"},
-    "auto": {"token": "99926029", "angel_name": "NIFTY AUTO", "index_name": "NIFTY AUTO"},
-    "fmcg": {"token": "99926021", "angel_name": "NIFTY FMCG", "index_name": "NIFTY FMCG"},
-    "metal": {"token": "99926030", "angel_name": "NIFTY METAL", "index_name": "NIFTY METAL"},
-    "realty": {"token": "99926018", "angel_name": "NIFTY REALTY", "index_name": "NIFTY REALTY"},
-    "media": {"token": "99926031", "angel_name": "NIFTY MEDIA", "index_name": "NIFTY MEDIA"},
-}
-
 def resolve_sector_angel_tokens(scrip_master: Optional[List[dict]] = None) -> Dict[str, Dict[str, Any]]:
     """
-    Dynamically resolves Angel One tokens for canonical sectors.
-    If scrip_master is provided, inspects AMXIDX / index records on NSE.
-    Falls back to verified tokens in SECTOR_INDEX_FALLBACK_TOKENS.
-    Sectors without an official spot token (healthcare, consumer_durables, oil_gas)
+    Dynamically resolves Angel One tokens for canonical sectors from OpenAPIScripMaster.json.
+    Matches exact upper-case trimmed name or symbol for NSE index instruments.
+    Sectors without an official spot token (or where no master token matches)
     are designated with source='equal_weight'.
     """
     from pipeline.sectors import SECTORS
@@ -290,13 +277,17 @@ def resolve_sector_angel_tokens(scrip_master: Optional[List[dict]] = None) -> Di
         index_name = (sec.get("index_name") or "").strip().upper()
 
         token = None
+        matched_by = None
         if lookup:
-            token = lookup.get(angel_name) or lookup.get(index_name)
-
-        if not token and key in SECTOR_INDEX_FALLBACK_TOKENS:
-            token = SECTOR_INDEX_FALLBACK_TOKENS[key]["token"]
+            if angel_name and angel_name in lookup:
+                token = lookup[angel_name]
+                matched_by = angel_name
+            elif index_name and index_name in lookup:
+                token = lookup[index_name]
+                matched_by = index_name
 
         if token:
+            logger.info(f"Sector '{key}' resolved to official token {token} (matched by '{matched_by}')")
             resolved[key] = {
                 "key": key,
                 "index_name": sec["index_name"],
@@ -316,8 +307,25 @@ def sync_sector_indices(client: Optional[SmartAPIClient] = None, years: int = 3,
     """
     Fetches daily OHLCV for official sector indices from SmartAPI and upserts into `daily_index_ohlcv`.
     Respects Angel One 3 req/sec rate limit.
+    Dynamically fetches OpenAPIScripMaster.json if not provided.
+    Rejects candles if last close is zero/None or date range < 100 sessions.
     Equal-weight sectors are recorded with source='equal_weight' and 0 rows (handled in Phase 3).
     """
+    from pipeline.instruments import ANGEL_SCRIP_MASTER_URL
+
+    if scrip_master is None:
+        try:
+            logger.info(f"Fetching Angel scrip master for sector index resolution from {ANGEL_SCRIP_MASTER_URL}...")
+            resp = requests.get(ANGEL_SCRIP_MASTER_URL, timeout=60)
+            if resp.status_code == 200:
+                scrip_master = resp.json()
+            else:
+                logger.warning(f"Failed to fetch Angel scrip master (HTTP {resp.status_code}). Skipping Angel sector fetch.")
+                return {"status": "partial", "degraded": True, "error": f"HTTP {resp.status_code} fetching scrip master"}
+        except Exception as e:
+            logger.warning(f"Error fetching Angel scrip master: {e}. Skipping Angel sector fetch.")
+            return {"status": "partial", "degraded": True, "error": str(e)}
+
     tokens_map = resolve_sector_angel_tokens(scrip_master)
 
     should_close = False
@@ -364,6 +372,18 @@ def sync_sector_indices(client: Optional[SmartAPIClient] = None, years: int = 3,
                 if not candles:
                     logger.warning(f"No candles returned for sector index {idx_name}.")
                     results[key] = {"rows": 0, "source": "official", "index_name": idx_name}
+                    continue
+
+                # Sanity-check the fetched candles: reject if < 100 sessions or last close is zero/None
+                if len(candles) < 100:
+                    logger.warning(f"Sanity check failed for {idx_name}: insufficient candles ({len(candles)} < 100). Rejecting and keeping stored data.")
+                    results[key] = {"rows": 0, "source": "official", "index_name": idx_name, "rejected": "insufficient_history"}
+                    continue
+
+                last_close = float(candles[-1][4]) if len(candles[-1]) > 4 and candles[-1][4] is not None else 0.0
+                if last_close <= 0:
+                    logger.warning(f"Sanity check failed for {idx_name}: invalid last close ({last_close} <= 0). Rejecting and keeping stored data.")
+                    results[key] = {"rows": 0, "source": "official", "index_name": idx_name, "rejected": "invalid_last_close"}
                     continue
 
                 records = []

@@ -652,14 +652,21 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
         conn.commit()
         logger.info(f"Successfully published {len(all_breadth_records)} rows to daily_market_breadth.")
 
-        # Compute sector breadth & equal-weight metrics (P3 - non-fatal)
+        # Compute sector breadth & equal-weight metrics (P3 - non-fatal, T13)
+        sector_degraded = False
         try:
             from pipeline.sectors import compute_sector_metrics
             logger.info("Computing sector breadth metrics...")
             sec_res = compute_sector_metrics(df_ind, conn=conn, publish_floor_date=publish_floor_date)
-            logger.info(f"Sector breadth computation finished: {sec_res.get('total_published')} rows published.")
+            rows_pub = sec_res.get('total_published', 0) if isinstance(sec_res, dict) else 0
+            if rows_pub == 0:
+                logger.warning("Sector metrics published 0 rows; marking degraded.")
+                sector_degraded = True
+            else:
+                logger.info(f"Sector breadth computation finished: {rows_pub} rows published.")
         except Exception as sce:
             logger.error(f"Sector breadth computation encountered an error: {sce}", exc_info=True)
+            sector_degraded = True
 
         # Trigger screener calculation for the latest trade date
         try:
@@ -676,7 +683,7 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             except Exception:
                 pass
 
-        return True
+        return {"success": True, "sector_degraded": sector_degraded}
     finally:
         conn.close()
 

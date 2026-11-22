@@ -147,7 +147,13 @@ export async function GET(request) {
       );
     }
 
-    if (sectorStaleDays !== null && sectorStaleDays > 3) {
+    // T13.2: Sector breadth is derived from breadth; degraded if > 1 session behind breadth
+    if (latestDate && sectorLatestDate && sectorLatestDate < latestDate) {
+      isDegraded = true;
+      failureReasons.push(
+        `Sector breadth data is lagging market breadth: sector asOf ${sectorLatestDate} vs breadth asOf ${latestDate}.`
+      );
+    } else if (sectorStaleDays !== null && sectorStaleDays > 1) {
       isDegraded = true;
       failureReasons.push(
         `Sector breadth data is ${sectorStaleDays} weekdays stale (latest: ${sectorLatestDate}).`

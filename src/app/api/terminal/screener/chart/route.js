@@ -25,6 +25,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const tokenParam = searchParams.get("token");
     const screener = searchParams.get("screener");
+    const sourceParam = searchParams.get("source");
 
     const token = parseInt(tokenParam, 10);
     if (!tokenParam || isNaN(token) || token <= 0) {
@@ -34,33 +35,55 @@ export async function GET(request) {
       );
     }
 
-    if (!screener || !VALID_SCREENERS.includes(screener)) {
-      return NextResponse.json(
-        { error: `Invalid screener '${screener}'. Allowed: ${VALID_SCREENERS.join(", ")}` },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
+    let stockRow = null;
+    let asOfStr = null;
+
+    if (sourceParam === "sector") {
+      // T9.3: Sector stocks chart support
+      const secRes = await queryWithRetry(
+        `SELECT symbol, trade_date::text as trade_date, rs_rank, vol_ratio
+         FROM sector_stock_metrics
+         WHERE token = $1
+         LIMIT 1;`,
+        [token]
       );
-    }
+      if (secRes.rows.length === 0) {
+        return NextResponse.json(
+          { error: `Stock with token ${token} not found in sector stock metrics.` },
+          { status: 404, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      stockRow = secRes.rows[0];
+      asOfStr = String(stockRow.trade_date);
+    } else {
+      if (!screener || !VALID_SCREENERS.includes(screener)) {
+        return NextResponse.json(
+          { error: `Invalid screener '${screener}'. Allowed: ${VALID_SCREENERS.join(", ")}` },
+          { status: 400, headers: { "Cache-Control": "no-store" } }
+        );
+      }
 
-    // 2. Fetch latest screener row for this token & screener to get metadata and overlay
-    // Serve only tokens that exist in the latest daily_screener_results (404 otherwise)
-    const stockRes = await queryWithRetry(
-      `SELECT symbol, trade_date::text as trade_date, rs_rank, vol_ratio, extra
-       FROM daily_screener_results
-       WHERE token = $1 AND screener = $2
-       ORDER BY trade_date DESC
-       LIMIT 1;`,
-      [token, screener]
-    );
-
-    if (stockRes.rows.length === 0) {
-      return NextResponse.json(
-        { error: `Stock with token ${token} not found in '${screener}' results today.` },
-        { status: 404, headers: { "Cache-Control": "no-store" } }
+      // 2. Fetch latest screener row for this token & screener to get metadata and overlay
+      // Serve only tokens that exist in the latest daily_screener_results (404 otherwise)
+      const stockRes = await queryWithRetry(
+        `SELECT symbol, trade_date::text as trade_date, rs_rank, vol_ratio, extra
+         FROM daily_screener_results
+         WHERE token = $1 AND screener = $2
+         ORDER BY trade_date DESC
+         LIMIT 1;`,
+        [token, screener]
       );
-    }
 
-    const stockRow = stockRes.rows[0];
-    const asOfStr = String(stockRow.trade_date);
+      if (stockRes.rows.length === 0) {
+        return NextResponse.json(
+          { error: `Stock with token ${token} not found in '${screener}' results today.` },
+          { status: 404, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+
+      stockRow = stockRes.rows[0];
+      asOfStr = String(stockRow.trade_date);
+    }
 
     // 3. Attempt to fetch all historical candles live from Angel One SmartAPI (5 years, 3h cache)
     let rawCandles = await fetchAllCandlesFromSmartAPI(token);
@@ -89,6 +112,13 @@ export async function GET(request) {
 
     // 4. Drop any in-progress/future candles after stockRow.trade_date (R12b)
     rawCandles = rawCandles.filter((c) => c && c.date <= asOfStr);
+
+    if (!rawCandles || rawCandles.length === 0) {
+      return NextResponse.json(
+        { error: "Chart unavailable", symbol: stockRow.symbol, token },
+        { status: 404, headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
     // Attach EMAs (10, 20, 50, 200) using shared indicators helper
     const candles = attachEMAs(rawCandles, [10, 20, 50, 200]);

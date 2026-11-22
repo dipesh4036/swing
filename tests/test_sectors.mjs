@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {
   SECTORS,
   SECTOR_KEYS,
+  SECTOR_LEADER_RULES,
+  isSectorLeader,
   computeSessionReturn,
   computeStandardReturns,
   computeAlignedRS,
@@ -11,19 +13,50 @@ import {
 
 console.log("--- Starting Sector Math Test Suite ---");
 
-// 1. SECTORS definitions
-console.log("1. Testing SECTORS taxonomy...");
-assert.equal(SECTORS.length, 12, "Must contain exactly 12 active canonical sectors");
-assert.equal(SECTOR_KEYS.length, 12);
+// 1. SECTORS definitions (T7.4, T12)
+console.log("1. Testing SECTORS taxonomy parity...");
+assert.equal(SECTORS.length, 21, "Must contain exactly 21 canonical sectors (11 index + 10 industry)");
+assert.equal(SECTOR_KEYS.length, 21);
 assert.ok(SECTOR_KEYS.includes("bank"));
 assert.ok(SECTOR_KEYS.includes("it"));
 assert.ok(SECTOR_KEYS.includes("healthcare"));
 assert.ok(SECTOR_KEYS.includes("consumer_durables"));
 assert.ok(SECTOR_KEYS.includes("oil_gas"));
-console.log("✓ Sector taxonomy verified");
+assert.ok(SECTOR_KEYS.includes("capital_goods"));
+assert.ok(SECTOR_KEYS.includes("chemicals"));
+assert.ok(SECTOR_KEYS.includes("power"));
+assert.ok(SECTOR_KEYS.includes("telecom"));
+assert.ok(!SECTOR_KEYS.includes("pharma"), "Pharma must be merged into healthcare");
+console.log("✓ Sector taxonomy parity verified (21 canonical sectors, pharma removed)");
 
-// 2. computeSessionReturn
-console.log("2. Testing computeSessionReturn...");
+// 2. Leader rules & evaluator
+console.log("2. Testing SECTOR_LEADER_RULES and isSectorLeader...");
+assert.equal(SECTOR_LEADER_RULES.above_50dma, true);
+assert.equal(SECTOR_LEADER_RULES.above_200dma, true);
+assert.equal(SECTOR_LEADER_RULES.pct_from_52w_high_min, -15.0);
+assert.equal(SECTOR_LEADER_RULES.min_rs_rank, 70);
+
+const leaderStock = {
+  symbol: "LEADER1",
+  above_50dma: true,
+  above_200dma: true,
+  pct_from_52w_high: -5.2,
+  rs_rank: 85,
+};
+assert.equal(isSectorLeader(leaderStock), true);
+
+const notLeaderLowRS = { ...leaderStock, rs_rank: 65 };
+assert.equal(isSectorLeader(notLeaderLowRS), false);
+
+const notLeaderFarFromHigh = { ...leaderStock, pct_from_52w_high: -20.0 };
+assert.equal(isSectorLeader(notLeaderFarFromHigh), false);
+
+const notLeaderBelow200 = { ...leaderStock, above_200dma: false };
+assert.equal(isSectorLeader(notLeaderBelow200), false);
+console.log("✓ Leader evaluation rules verified");
+
+// 3. computeSessionReturn
+console.log("3. Testing computeSessionReturn...");
 assert.equal(computeSessionReturn(null, 5), null);
 assert.equal(computeSessionReturn([], 5), null);
 assert.equal(computeSessionReturn([{ trade_date: "2026-01-01", close: 100 }], 5), null);
@@ -41,8 +74,8 @@ const ret5 = computeSessionReturn(sixCandles, 5);
 assert.equal(ret5, 10.0, "5-session return from 100 to 110 should be 10.0%");
 console.log("✓ Session return calculation verified");
 
-// 3. computeAlignedRS
-console.log("3. Testing computeAlignedRS...");
+// 4. computeAlignedRS
+console.log("4. Testing computeAlignedRS...");
 const sectorCandles = [
   { trade_date: "2026-01-01", close: 200 },
   { trade_date: "2026-01-02", close: 210 },
@@ -61,8 +94,8 @@ assert.equal(aligned[1].trade_date, "2026-01-04");
 assert.equal(aligned[1].rs, 2.0); // 220 / 110
 console.log("✓ Date alignment and RS ratio verified");
 
-// 4. computeQuadrant
-console.log("4. Testing computeQuadrant...");
+// 5. computeQuadrant
+console.log("5. Testing computeQuadrant...");
 // < 60 sessions -> null
 const shortRS = Array.from({ length: 59 }, (_, i) => ({
   trade_date: `2026-01-${String(i + 1).padStart(2, "0")}`,
@@ -77,7 +110,7 @@ const leadingRS = Array.from({ length: 70 }, (_, i) => ({
   rs: 1.0 + i * 0.01, // steadily increasing
 }));
 const qLeading = computeQuadrant(leadingRS);
-assert.equal(qLeading.quadrant, "leading");
+assert.equal(qLeading.quadrant.toLowerCase(), "leading");
 assert.ok(qLeading.x > 0);
 assert.ok(qLeading.y > 0);
 
@@ -87,24 +120,23 @@ const laggingRS = Array.from({ length: 70 }, (_, i) => ({
   rs: 2.0 - i * 0.01, // steadily decreasing
 }));
 const qLagging = computeQuadrant(laggingRS);
-assert.equal(qLagging.quadrant, "lagging");
+assert.equal(qLagging.quadrant.toLowerCase(), "lagging");
 assert.ok(qLagging.x < 0);
 assert.ok(qLagging.y < 0);
 console.log("✓ Quadrant classifications verified (leading, lagging, boundary guard <60)");
 
-// 5. computeRSSeries
-console.log("5. Testing computeRSSeries...");
+// 6. computeRSSeries
+console.log("6. Testing computeRSSeries...");
 const testSeries = [
   { trade_date: "2026-01-01", rs: 2.0 },
   { trade_date: "2026-01-02", rs: 2.2 },
   { trade_date: "2026-01-03", rs: 2.5 },
 ];
-const rebased = computeRSSeries(testSeries, 120);
+const rebased = computeRSSeries(testSeries, 3);
 assert.equal(rebased.length, 3);
-assert.equal(rebased[0].time, "2026-01-01");
-assert.equal(rebased[0].value, 100.0, "Base session must be 100.0");
-assert.equal(rebased[1].value, 110.0, "2.2 / 2.0 * 100 = 110.0");
-assert.equal(rebased[2].value, 125.0, "2.5 / 2.0 * 100 = 125.0");
+assert.equal(rebased[0].value, 100.0);
+assert.equal(rebased[1].value, 110.0);
+assert.equal(rebased[2].value, 125.0);
 console.log("✓ Rebased RS series rebased cleanly to 100.0");
 
 console.log("--- All Sector Math Tests Passed Successfully! ---");

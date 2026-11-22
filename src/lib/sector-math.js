@@ -1,28 +1,211 @@
 /**
  * src/lib/sector-math.js
  * Pure mathematical functions for Sector Rotation analytics:
+ * - Canonical SECTORS taxonomy (mirrored from Python pipeline/sectors.py)
  * - Session-based percentage returns (5, 22, 64, 126 sessions)
  * - Relative Strength (RS) vs benchmark
- * - Simplified RRG RS trend quadrant (x: RS vs 50 SMA %, y: 10-session RS momentum %)
+ * - Simplified RS trend quadrant (x: RS vs 50 SMA %, y: 10-session RS momentum %)
  * - Rebased RS series for charts
+ * - Sector Leader rules & evaluator
  */
 
 export const SECTORS = [
-  { key: "bank", label: "Bank", index_name: "NIFTY BANK" },
-  { key: "financial_services", label: "Financial Services (ex-Bank)", index_name: "NIFTY FINANCIAL SERVICES" },
-  { key: "it", label: "IT", index_name: "NIFTY IT" },
-  { key: "pharma", label: "Pharma", index_name: "NIFTY PHARMA" },
-  { key: "healthcare", label: "Healthcare", index_name: "NIFTY HEALTHCARE" },
-  { key: "auto", label: "Auto", index_name: "NIFTY AUTO" },
-  { key: "consumer_durables", label: "Consumer Durables", index_name: "NIFTY CONSUMER DURABLES" },
-  { key: "fmcg", label: "FMCG", index_name: "NIFTY FMCG" },
-  { key: "metal", label: "Metal", index_name: "NIFTY METAL" },
-  { key: "oil_gas", label: "Oil & Gas", index_name: "NIFTY OIL & GAS" },
-  { key: "realty", label: "Realty", index_name: "NIFTY REALTY" },
-  { key: "media", label: "Media", index_name: "NIFTY MEDIA" },
+  {
+    key: "bank",
+    label: "Bank",
+    short: "Bank",
+    index_name: "NIFTY BANK",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "financial_services",
+    label: "Financial Services (ex-Bank)",
+    short: "FinSvc",
+    index_name: "NIFTY FINANCIAL SERVICES",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "it",
+    label: "IT",
+    short: "IT",
+    index_name: "NIFTY IT",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "healthcare",
+    label: "Healthcare (Pharma + Hospitals)",
+    short: "Health",
+    index_name: "NIFTY HEALTHCARE (EW)",
+    group_type: "index",
+    price_source: "equal_weight",
+  },
+  {
+    key: "auto",
+    label: "Auto",
+    short: "Auto",
+    index_name: "NIFTY AUTO",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "consumer_durables",
+    label: "Consumer Durables",
+    short: "ConsDur",
+    index_name: "NIFTY CONSUMER DURABLES (EW)",
+    group_type: "index",
+    price_source: "equal_weight",
+  },
+  {
+    key: "fmcg",
+    label: "FMCG",
+    short: "FMCG",
+    index_name: "NIFTY FMCG",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "metal",
+    label: "Metal",
+    short: "Metal",
+    index_name: "NIFTY METAL",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "oil_gas",
+    label: "Oil & Gas",
+    short: "Oil&Gas",
+    index_name: "NIFTY OIL & GAS (EW)",
+    group_type: "index",
+    price_source: "equal_weight",
+  },
+  {
+    key: "realty",
+    label: "Realty",
+    short: "Realty",
+    index_name: "NIFTY REALTY",
+    group_type: "index",
+    price_source: "official",
+  },
+  {
+    key: "media",
+    label: "Media",
+    short: "Media",
+    index_name: "NIFTY MEDIA",
+    group_type: "index",
+    price_source: "official",
+  },
+  // Industry-based groups covering remaining Nifty 500 stocks (group_type='industry')
+  {
+    key: "capital_goods",
+    label: "Capital Goods",
+    short: "CapGoods",
+    index_name: "NIFTY CAPITAL GOODS (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "chemicals",
+    label: "Chemicals",
+    short: "Chem",
+    index_name: "NIFTY CHEMICALS (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "power",
+    label: "Power",
+    short: "Power",
+    index_name: "NIFTY POWER (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "telecom",
+    label: "Telecommunication",
+    short: "Telecom",
+    index_name: "NIFTY TELECOM (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "consumer_services",
+    label: "Consumer Services",
+    short: "ConsSvc",
+    index_name: "NIFTY CONS SERVICES (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "services",
+    label: "Services",
+    short: "Services",
+    index_name: "NIFTY SERVICES (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "construction",
+    label: "Construction",
+    short: "Constr",
+    index_name: "NIFTY CONSTRUCTION (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "construction_materials",
+    label: "Construction Materials",
+    short: "ConstMat",
+    index_name: "NIFTY CONST MAT (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "textiles",
+    label: "Textiles",
+    short: "Textiles",
+    index_name: "NIFTY TEXTILES (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
+  {
+    key: "diversified",
+    label: "Diversified",
+    short: "Divers",
+    index_name: "NIFTY DIVERSIFIED (EW)",
+    group_type: "industry",
+    price_source: "equal_weight",
+  },
 ];
 
 export const SECTOR_KEYS = SECTORS.map((s) => s.key);
+export const SECTORS_BY_KEY = Object.fromEntries(SECTORS.map((s) => [s.key, s]));
+
+export const SECTOR_LEADER_RULES = {
+  above_50dma: true,
+  above_200dma: true,
+  pct_from_52w_high_min: -15.0,
+  min_rs_rank: 70,
+};
+
+export function isSectorLeader(stock, rules = SECTOR_LEADER_RULES) {
+  if (!stock) return false;
+  if (rules.above_50dma && stock.above_50dma !== true) return false;
+  if (rules.above_200dma && stock.above_200dma !== true) return false;
+  if (
+    stock.pct_from_52w_high == null ||
+    stock.pct_from_52w_high < rules.pct_from_52w_high_min
+  ) {
+    return false;
+  }
+  if (stock.rs_rank == null || stock.rs_rank < rules.min_rs_rank) {
+    return false;
+  }
+  return true;
+}
 
 /**
  * Computes return over specified session count.
@@ -103,7 +286,8 @@ export function computeQuadrant(alignedRS) {
   }
 
   const n = alignedRS.length;
-  const latestRS = alignedRS[n - 1].rs;
+  const currentRS = alignedRS[n - 1].rs;
+  const tenSessionsAgoRS = alignedRS[n - 11].rs;
 
   // 50-session SMA of RS
   let sum50 = 0;
@@ -111,49 +295,44 @@ export function computeQuadrant(alignedRS) {
     sum50 += alignedRS[i].rs;
   }
   const sma50 = sum50 / 50.0;
-  if (sma50 <= 0) {
+
+  if (sma50 === 0 || tenSessionsAgoRS === 0) {
     return { quadrant: null, x: null, y: null };
   }
 
-  const prior10RS = alignedRS[n - 1 - 10].rs;
-  if (prior10RS <= 0) {
-    return { quadrant: null, x: null, y: null };
-  }
+  const x = Number((((currentRS / sma50) - 1.0) * 100.0).toFixed(2));
+  const y = Number((((currentRS / tenSessionsAgoRS) - 1.0) * 100.0).toFixed(2));
 
-  const x = ((latestRS / sma50) - 1.0) * 100.0;
-  const y = ((latestRS / prior10RS) - 1.0) * 100.0;
-
-  let quadrant = "lagging";
+  let quadrant = "Lagging";
   if (x > 0 && y > 0) {
-    quadrant = "leading";
+    quadrant = "Leading";
   } else if (x > 0 && y <= 0) {
-    quadrant = "weakening";
-  } else if (x <= 0 && y <= 0) {
-    quadrant = "lagging";
+    quadrant = "Weakening";
   } else if (x <= 0 && y > 0) {
-    quadrant = "improving";
+    quadrant = "Improving";
+  } else {
+    quadrant = "Lagging";
   }
 
-  return {
-    quadrant,
-    x: Number(x.toFixed(2)),
-    y: Number(y.toFixed(2)),
-  };
+  return { quadrant, x, y };
 }
 
 /**
- * Returns last N sessions of RS series rebased to 100.0 at the window start.
+ * Rebased RS series rebased to 100.0 on the first session of the window.
  * @param {Array<{trade_date: string, rs: number}>} alignedRS
- * @param {number} window - default 120
+ * @param {number} sessions
+ * @returns {Array<{date: string, value: number}>}
  */
-export function computeRSSeries(alignedRS, window = 120) {
+export function computeRSSeries(alignedRS, sessions = 120) {
   if (!alignedRS || alignedRS.length === 0) return [];
-  const slice = alignedRS.slice(-window);
-  const baseRS = slice[0].rs;
-  if (!baseRS || baseRS <= 0) return [];
+  const windowSlice = alignedRS.slice(-sessions);
+  if (windowSlice.length === 0) return [];
 
-  return slice.map((item) => ({
-    time: item.trade_date,
+  const baseRS = windowSlice[0].rs;
+  if (baseRS === 0 || baseRS == null) return [];
+
+  return windowSlice.map((item) => ({
+    date: item.trade_date,
     value: Number(((item.rs / baseRS) * 100.0).toFixed(2)),
   }));
 }

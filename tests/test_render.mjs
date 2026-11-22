@@ -235,9 +235,9 @@ assert.doesNotThrow(() => {
 console.log("✓ ScreenerGrid rendered successfully with fast scan candidate cards");
 
 // -----------------------------------------------------------------------------
-// 4. SectorRotationPage Smoke Test
+// 4. SectorRotationPage & Components Smoke Tests (T11)
 // -----------------------------------------------------------------------------
-console.log("4. Testing SectorRotationPage renderToString...");
+console.log("4. Testing SectorRotationPage and Tab 3 components renderToString...");
 
 const sectorMockRequire = (id) => {
   if (id === "react") return React;
@@ -245,8 +245,26 @@ const sectorMockRequire = (id) => {
   if (id === "next/link") {
     return ({ href, children, ...props }) => React.createElement("a", { href, ...props }, children);
   }
+  if (id === "next/navigation") {
+    return {
+      useRouter: () => ({ push: () => {}, replace: () => {} }),
+      useSearchParams: () => new URLSearchParams("view=map&metric=1m"),
+    };
+  }
+  if (id === "@/components/sectors/SectorTreeMap") {
+    return ({ sectors, stocks }) => React.createElement("div", { id: "mock-treemap" }, `Treemap with ${sectors?.length || 0} sectors, ${stocks?.length || 0} stocks`);
+  }
   if (id === "@/components/sectors/SectorScatterPlot") {
     return ({ sectors }) => React.createElement("div", { id: "mock-scatter" }, `Scatter with ${sectors?.length || 0} sectors`);
+  }
+  if (id === "@/components/sectors/SectorTableView") {
+    return ({ sectors }) => React.createElement("div", { id: "mock-table" }, `Table with ${sectors?.length || 0} sectors`);
+  }
+  if (id === "@/components/sectors/StockExplorerView") {
+    return ({ stocks }) => React.createElement("div", { id: "mock-explorer" }, `Explorer with ${stocks?.length || 0} stocks`);
+  }
+  if (id === "@/components/sectors/StockDetailPanel") {
+    return ({ stock }) => React.createElement("div", { id: "mock-detail" }, `Detail for ${stock?.symbol}`);
   }
   if (id === "lucide-react") {
     return new Proxy({}, {
@@ -271,6 +289,40 @@ assert.doesNotThrow(() => {
   assert.ok(html.includes("Where is money moving?"));
 }, "SectorRotationPage must render without throwing");
 console.log("✓ SectorRotationPage rendered successfully with 'Sector Rotation' and 'Where is money moving?'");
+
+// Render SectorTableView smoke test
+const SectorTableView = compileAndLoadComponent(
+  "src/components/sectors/SectorTableView.jsx",
+  sectorMockRequire
+);
+assert.doesNotThrow(() => {
+  const sampleSectors = [
+    { key: "bank", label: "Bank", rs_1m: 3.5, rs_3m: 6.2, ret_1m: 4.1, pct_above_50dma: 80.0, pct_above_200dma: 70.0, quadrant: "Leading", leaders_count: 5 },
+    { key: "it", label: "IT", rs_1m: -1.2, rs_3m: 0.5, ret_1m: -0.8, pct_above_50dma: 40.0, pct_above_200dma: 50.0, quadrant: "Lagging", leaders_count: 2 },
+  ];
+  const html = renderToString(React.createElement(SectorTableView, { sectors: sampleSectors }));
+  assert.ok(html.includes("Bank"));
+  assert.ok(html.includes("IT"));
+  assert.ok(html.includes("Leading"));
+});
+console.log("✓ SectorTableView rendered successfully");
+
+// Render StockExplorerView smoke test
+const StockExplorerView = compileAndLoadComponent(
+  "src/components/sectors/StockExplorerView.jsx",
+  sectorMockRequire
+);
+assert.doesNotThrow(() => {
+  const sampleStocks = [
+    { token: 101, symbol: "TESTBANK", sector: "bank", close: 1500, ret_1d: 1.2, ret_1m: 5.4, rs_rank: 88, in_universe: true, leader: true },
+    { token: 102, symbol: "TESTIT", sector: "it", close: 3200, ret_1d: -0.5, ret_1m: -2.1, rs_rank: 45, in_universe: true, leader: false },
+  ];
+  const html = renderToString(React.createElement(StockExplorerView, { stocks: sampleStocks, sectors: [{ key: "bank", label: "Bank" }, { key: "it", label: "IT" }] }));
+  assert.ok(html.includes("TESTBANK"));
+  assert.ok(html.includes("TESTIT"));
+  assert.ok(html.includes("Leaders only"));
+});
+console.log("✓ StockExplorerView rendered successfully");
 
 // Restore fetch
 globalThis.fetch = originalFetch;
