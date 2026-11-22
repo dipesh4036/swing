@@ -652,7 +652,15 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
         conn.commit()
         logger.info(f"Successfully published {len(all_breadth_records)} rows to daily_market_breadth.")
 
-        # Compute sector breadth & equal-weight metrics (P3 - non-fatal, T13)
+        # U2: Enrich indicators frame ONCE with screener-specific indicators (including rs_raw)
+        try:
+            from pipeline.screeners import compute_screener_indicators
+            logger.info("Enriching indicators frame with screener indicators (rs_raw) once...")
+            df_ind = compute_screener_indicators(df_ind)
+        except Exception as e:
+            logger.error(f"Enriching indicators frame failed: {e}", exc_info=True)
+
+        # Compute sector breadth & equal-weight metrics (P3 - non-fatal, T13, U2)
         sector_degraded = False
         try:
             from pipeline.sectors import compute_sector_metrics
@@ -669,17 +677,24 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             sector_degraded = True
 
         # Trigger screener calculation for the latest trade date
+        latest_date = max(all_trade_dates)
         try:
             from pipeline.screeners import run_screeners
-            latest_date = max(all_trade_dates)
             logger.info(f"Triggering screeners for latest trade date: {latest_date}...")
             screener_res = run_screeners(df_ind, target_date=latest_date, conn=conn)
             logger.info(f"Screener execution finished for {latest_date}: {screener_res.get('counts')}")
+
+            # U3: Refresh sector_stock_metrics.screeners from daily_screener_results
+            try:
+                from pipeline.sectors import refresh_sector_stock_screeners
+                refresh_sector_stock_screeners(conn, latest_date)
+            except Exception as rse:
+                logger.warning(f"Could not refresh sector stock screeners: {rse}")
         except Exception as se:
             logger.error(f"Screener execution encountered an error: {se}", exc_info=True)
             try:
                 from pipeline.alerts import send_telegram_alert
-                send_telegram_alert(f"⚠️ Screener run failed for {max(all_trade_dates)}: {se}")
+                send_telegram_alert(f"⚠️ Screener run failed for {latest_date}: {se}")
             except Exception:
                 pass
 

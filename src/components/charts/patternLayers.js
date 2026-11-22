@@ -2,7 +2,7 @@
  * Lightweight Charts Series Primitive for Chart Patterns
  * Draws trendlines, retest bands, touch circles, breakout/retest glyphs, and base boxes.
  */
-import { getLinePrice } from '@/lib/patterns/trendlines';
+import { getLinePrice } from '../../lib/patterns/trendlines.js';
 
 /**
  * Custom Series Primitive implementing ISeriesPrimitive

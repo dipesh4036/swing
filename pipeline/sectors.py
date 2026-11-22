@@ -7,6 +7,7 @@ Round 2: Covers all 501 Nifty 500 stocks via sector indices + Industry mapping.
 """
 
 import io
+import re
 import logging
 from typing import Dict, List, Any, Optional, Tuple, Set
 import requests
@@ -263,6 +264,9 @@ INDUSTRY_TO_SECTOR: Dict[str, str] = {
     "Diversified": "diversified",
 }
 
+# U5: Whole-word regex rule for private and small finance banks falling under Financial Services
+PRIVATE_BANK_NAME_RULE = re.compile(r"\b(?:Bank|Small Finance Bank)\b", re.IGNORECASE)
+
 # Single constants definition for Sector Leaders (T8.4)
 SECTOR_LEADER_RULES = {
     "above_50dma": True,
@@ -277,6 +281,7 @@ def assign_stock_sectors(
     nifty500_df: Optional[pd.DataFrame],
     isin_to_symbol: Dict[str, str],
     known_symbols: Set[str],
+    symbol_to_name: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
     """
     Assigns each stock to exactly ONE primary sector based on priority order:
@@ -398,6 +403,17 @@ def assign_stock_sectors(
 
                 # Map via Industry
                 target_sector = INDUSTRY_TO_SECTOR.get(raw_ind)
+                mapped_via = "industry"
+
+                # U5: Private banks in Financial Services move to bank via industry_name_rule
+                if raw_ind == "Financial Services":
+                    inst_name = (symbol_to_name or {}).get(master_symbol) or ""
+                    comp_name = str(row.get("Company Name", "")).strip() if "Company Name" in row else ""
+                    check_name = inst_name if inst_name else comp_name
+                    if PRIVATE_BANK_NAME_RULE.search(check_name):
+                        target_sector = "bank"
+                        mapped_via = "industry_name_rule"
+
                 if not target_sector:
                     # Safe fallback: create a slug for any new unmapped industry
                     slug = raw_ind.lower().replace(" & ", "_").replace(" ", "_")
@@ -414,7 +430,7 @@ def assign_stock_sectors(
                     "sector": target_sector,
                     "industry": raw_ind,
                     "source_index": source_idx,
-                    "mapped_via": "industry",
+                    "mapped_via": mapped_via,
                 }
                 if target_sector in stats:
                     stats[target_sector]["industry"] += 1
@@ -494,12 +510,13 @@ def sync_stock_sectors(conn=None) -> Dict[str, Any]:
         except Exception as e:
             dropped_sectors.append(("nifty500", str(e)))
 
-        # 3. Query active instruments for ISIN and Symbol resolution
+        # 3. Query active instruments for ISIN, Symbol and Name resolution
         with conn.cursor() as cur:
-            cur.execute("SELECT symbol, isin FROM instruments WHERE is_active = TRUE;")
+            cur.execute("SELECT symbol, isin, name FROM instruments WHERE is_active = TRUE;")
             rows = cur.fetchall()
             isin_to_symbol = {r[1]: r[0] for r in rows if r[1]}
             known_symbols = {r[0] for r in rows if r[0]}
+            symbol_to_name = {r[0]: str(r[2]) for r in rows if r[0] and r[2]}
 
         # 4. Perform assignment
         assigned, stats = assign_stock_sectors(
@@ -507,6 +524,7 @@ def sync_stock_sectors(conn=None) -> Dict[str, Any]:
             nifty500_df=nifty500_df,
             isin_to_symbol=isin_to_symbol,
             known_symbols=known_symbols,
+            symbol_to_name=symbol_to_name,
         )
 
         records = [
@@ -607,6 +625,10 @@ def compute_sector_metrics(
         logger.warning("Empty df_ind provided to compute_sector_metrics.")
         return {"total_published": 0, "status": "skipped"}
 
+    # U2: Ensure rs_raw is present in df_ind
+    if "rs_raw" not in df_ind.columns:
+        raise ValueError("compute_sector_metrics requires 'rs_raw' in df_ind. Ensure compute_screener_indicators is run first.")
+
     should_close = False
     if conn is None:
         conn = get_connection()
@@ -649,8 +671,11 @@ def compute_sector_metrics(
         )
 
         # 3. Determine strict liquid universe mask
-        vol_col = "vol_sma_50" if "vol_sma_50" in df_ind.columns else "volume"
-        is_liquid = (df_ind["close"] >= 20) & (df_ind[vol_col] >= 25000) & df_ind[vol_col].notna()
+        vol_col = "vol_sma_50" if "vol_sma_50" in df_ind.columns else "volume" if "volume" in df_ind.columns else None
+        if vol_col is not None:
+            is_liquid = (df_ind["close"] >= 20) & (df_ind[vol_col] >= 25000) & df_ind[vol_col].notna()
+        else:
+            is_liquid = df_ind["close"] >= 20
         df_ind["in_universe"] = is_liquid
 
         # Map sector
@@ -817,13 +842,30 @@ def compute_sector_metrics(
         if latest_date:
             df_latest = df_ind[(df_ind["trade_date"] == latest_date) & df_ind["sector"].notna()].copy()
             if not df_latest.empty:
-                # Calculate RS rank over eligible stocks for latest date
-                from pipeline.screeners import calculate_rs_rank
-                eligible_mask = df_latest["in_universe"] & df_latest["rs_raw"].notna() if "rs_raw" in df_latest.columns else pd.Series(False, index=df_latest.index)
-                if "rs_raw" in df_latest.columns:
-                    df_latest["rs_rank_calc"] = calculate_rs_rank(df_latest, eligible_mask)
-                else:
-                    df_latest["rs_rank_calc"] = np.nan
+                # U2: Calculate RS rank over the EXACT SAME eligible universe as the screeners
+                if "rs_raw" not in df_ind.columns:
+                    raise ValueError("compute_sector_metrics requires 'rs_raw' in df_ind. Ensure compute_screener_indicators is run first.")
+
+                from pipeline.screeners import SCREENER_PARAMS, calculate_rs_rank
+
+                df_target = df_ind[df_ind["trade_date"] == latest_date].copy()
+                p_trad = SCREENER_PARAMS["tradability"]
+                session_col = df_target["session_idx"] if "session_idx" in df_target.columns else pd.Series(p_trad["min_history_sessions"], index=df_target.index)
+                v_col = df_target["vol_sma_50"] if "vol_sma_50" in df_target.columns else df_target["volume"] if "volume" in df_target.columns else pd.Series(p_trad["min_vol_sma_50"], index=df_target.index)
+                tradable_mask = (
+                    (df_target["close"] >= p_trad["min_close"]) &
+                    (v_col >= p_trad["min_vol_sma_50"]) &
+                    ((df_target["close"] * v_col) >= p_trad["min_traded_value"]) &
+                    (session_col >= p_trad["min_history_sessions"])
+                )
+                rs_ranks_for_date = calculate_rs_rank(df_target, tradable_mask)
+
+                # Guard (d): fail if all rs_rank values are NULL for a non-empty eligible set
+                if tradable_mask.any() and (df_target["rs_raw"].notna() & tradable_mask).any() and rs_ranks_for_date.dropna().empty:
+                    raise ValueError("All rs_rank values calculated as NULL for non-empty eligible set.")
+
+                token_to_rs = dict(zip(df_target["token"], rs_ranks_for_date))
+                df_latest["rs_rank_calc"] = df_latest["token"].map(token_to_rs)
 
                 # Fetch screeners for latest date
                 screeners_by_token: Dict[int, List[str]] = {}
@@ -976,6 +1018,16 @@ def compute_sector_metrics(
                         """
                         execute_batch(cur, upsert_stock_sql, stock_records, page_size=1000)
                         cur.execute("DELETE FROM sector_stock_metrics WHERE trade_date < %s;", (latest_date,))
+                        # U6.1: Delete rows whose token is not in the current mapped set
+                        cur.execute("""
+                            DELETE FROM sector_stock_metrics
+                            WHERE token NOT IN (
+                                SELECT i.token
+                                FROM instruments i
+                                JOIN stock_sector s ON i.symbol = s.symbol
+                                WHERE i.token IS NOT NULL
+                            );
+                        """)
                     conn.commit()
                     logger.info(f"Published {len(stock_records)} rows to sector_stock_metrics for date {latest_date}.")
 
@@ -988,6 +1040,38 @@ def compute_sector_metrics(
             conn.close()
 
 
+def refresh_sector_stock_screeners(conn, latest_date: Any) -> int:
+    """
+    U3: Refreshes sector_stock_metrics.screeners from daily_screener_results
+    for latest_date in a single non-fatal query. Rows with no hit receive an empty array.
+    """
+    if hasattr(latest_date, "strftime"):
+        target_date_str = latest_date.strftime("%Y-%m-%d")
+    else:
+        target_date_str = str(latest_date)
+
+    sql = """
+    WITH scr_agg AS (
+        SELECT token, array_agg(screener ORDER BY screener) AS screeners_list
+        FROM daily_screener_results
+        WHERE trade_date = %s
+        GROUP BY token
+    )
+    UPDATE sector_stock_metrics m
+    SET screeners = COALESCE(scr_agg.screeners_list, ARRAY[]::TEXT[]),
+        updated_at = NOW()
+    FROM sector_stock_metrics m2
+    LEFT JOIN scr_agg ON m2.token = scr_agg.token
+    WHERE m.token = m2.token AND m.trade_date = %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (target_date_str, target_date_str))
+        cnt = cur.rowcount
+    conn.commit()
+    logger.info(f"Refreshed screeners for {cnt} sector_stock_metrics rows on date {target_date_str}.")
+    return cnt
+
+
 def backfill_sector_breadth(parquet_path: Optional[str] = None, conn=None) -> Dict[str, Any]:
     """
     Backfills daily sector breadth across all available history in parquet.
@@ -995,6 +1079,7 @@ def backfill_sector_breadth(parquet_path: Optional[str] = None, conn=None) -> Di
     import os
     from pipeline.config import EQUITY_PARQUET_PATH
     from pipeline.compute import compute_stock_indicators
+    from pipeline.screeners import compute_screener_indicators
 
     p_path = parquet_path or EQUITY_PARQUET_PATH
     if not os.path.exists(p_path):
@@ -1002,6 +1087,7 @@ def backfill_sector_breadth(parquet_path: Optional[str] = None, conn=None) -> Di
 
     df_raw = pd.read_parquet(p_path)
     df_ind = compute_stock_indicators(df_raw)
+    df_ind = compute_screener_indicators(df_ind)
     all_trade_dates = sorted(df_ind["trade_date"].unique())
     publish_floor_date = all_trade_dates[252] if len(all_trade_dates) >= 253 else all_trade_dates[0]
 

@@ -13,7 +13,6 @@ export const PATTERN_PARAMS = {
   // Swing Pivots
   pivot_k: 3,                      // Number of neighbor bars on each side for local extremum
   pivot_prominence_atr: 0.5,       // Swing point must stand out by at least 0.5 ATR
-  lookahead_guard_bars: 3,         // Last k bars cannot serve as confirmed touches
 
   // Common Line Geometry
   touch_tol: 0.35,                 // Distance in ATR units to count a swing point as a line touch
@@ -23,13 +22,15 @@ export const PATTERN_PARAMS = {
   min_span_bars: 10,               // Minimum length of pattern line in bars
   max_span_bars: 120,              // Maximum length of pattern line in bars
   max_slope_pct_per_bar: 0.01,     // Maximum slope in ln space (1.0% per bar)
-  flat_slope: 0.0008,              // Max absolute slope to classify a line as horizontal
+  flat_drift_atr: 0.5,             // Max total drift in ATR units to classify a boundary as flat (U10)
 
   // Status & Event Thresholds
   at_line_atr: 0.5,                // Within 0.5 ATR of line is "at_line" (Testing)
   breakout_atr: 0.1,               // Penetration beyond line by 0.1 ATR defines a break
   retest_atr: 0.25,                // Return within 0.25 ATR of line constitutes a retest
   retest_band_half_width_atr: 0.25,// Retest band thickness in ATR units
+  recent_break_bars: 10,           // Break must be within 10 bars to be active (U8)
+  max_pattern_age_bars: 40,        // Max age since last touch for forming/at_line patterns (U8)
 
   // Triangles
   triangle_min_duration: 15,       // Minimum bars between first touch and convergence

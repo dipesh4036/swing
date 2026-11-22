@@ -45,6 +45,14 @@ jobs:
       - name: Run Python unit tests (no DB secrets)
         run: env -u DATABASE_URL pytest -q
 
+      - name: Verify no prompt files committed
+        run: |
+          PROMPT_FILES=$(git ls-files | grep -iE 'ANTIGRAVITY_|docs/.*round|docs/.*prompt' || true)
+          if [ -n "$PROMPT_FILES" ]; then
+            echo "Error: Forbidden prompt files tracked in git: $PROMPT_FILES"
+            exit 1
+          fi
+
       - name: Run TypeScript type check
         run: npx tsc --noEmit
 

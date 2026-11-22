@@ -752,8 +752,8 @@ def run_screeners(
         close_connection_at_end = True
 
     try:
-        # Precompute indicators across full history if not already present
-        required_cols = {"sma_10", "sma_20", "ema_50", "high_52w_incl", "pivot_20", "vol_avg_10", "atr_pct"}
+        # Precompute indicators across full history if not already present (U2: rs_raw included)
+        required_cols = {"sma_10", "sma_20", "ema_50", "high_52w_incl", "pivot_20", "vol_avg_10", "atr_pct", "rs_raw"}
         if not required_cols.issubset(df.columns):
             df = compute_screener_indicators(df)
 

@@ -2,6 +2,7 @@
  * Triangle Pattern Detection
  * Identifies converging upper resistance and lower support formations:
  * Ascending, Descending, and Symmetrical triangles.
+ * Implements U8 (status aging, single events), U9 (no-pierce check), U10 (flat drift in ATR).
  */
 import { PATTERN_PARAMS } from './params.js';
 import { getLinePrice } from './trendlines.js';
@@ -68,97 +69,178 @@ export function findTriangles(candles, atrs, pivots) {
   // Pair upper and lower lines
   for (const up of upperLines) {
     for (const low of lowerLines) {
-      const startIdx = Math.min(up.touches[0].idx, low.touches[0].idx);
-      const endIdx = Math.max(
-        up.touches[up.touches.length - 1].idx,
-        low.touches[low.touches.length - 1].idx
-      );
+      const upFirst = up.touches[0].idx;
+      const upLast = up.touches[up.touches.length - 1].idx;
+      const lowFirst = low.touches[0].idx;
+      const lowLast = low.touches[low.touches.length - 1].idx;
+
+      const startIdx = Math.min(upFirst, lowFirst);
+      const endIdx = Math.max(upLast, lowLast);
       const duration = endIdx - startIdx;
 
       if (duration < PATTERN_PARAMS.triangle_min_duration || duration > PATTERN_PARAMS.triangle_max_duration) {
         continue;
       }
 
-      const upStartP = getLinePrice(up.hA.idx, up.hA.price, up.slope, startIdx);
-      const lowStartP = getLinePrice(low.lA.idx, low.lA.price, low.slope, startIdx);
-      const upEndP = getLinePrice(up.hA.idx, up.hA.price, up.slope, endIdx);
-      const lowEndP = getLinePrice(low.lA.idx, low.lA.price, low.slope, endIdx);
+      // U9: Validate no-pierce rule over the drawn span for BOTH upper and lower lines
+      let upPierced = false;
+      for (let bar = upFirst; bar <= upLast; bar++) {
+        const c = candles[bar];
+        const barAtr = atrs[bar] || 1;
+        const lineP = getLinePrice(up.hA.idx, up.hA.price, up.slope, bar);
+        if (c.close - lineP > PATTERN_PARAMS.pierce_tol * barAtr) {
+          upPierced = true;
+          break;
+        }
+      }
+      if (upPierced) continue;
 
-      const startWidth = upStartP - lowStartP;
-      const endWidth = upEndP - lowEndP;
+      let lowPierced = false;
+      for (let bar = lowFirst; bar <= lowLast; bar++) {
+        const c = candles[bar];
+        const barAtr = atrs[bar] || 1;
+        const lineP = getLinePrice(low.lA.idx, low.lA.price, low.slope, bar);
+        if (lineP - c.close > PATTERN_PARAMS.pierce_tol * barAtr) {
+          lowPierced = true;
+          break;
+        }
+      }
+      if (lowPierced) continue;
+
+      const upStartP = getLinePrice(up.hA.idx, up.hA.price, up.slope, upFirst);
+      const lowStartP = getLinePrice(low.lA.idx, low.lA.price, low.slope, lowFirst);
+      const upEndP = getLinePrice(up.hA.idx, up.hA.price, up.slope, upLast);
+      const lowEndP = getLinePrice(low.lA.idx, low.lA.price, low.slope, lowLast);
+
+      const startWidth = getLinePrice(up.hA.idx, up.hA.price, up.slope, startIdx) - getLinePrice(low.lA.idx, low.lA.price, low.slope, startIdx);
+      const endWidth = getLinePrice(up.hA.idx, up.hA.price, up.slope, endIdx) - getLinePrice(low.lA.idx, low.lA.price, low.slope, endIdx);
 
       // Must be converging and positive width
       if (startWidth <= 0 || endWidth <= 0 || endWidth > PATTERN_PARAMS.triangle_end_width_ratio * startWidth) {
         continue;
       }
 
-      // Determine triangle classification
-      const flatSlope = PATTERN_PARAMS.flat_slope;
+      // U10: Replace per-bar slope with total drift measured in ATR over drawn span
+      const endAtr = atrs[endIdx] || 1;
+      const maxDrift = PATTERN_PARAMS.flat_drift_atr * endAtr;
+
+      const upIsFlat = Math.abs(upEndP - upStartP) <= maxDrift;
+      const lowIsFlat = Math.abs(lowEndP - lowStartP) <= maxDrift;
+      const upIsFalling = upEndP < upStartP - maxDrift;
+      const lowIsRising = lowEndP > lowStartP + maxDrift;
+
       let type = null;
       let title = '';
 
-      if (Math.abs(up.slope) <= flatSlope && low.slope > flatSlope) {
+      if (upIsFlat && lowIsRising) {
         type = 'ascending_triangle';
         title = 'Ascending triangle';
-      } else if (Math.abs(low.slope) <= flatSlope && up.slope < -flatSlope) {
+      } else if (lowIsFlat && upIsFalling) {
         type = 'descending_triangle';
         title = 'Descending triangle';
-      } else if (up.slope < -flatSlope && low.slope > flatSlope) {
+      } else if (upIsFalling && lowIsRising) {
         type = 'symmetrical_triangle';
         title = 'Symmetrical triangle';
       }
 
       if (!type) continue;
 
-      // Evaluate breakout / breakdown after endIdx
+      // Evaluate breakout / breakdown after the first line's last touch (U8, U9)
+      const scanStart = Math.min(upLast, lowLast) + 1;
       let broke = false;
+      let breakoutIdx = -1;
       let side = 'neutral';
-      const events = [];
+      let piercedAfter = false;
 
-      for (let bar = endIdx + 1; bar < n; bar++) {
+      let breakoutEvent = null;
+      let retestEvent = null;
+      let closeBackInsideEvent = null;
+
+      for (let bar = scanStart; bar < n; bar++) {
         const c = candles[bar];
         const barAtr = atrs[bar] || 1;
         const curUpP = getLinePrice(up.hA.idx, up.hA.price, up.slope, bar);
         const curLowP = getLinePrice(low.lA.idx, low.lA.price, low.slope, bar);
 
         if (!broke) {
-          if (c.close > curUpP + PATTERN_PARAMS.breakout_atr * barAtr) {
+          if (bar > upLast && c.close > curUpP + PATTERN_PARAMS.breakout_atr * barAtr) {
             broke = true;
+            breakoutIdx = bar;
             side = 'resistance';
-            events.push({ type: 'breakout', idx: bar, date: c.date, price: c.close });
-          } else if (c.close < curLowP - PATTERN_PARAMS.breakout_atr * barAtr) {
+            breakoutEvent = { type: 'breakout', idx: bar, date: c.date, price: c.close };
+          } else if (bar > lowLast && c.close < curLowP - PATTERN_PARAMS.breakout_atr * barAtr) {
             broke = true;
+            breakoutIdx = bar;
             side = 'support';
-            events.push({ type: 'breakdown', idx: bar, date: c.date, price: c.close });
+            breakoutEvent = { type: 'breakdown', idx: bar, date: c.date, price: c.close };
+          } else {
+            // Check piercing before breaking (U9)
+            if (bar > upLast && c.close - curUpP > PATTERN_PARAMS.pierce_tol * barAtr) {
+              piercedAfter = true;
+              break;
+            }
+            if (bar > lowLast && curLowP - c.close > PATTERN_PARAMS.pierce_tol * barAtr) {
+              piercedAfter = true;
+              break;
+            }
           }
         } else {
-          // Check retest
+          // Check at most 1 retest and at most 1 close_back_inside (U8)
           const targetLineP = side === 'resistance' ? curUpP : curLowP;
           const distToLine = Math.abs(c.close - targetLineP) / barAtr;
-          if (distToLine <= PATTERN_PARAMS.retest_atr) {
-            events.push({ type: 'retest', idx: bar, date: c.date, price: c.close });
+
+          if (!retestEvent && distToLine <= PATTERN_PARAMS.retest_atr) {
+            retestEvent = { type: 'retest', idx: bar, date: c.date, price: c.close };
           }
-          if (side === 'resistance' && c.close < targetLineP) {
-            events.push({ type: 'close_back_inside', idx: bar, date: c.date, price: c.close });
-          } else if (side === 'support' && c.close > targetLineP) {
-            events.push({ type: 'close_back_inside', idx: bar, date: c.date, price: c.close });
+
+          if (!closeBackInsideEvent) {
+            if (side === 'resistance' && c.close < targetLineP) {
+              closeBackInsideEvent = { type: 'close_back_inside', idx: bar, date: c.date, price: c.close };
+            } else if (side === 'support' && c.close > targetLineP) {
+              closeBackInsideEvent = { type: 'close_back_inside', idx: bar, date: c.date, price: c.close };
+            }
           }
         }
       }
 
-      const lastClose = candles[n - 1].close;
-      const lastAtr = atrs[n - 1] || 1;
-      const curUpP = getLinePrice(up.hA.idx, up.hA.price, up.slope, n - 1);
-      const curLowP = getLinePrice(low.lA.idx, low.lA.price, low.slope, n - 1);
+      if (piercedAfter) continue;
+
+      const events = [];
+      if (breakoutEvent) events.push(breakoutEvent);
+      if (retestEvent) events.push(retestEvent);
+      if (closeBackInsideEvent) events.push(closeBackInsideEvent);
+
+      const lastBarIdx = n - 1;
+      const lastClose = candles[lastBarIdx].close;
+      const lastAtr = atrs[lastBarIdx] || 1;
+      const curUpP = getLinePrice(up.hA.idx, up.hA.price, up.slope, lastBarIdx);
+      const curLowP = getLinePrice(low.lA.idx, low.lA.price, low.slope, lastBarIdx);
 
       let status = 'forming';
       let atrBeyond = 0;
 
       if (broke) {
-        status = side === 'resistance' ? 'broke_out' : 'broke_down';
+        const breakAge = lastBarIdx - breakoutIdx;
         const lineP = side === 'resistance' ? curUpP : curLowP;
         atrBeyond = (lastClose - lineP) / lastAtr;
+
+        if (breakAge > PATTERN_PARAMS.recent_break_bars) {
+          status = 'historical';
+        } else {
+          const stillBeyond = side === 'resistance' ? lastClose >= curUpP : lastClose <= curLowP;
+          if (stillBeyond) {
+            status = side === 'resistance' ? 'broke_out' : 'broke_down';
+          } else {
+            status = 'failed_break';
+          }
+        }
       } else {
+        // Unbroken: check max_pattern_age_bars (U8.3)
+        const ageSinceEnd = lastBarIdx - endIdx;
+        if (ageSinceEnd > PATTERN_PARAMS.max_pattern_age_bars) {
+          continue; // Drop pattern if triangle convergence ended > max_pattern_age_bars ago
+        }
+
         const distUp = Math.abs(lastClose - curUpP) / lastAtr;
         const distLow = Math.abs(lastClose - curLowP) / lastAtr;
         if (distUp <= PATTERN_PARAMS.at_line_atr || distLow <= PATTERN_PARAMS.at_line_atr) {
@@ -176,18 +258,18 @@ export function findTriangles(candles, atrs, pivots) {
         lines: [
           {
             role: 'upper_resistance',
-            idx1: up.hA.idx,
-            p1: up.hA.price,
-            idx2: endIdx,
+            idx1: upFirst,
+            p1: upStartP,
+            idx2: upLast,
             p2: upEndP,
             slope: up.slope,
             touches: up.touches.map((t) => ({ idx: t.idx, price: t.price, date: t.date })),
           },
           {
             role: 'lower_support',
-            idx1: low.lA.idx,
-            p1: low.lA.price,
-            idx2: endIdx,
+            idx1: lowFirst,
+            p1: lowStartP,
+            idx2: lowLast,
             p2: lowEndP,
             slope: low.slope,
             touches: low.touches.map((t) => ({ idx: t.idx, price: t.price, date: t.date })),

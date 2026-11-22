@@ -1,5 +1,5 @@
 /**
- * Pattern Audit Script
+ * Pattern Audit Script - Round 3 / U12
  * Runs pure JS chart pattern detector across screener tokens in Neon DB.
  * Read-only role, no secrets printed.
  */
@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Pool, types } from 'pg';
 import { detectPatterns } from '../src/lib/patterns/index.js';
+import { computeATR } from '../src/lib/patterns/atr.js';
+import { PATTERN_PARAMS } from '../src/lib/patterns/params.js';
 
 // Return DATE (type OID 1082) as raw string 'YYYY-MM-DD'
 types.setTypeParser(1082, (str) => str);
@@ -41,7 +43,7 @@ const pool = new Pool({
 });
 
 async function runAudit() {
-  console.log('=== AUTO CHART PATTERNS AUDIT ===\n');
+  console.log('=== AUTO CHART PATTERNS AUDIT & BENCHMARK (U12) ===\n');
 
   // 1. Fetch latest screener tokens with symbols
   const tokensRes = await pool.query(`
@@ -82,16 +84,23 @@ async function runAudit() {
 
   console.log(`Loaded candle history across ${candlesByToken.size} tokens.\n`);
 
-  // 3. Run pattern detector and benchmark
+  // 3. Run pattern detector across all stocks
   const typeCounts = {};
   const statusCounts = {};
-  const examples = [];
+  const currentExamples = [];
+  const patternsPerStock = [];
+  const currentPatternsPerStock = [];
+  let stocksWithCurrentPattern = 0;
   let totalDetectorTimeMs = 0;
   let totalStocksEvaluated = 0;
+
+  const evaluatedStockData = [];
 
   for (const stock of stocks) {
     const candles = candlesByToken.get(stock.token) || [];
     if (candles.length < 60) continue;
+
+    evaluatedStockData.push({ stock, candles });
 
     const t0 = performance.now();
     const result = detectPatterns(candles);
@@ -100,14 +109,21 @@ async function runAudit() {
     totalDetectorTimeMs += elapsed;
     totalStocksEvaluated++;
 
-    for (const pat of result.patterns) {
+    const stockPatterns = result.patterns;
+    patternsPerStock.push(stockPatterns.length);
+
+    const currentPats = stockPatterns.filter((p) => p.status !== 'historical');
+    currentPatternsPerStock.push(currentPats.length);
+    if (currentPats.length > 0) stocksWithCurrentPattern++;
+
+    for (const pat of stockPatterns) {
       typeCounts[pat.type] = (typeCounts[pat.type] || 0) + 1;
       statusCounts[pat.status] = (statusCounts[pat.status] || 0) + 1;
 
-      if (examples.length < 10) {
+      if (pat.status !== 'historical' && currentExamples.length < 10) {
         const line = pat.lines[0];
         const touches = line?.touches || [];
-        examples.push({
+        currentExamples.push({
           symbol: stock.symbol,
           type: pat.type,
           title: pat.title,
@@ -118,13 +134,21 @@ async function runAudit() {
             start_price: touches[0]?.price || line?.p1,
             end_price: touches[touches.length - 1]?.price || line?.p2,
           },
+          touches: touches.map((t) => ({ date: t.date, price: t.price })),
           summary: pat.summary,
         });
       }
     }
   }
 
-  // 4. Output Summary Statistics
+  // U12.4 Statistics
+  const totalPatterns = patternsPerStock.reduce((a, b) => a + b, 0);
+  const avgPatterns = totalStocksEvaluated > 0 ? (totalPatterns / totalStocksEvaluated).toFixed(2) : 0;
+  const maxPatterns = patternsPerStock.length > 0 ? Math.max(...patternsPerStock) : 0;
+  const totalCurrentPatterns = currentPatternsPerStock.reduce((a, b) => a + b, 0);
+  const avgCurrentPatterns = totalStocksEvaluated > 0 ? (totalCurrentPatterns / totalStocksEvaluated).toFixed(2) : 0;
+  const maxCurrentPatterns = currentPatternsPerStock.length > 0 ? Math.max(...currentPatternsPerStock) : 0;
+
   console.log('--- PATTERN COUNTS BY TYPE ---');
   for (const [type, count] of Object.entries(typeCounts)) {
     console.log(`  ${type.padEnd(25)}: ${count}`);
@@ -135,19 +159,153 @@ async function runAudit() {
     console.log(`  ${status.padEnd(25)}: ${count}`);
   }
 
-  const avgMs = totalStocksEvaluated > 0 ? totalDetectorTimeMs / totalStocksEvaluated : 0;
-  const grid40Ms = avgMs * 40;
+  console.log('\n--- U12.4 PATTERN DISTRIBUTION & CURRENT PATTERNS ---');
+  console.log(`  Evaluated stocks                    : ${totalStocksEvaluated}`);
+  console.log(`  Total patterns detected             : ${totalPatterns}`);
+  console.log(`  Patterns per stock (all)            : avg ${avgPatterns}, max ${maxPatterns}`);
+  console.log(`  Total CURRENT patterns              : ${totalCurrentPatterns}`);
+  console.log(`  Current patterns per stock          : avg ${avgCurrentPatterns}, max ${maxCurrentPatterns}`);
+  console.log(`  Stocks with >= 1 CURRENT pattern    : ${stocksWithCurrentPattern} / ${totalStocksEvaluated} (${((stocksWithCurrentPattern / totalStocksEvaluated) * 100).toFixed(1)}%)`);
 
-  console.log('\n--- PERFORMANCE BENCHMARK ---');
-  console.log(`  Evaluated stocks         : ${totalStocksEvaluated}`);
-  console.log(`  Total detector runtime   : ${totalDetectorTimeMs.toFixed(2)} ms`);
-  console.log(`  Average runtime per stock: ${avgMs.toFixed(2)} ms (target <= 15 ms)`);
-  console.log(`  Projected 40-tile grid   : ${grid40Ms.toFixed(2)} ms`);
+  // U12.2 Real Node benchmarks for 40 tiles
+  console.log('\n--- U12.2 REAL BENCHMARK (40 TILES) ---');
 
-  console.log('\n--- 10 JSON EXAMPLES (for TradingView visual comparison) ---');
-  console.log(JSON.stringify(examples, null, 2));
+  // Benchmark 40 tiles of 150 bars
+  const times150 = [];
+  const subset40 = evaluatedStockData.slice(0, 40);
+  for (let trial = 0; trial < 10; trial++) {
+    const t0 = performance.now();
+    for (const item of subset40) {
+      const sliced150 = item.candles.slice(-150);
+      detectPatterns(sliced150);
+    }
+    times150.push(performance.now() - t0);
+  }
+  const min150 = Math.min(...times150).toFixed(2);
+  const max150 = Math.max(...times150).toFixed(2);
+  const avg150 = (times150.reduce((a, b) => a + b, 0) / times150.length).toFixed(2);
+  console.log(`  40 tiles of 150 bars (10 runs) : min ${min150} ms, avg ${avg150} ms, max ${max150} ms (avg per tile: ${(avg150 / 40).toFixed(2)} ms)`);
+
+  // Benchmark 40 tiles of 260 bars
+  const times260 = [];
+  for (let trial = 0; trial < 10; trial++) {
+    const t0 = performance.now();
+    for (const item of subset40) {
+      const sliced260 = item.candles.slice(-260);
+      detectPatterns(sliced260);
+    }
+    times260.push(performance.now() - t0);
+  }
+  const min260 = Math.min(...times260).toFixed(2);
+  const max260 = Math.max(...times260).toFixed(2);
+  const avg260 = (times260.reduce((a, b) => a + b, 0) / times260.length).toFixed(2);
+  console.log(`  40 tiles of 260 bars (10 runs) : min ${min260} ms, avg ${avg260} ms, max ${max260} ms (avg per tile: ${(avg260 / 40).toFixed(2)} ms)`);
+
+  // Benchmark 1,200 bars (Angel 5-year history)
+  // Synthesize or tile candles to 1200 bars
+  const times1200 = [];
+  const base1200Candles = [];
+  if (subset40.length > 0) {
+    let seed = subset40[0].candles;
+    while (base1200Candles.length < 1200) {
+      base1200Candles.push(...seed);
+    }
+    base1200Candles.length = 1200;
+  }
+  for (let trial = 0; trial < 10; trial++) {
+    const t0 = performance.now();
+    detectPatterns(base1200Candles);
+    times1200.push(performance.now() - t0);
+  }
+  const min1200 = Math.min(...times1200).toFixed(2);
+  const max1200 = Math.max(...times1200).toFixed(2);
+  const avg1200 = (times1200.reduce((a, b) => a + b, 0) / times1200.length).toFixed(2);
+  console.log(`  Single 1,200-bar history (10 runs) : min ${min1200} ms, avg ${avg1200} ms, max ${max1200} ms`);
+
+  // U12.1 Hand Checks on Real DB Candles
+  console.log('\n--- U12.1 HAND CHECKS ON REAL DB CANDLES ---');
+  let slopedExample = null;
+  let triangleExample = null;
+  let baseExample = null;
+
+  for (const item of evaluatedStockData) {
+    const res = detectPatterns(item.candles);
+    const atrs = computeATR(item.candles, 14);
+
+    for (const pat of res.patterns) {
+      if (!slopedExample && (pat.type === 'sloped_resistance' || pat.type === 'sloped_support')) {
+        slopedExample = verifyPatternPiercing(item.stock.symbol, pat, item.candles, atrs);
+      }
+      if (!triangleExample && (pat.type === 'ascending_triangle' || pat.type === 'descending_triangle' || pat.type === 'symmetrical_triangle')) {
+        triangleExample = verifyPatternPiercing(item.stock.symbol, pat, item.candles, atrs);
+      }
+      if (!baseExample && pat.type === 'base_pivot') {
+        baseExample = verifyPatternPiercing(item.stock.symbol, pat, item.candles, atrs);
+      }
+    }
+    if (slopedExample && triangleExample && baseExample) break;
+  }
+
+  printHandCheckResult('1. Sloped Line', slopedExample);
+  printHandCheckResult('2. Triangle', triangleExample);
+  printHandCheckResult('3. Base + Pivot', baseExample);
+
+  console.log('\n--- 10 CURRENT PATTERNS (for TradingView visual comparison) ---');
+  console.log(JSON.stringify(currentExamples, null, 2));
 
   await pool.end();
+}
+
+function verifyPatternPiercing(symbol, pat, candles, atrs) {
+  const line = pat.lines[0];
+  const touches = line.touches || [];
+  const firstIdx = touches.length > 0 ? touches[0].idx : line.idx1;
+  const lastIdx = touches.length > 0 ? touches[touches.length - 1].idx : line.idx2;
+
+  let maxAtrPenetration = 0;
+  for (let bar = firstIdx; bar <= lastIdx; bar++) {
+    const c = candles[bar];
+    const atr = atrs[bar] || 1;
+    const lnP1 = Math.log(line.p1);
+    const lineP = Math.exp(lnP1 + (line.slope || 0) * (bar - line.idx1));
+
+    let pen = 0;
+    if (line.role === 'resistance' || line.role === 'upper_resistance' || line.role === 'pivot') {
+      pen = Math.max(0, c.close - lineP) / atr;
+    } else {
+      pen = Math.max(0, lineP - c.close) / atr;
+    }
+    if (pen > maxAtrPenetration) maxAtrPenetration = pen;
+  }
+
+  return {
+    symbol,
+    type: pat.type,
+    title: pat.title,
+    status: pat.status,
+    touches: touches.map((t) => ({ date: t.date, price: t.price })),
+    drawnSpan: { start_date: candles[firstIdx]?.date, end_date: candles[lastIdx]?.date },
+    maxAtrPenetration: Number(maxAtrPenetration.toFixed(4)),
+    pierceTol: PATTERN_PARAMS.pierce_tol,
+    passesNoPierce: maxAtrPenetration <= PATTERN_PARAMS.pierce_tol + 1e-4,
+  };
+}
+
+function printHandCheckResult(label, res) {
+  console.log(`\n${label}:`);
+  if (!res) {
+    console.log('  None found.');
+    return;
+  }
+  console.log(`  Symbol       : ${res.symbol}`);
+  console.log(`  Pattern      : ${res.title} (${res.type}) [Status: ${res.status}]`);
+  console.log(`  Drawn Span   : ${res.drawnSpan.start_date} to ${res.drawnSpan.end_date}`);
+  console.log(`  Touches      :`);
+  for (const t of res.touches) {
+    console.log(`    Date: ${t.date}, Price: ₹${t.price}`);
+  }
+  console.log(`  Max Penetration Between Touches: ${res.maxAtrPenetration} ATR (Tolerance: ${res.pierceTol} ATR)`);
+  console.log(`  Passes No-Pierce Invariant    : ${res.passesNoPierce ? 'YES (VERIFIED)' : 'NO (FAILED)'}`);
 }
 
 runAudit().catch((err) => {

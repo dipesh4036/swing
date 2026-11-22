@@ -67,27 +67,28 @@ export default function ScreenerChart({
     return detectPatterns(stockData.candles);
   }, [stockData?.candles, timeframe]);
 
-  // Default: top 3 patterns on
+  // Default: top 3 non-historical patterns on (historical patterns shown only when focused, U8.4)
   const activePatterns = useMemo(() => {
-    return patternResult.patterns.slice(0, 3);
-  }, [patternResult.patterns]);
+    const nonHistorical = patternResult.patterns.filter((p) => p.status !== "historical");
+    const topActive = nonHistorical.slice(0, 3);
+    if (focusedPatternId) {
+      const focused = patternResult.patterns.find((p) => p.id === focusedPatternId);
+      if (focused && focused.status === "historical" && !topActive.some((p) => p.id === focused.id)) {
+        return [...topActive, focused];
+      }
+    }
+    return topActive;
+  }, [patternResult.patterns, focusedPatternId]);
 
-  // Pattern counts for chip row
+  // Pattern counts for chip row (historical patterns do not count in Pattern lines n chip, U8.4)
   const patternCounts = useMemo(() => {
+    const nonHistorical = activePatterns.filter((p) => p.status !== "historical");
     return {
-      patternLines: activePatterns.reduce((acc, p) => acc + (p.lines?.length || 1), 0),
-      breakoutRetest: activePatterns.reduce((acc, p) => acc + (p.events?.length || 0), 0),
-      basePivot: activePatterns.filter((p) => p.type === "base_pivot").length,
+      patternLines: nonHistorical.reduce((acc, p) => acc + (p.lines?.length || 1), 0),
+      breakoutRetest: nonHistorical.reduce((acc, p) => acc + (p.events?.length || 0), 0),
+      basePivot: nonHistorical.filter((p) => p.type === "base_pivot").length,
     };
   }, [activePatterns]);
-
-  // Count patterns whose anchors begin off-screen
-  const offscreenCount = useMemo(() => {
-    if (!candles || candles.length === 0 || activePatterns.length === 0) return 0;
-    // Consider anchors in the earliest 10% of history as potentially off-screen initially
-    const cutoff = Math.floor(candles.length * 0.1);
-    return activePatterns.filter((p) => (p.lines[0]?.idx1 ?? 0) <= cutoff).length;
-  }, [candles, activePatterns]);
 
   // EMA configs (Only EMAs: 10, 20, 50, 200 - SMA 150 removed)
   const maConfigs = useMemo(() => [
@@ -117,6 +118,14 @@ export default function ScreenerChart({
       };
     });
   }, [stockData, timeframe]);
+
+  // Count patterns whose anchors begin off-screen
+  const offscreenCount = useMemo(() => {
+    if (!candles || candles.length === 0 || activePatterns.length === 0) return 0;
+    // Consider anchors in the earliest 10% of history as potentially off-screen initially
+    const cutoff = Math.floor(candles.length * 0.1);
+    return activePatterns.filter((p) => (p.lines[0]?.idx1 ?? 0) <= cutoff).length;
+  }, [candles, activePatterns]);
 
   // Active candle for top bar display (hovered or last)
   const activeCandle = hoveredCandle || (candles.length > 0 ? candles[candles.length - 1] : null);

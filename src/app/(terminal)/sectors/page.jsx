@@ -101,7 +101,7 @@ function SectorRotationContent() {
 
   const sectors = data?.sectors || [];
   const stocks = data?.stocks || [];
-  const coverage = data?.coverage || { n_mapped: 0, n_in_universe: 0, total_nifty500: 501 };
+  const coverage = data?.coverage || { n_mapped: 0, n_in_universe: 0, total_nifty500: null, uncovered: 0 };
   const asOf = data?.asOf;
   const breadthAsOf = data?.breadthAsOf;
 

@@ -1,6 +1,7 @@
 /**
  * Sloped Trendline Pattern Detection
  * Identifies resistance and support trendlines in ln(price) space.
+ * Implements U8 (status aging, single events) and U9 (full span no-pierce check).
  */
 import { PATTERN_PARAMS } from './params.js';
 
@@ -15,13 +16,18 @@ export function getLinePrice(idx1, p1, slope, targetIdx) {
 
 /**
  * Evaluates breakout, retest, and back-inside events for a sloped line.
+ * Caps events to at most 1 breakout/breakdown, 1 retest, and 1 close_back_inside (U8).
  */
 function evaluateSlopedEvents(candles, atrs, idx1, p1, slope, side, lastTouchIdx) {
   const n = candles.length;
-  const events = [];
   let broke = false;
   let breakoutIdx = -1;
+  let piercedAfter = false;
   const isResistance = side === 'resistance';
+
+  let breakoutEvent = null;
+  let retestEvent = null;
+  let closeBackInsideEvent = null;
 
   for (let i = lastTouchIdx + 1; i < n; i++) {
     const c = candles[i];
@@ -33,56 +39,71 @@ function evaluateSlopedEvents(candles, atrs, idx1, p1, slope, side, lastTouchIdx
       if (isResistance && diff > PATTERN_PARAMS.breakout_atr * atr) {
         broke = true;
         breakoutIdx = i;
-        events.push({
+        breakoutEvent = {
           type: 'breakout',
           idx: i,
           date: c.date,
           price: c.close,
-        });
+        };
       } else if (!isResistance && diff < -PATTERN_PARAMS.breakout_atr * atr) {
         broke = true;
         breakoutIdx = i;
-        events.push({
+        breakoutEvent = {
           type: 'breakdown',
           idx: i,
           date: c.date,
           price: c.close,
-        });
+        };
+      } else {
+        // Check piercing before breaking (U9)
+        const penetration = isResistance ? diff : -diff;
+        if (penetration > PATTERN_PARAMS.pierce_tol * atr) {
+          piercedAfter = true;
+          break;
+        }
       }
     } else {
+      // Already broken: record at most 1 retest and at most 1 close_back_inside (U8)
       const distToLine = Math.abs(c.close - linePrice) / atr;
       const extremumDist = isResistance
         ? Math.abs(c.low - linePrice) / atr
         : Math.abs(c.high - linePrice) / atr;
 
-      if (distToLine <= PATTERN_PARAMS.retest_atr || extremumDist <= PATTERN_PARAMS.retest_atr) {
-        events.push({
+      if (!retestEvent && (distToLine <= PATTERN_PARAMS.retest_atr || extremumDist <= PATTERN_PARAMS.retest_atr)) {
+        retestEvent = {
           type: 'retest',
           idx: i,
           date: c.date,
           price: c.close,
-        });
+        };
       }
 
-      if (isResistance && c.close < linePrice) {
-        events.push({
-          type: 'close_back_inside',
-          idx: i,
-          date: c.date,
-          price: c.close,
-        });
-      } else if (!isResistance && c.close > linePrice) {
-        events.push({
-          type: 'close_back_inside',
-          idx: i,
-          date: c.date,
-          price: c.close,
-        });
+      if (!closeBackInsideEvent) {
+        if (isResistance && c.close < linePrice) {
+          closeBackInsideEvent = {
+            type: 'close_back_inside',
+            idx: i,
+            date: c.date,
+            price: c.close,
+          };
+        } else if (!isResistance && c.close > linePrice) {
+          closeBackInsideEvent = {
+            type: 'close_back_inside',
+            idx: i,
+            date: c.date,
+            price: c.close,
+          };
+        }
       }
     }
   }
 
-  return { broke, breakoutIdx, events };
+  const events = [];
+  if (breakoutEvent) events.push(breakoutEvent);
+  if (retestEvent) events.push(retestEvent);
+  if (closeBackInsideEvent) events.push(closeBackInsideEvent);
+
+  return { broke, breakoutIdx, events, piercedAfter };
 }
 
 /**
@@ -125,14 +146,47 @@ export function findTrendlines(candles, atrs, pivots) {
           continue;
         }
 
-        // Check piercing between pA.idx and pB.idx
+        // Count touches across all activePoints
+        const touches = [];
+        for (const pt of activePoints) {
+          const expectedP = getLinePrice(pA.idx, pA.price, slope, pt.idx);
+          const distAtr = Math.abs(pt.price - expectedP) / (pt.atr || 1);
+          if (distAtr <= PATTERN_PARAMS.touch_tol) {
+            touches.push(pt);
+          }
+        }
+
+        // Filter touches to ensure at least min_bars_between_touches
+        const spacedTouches = [];
+        for (const t of touches) {
+          if (
+            spacedTouches.length === 0 ||
+            t.idx - spacedTouches[spacedTouches.length - 1].idx >= PATTERN_PARAMS.min_bars_between_touches
+          ) {
+            spacedTouches.push(t);
+          }
+        }
+
+        if (spacedTouches.length < PATTERN_PARAMS.min_touches) {
+          continue;
+        }
+
+        const firstTouch = spacedTouches[0];
+        const lastTouch = spacedTouches[spacedTouches.length - 1];
+        const totalSpan = lastTouch.idx - firstTouch.idx;
+
+        if (totalSpan < PATTERN_PARAMS.min_span_bars || totalSpan > PATTERN_PARAMS.max_span_bars) {
+          continue;
+        }
+
+        // U9: Validate no-pierce rule over the FULL drawn span firstTouch.idx .. lastTouch.idx
         let pierced = false;
         let nearPierces = 0;
 
-        for (let bar = pA.idx; bar <= pB.idx; bar++) {
+        for (let bar = firstTouch.idx; bar <= lastTouch.idx; bar++) {
           const c = candles[bar];
           const barAtr = atrs[bar] || 1;
-          const lineP = getLinePrice(pA.idx, pA.price, slope, bar);
+          const lineP = getLinePrice(firstTouch.idx, firstTouch.price, slope, bar);
 
           if (isResistance) {
             const diff = c.close - lineP;
@@ -155,39 +209,16 @@ export function findTrendlines(candles, atrs, pivots) {
 
         if (pierced) continue;
 
-        // Count touches across all activePoints
-        const touches = [];
-        for (const pt of activePoints) {
-          const expectedP = getLinePrice(pA.idx, pA.price, slope, pt.idx);
-          const distAtr = Math.abs(pt.price - expectedP) / (pt.atr || 1);
-          if (distAtr <= PATTERN_PARAMS.touch_tol) {
-            touches.push(pt);
-          }
-        }
-
-        // Filter touches to ensure at least min_bars_between_touches
-        const spacedTouches = [];
-        for (const t of touches) {
-          if (spacedTouches.length === 0 || t.idx - spacedTouches[spacedTouches.length - 1].idx >= PATTERN_PARAMS.min_bars_between_touches) {
-            spacedTouches.push(t);
-          }
-        }
-
-        if (spacedTouches.length >= PATTERN_PARAMS.min_touches) {
-          const firstTouch = spacedTouches[0];
-          const lastTouch = spacedTouches[spacedTouches.length - 1];
-
-          validLines.push({
-            pA,
-            pB,
-            slope,
-            firstTouch,
-            lastTouch,
-            touches: spacedTouches,
-            nearPierces,
-            spanBars: lastTouch.idx - firstTouch.idx,
-          });
-        }
+        validLines.push({
+          pA,
+          pB,
+          slope,
+          firstTouch,
+          lastTouch,
+          touches: spacedTouches,
+          nearPierces,
+          spanBars: totalSpan,
+        });
       }
     }
 
@@ -223,7 +254,7 @@ export function findTrendlines(candles, atrs, pivots) {
 
     for (const line of kept) {
       const { firstTouch, lastTouch, slope, touches } = line;
-      const { broke, events } = evaluateSlopedEvents(
+      const { broke, breakoutIdx, events, piercedAfter } = evaluateSlopedEvents(
         candles,
         atrs,
         firstTouch.idx,
@@ -233,16 +264,40 @@ export function findTrendlines(candles, atrs, pivots) {
         lastTouch.idx
       );
 
-      const lastClose = candles[n - 1].close;
-      const lastAtr = atrs[n - 1] || 1;
-      const currentLinePrice = getLinePrice(firstTouch.idx, firstTouch.price, slope, n - 1);
+      // U9: Reject if pierced between last touch and last bar without breakout
+      if (piercedAfter) continue;
+
+      const lastBarIdx = n - 1;
+      const lastClose = candles[lastBarIdx].close;
+      const lastAtr = atrs[lastBarIdx] || 1;
+      const currentLinePrice = getLinePrice(firstTouch.idx, firstTouch.price, slope, lastBarIdx);
       const diffAtr = (lastClose - currentLinePrice) / lastAtr;
 
       let status = 'forming';
       if (broke) {
-        status = isResistance ? 'broke_out' : 'broke_down';
-      } else if (Math.abs(diffAtr) <= PATTERN_PARAMS.at_line_atr) {
-        status = 'at_line';
+        const breakAge = lastBarIdx - breakoutIdx;
+        if (breakAge > PATTERN_PARAMS.recent_break_bars) {
+          status = 'historical';
+        } else {
+          // Check if last close is still beyond line (U8)
+          const stillBeyond = isResistance ? lastClose >= currentLinePrice : lastClose <= currentLinePrice;
+          if (stillBeyond) {
+            status = isResistance ? 'broke_out' : 'broke_down';
+          } else {
+            status = 'failed_break';
+          }
+        }
+      } else {
+        // Unbroken: forming or at_line. Check max_pattern_age_bars (U8.3)
+        const ageSinceTouch = lastBarIdx - lastTouch.idx;
+        if (ageSinceTouch > PATTERN_PARAMS.max_pattern_age_bars) {
+          continue; // Drop pattern if last touch is older than max_pattern_age_bars
+        }
+        if (Math.abs(diffAtr) <= PATTERN_PARAMS.at_line_atr) {
+          status = 'at_line';
+        } else {
+          status = 'forming';
+        }
       }
 
       candidatePatterns.push({

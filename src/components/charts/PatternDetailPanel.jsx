@@ -23,6 +23,14 @@ function PatternStatusChip({ status }) {
       label = "Broke down";
       classes = "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30";
       break;
+    case "failed_break":
+      label = "Close back inside";
+      classes = "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30";
+      break;
+    case "historical":
+      label = "Historical";
+      classes = "bg-zinc-500/10 text-zinc-500 dark:text-zinc-500 border-zinc-500/20";
+      break;
     default:
       label = "Forming";
       classes = "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30";
@@ -94,6 +102,10 @@ export function PatternDetailPanel({
             </span>
             {patterns.map((p) => {
               const isSelected = p.id === focusedPattern.id;
+              const isHistorical = p.status === "historical";
+              const endLabel = p.window?.end_date ? formatPatternDate(p.window.end_date) : "";
+              const buttonText = isHistorical ? `${p.title} · ended ${endLabel}` : p.title;
+
               return (
                 <button
                   key={p.id}
@@ -102,10 +114,12 @@ export function PatternDetailPanel({
                   className={`px-2 py-0.5 rounded text-[11px] whitespace-nowrap transition-colors border ${
                     isSelected
                       ? "bg-primary text-primary-foreground font-semibold border-primary"
+                      : isHistorical
+                      ? "bg-muted/40 text-muted-foreground/70 hover:bg-muted border-border/40 italic"
                       : "bg-muted/60 text-muted-foreground hover:bg-muted border-border/60"
                   }`}
                 >
-                  {p.title}
+                  {buttonText}
                 </button>
               );
             })}

@@ -131,7 +131,7 @@ export default function SectorScatterPlot({
     }
 
     return placed;
-  }, [plottable, boundX, boundY, originX, originY]);
+  }, [plottable, boundX, boundY, originX, originY, plotW, plotH]);
 
   const getQuadrantColor = (q) => {
     switch (q?.toLowerCase()) {

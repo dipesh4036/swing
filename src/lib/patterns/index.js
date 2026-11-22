@@ -1,6 +1,12 @@
 /**
  * Pattern Detection Engine
  * Pure JavaScript detection of chart geometry on daily candles.
+ *
+ * INDEX ALIGNMENT GUARANTEE (U7):
+ * All bar indices returned in pattern objects (line idx1/idx2, touches[].idx,
+ * events[].idx, leg_start.idx, and base_box.start_idx/end_idx) correspond directly
+ * to the original rawCandles array passed by the caller, preserving full 1-to-1
+ * alignment even when bad candles are pruned or a 250-bar lookback window is sliced.
  */
 import { PATTERN_PARAMS } from './params.js';
 import { computeATR } from './atr.js';
@@ -14,6 +20,51 @@ import { describePattern } from './explain.js';
 export { PATTERN_PARAMS } from './params.js';
 
 /**
+ * Remaps local detector candle indices to original caller array indices.
+ */
+function remapPatternIndices(pat, origIdx) {
+  const mapI = (idx) => (typeof idx === 'number' && origIdx[idx] !== undefined ? origIdx[idx] : idx);
+
+  const remappedLines = (pat.lines || []).map((l) => ({
+    ...l,
+    idx1: mapI(l.idx1),
+    idx2: mapI(l.idx2),
+    touches: (l.touches || []).map((t) => ({
+      ...t,
+      idx: mapI(t.idx),
+    })),
+  }));
+
+  const remappedEvents = (pat.events || []).map((ev) => ({
+    ...ev,
+    idx: mapI(ev.idx),
+  }));
+
+  const remappedLegStart = pat.leg_start
+    ? {
+        ...pat.leg_start,
+        idx: mapI(pat.leg_start.idx),
+      }
+    : undefined;
+
+  const remappedBaseBox = pat.base_box
+    ? {
+        ...pat.base_box,
+        start_idx: mapI(pat.base_box.start_idx),
+        end_idx: mapI(pat.base_box.end_idx),
+      }
+    : undefined;
+
+  return {
+    ...pat,
+    lines: remappedLines,
+    events: remappedEvents,
+    ...(remappedLegStart ? { leg_start: remappedLegStart } : {}),
+    ...(remappedBaseBox ? { base_box: remappedBaseBox } : {}),
+  };
+}
+
+/**
  * Detects chart patterns on a series of daily candles.
  *
  * @param {Array<{date: string, open: number, high: number, low: number, close: number, volume?: number}>} rawCandles
@@ -24,8 +75,9 @@ export function detectPatterns(rawCandles) {
     return { patterns: [], reason: 'insufficient_history' };
   }
 
-  // 1. Clean candles: drop rows with null/undefined/NaN OHLC
+  // 1. Clean candles: track original index (U7)
   const cleaned = [];
+  const origIndices = [];
   for (let i = 0; i < rawCandles.length; i++) {
     const c = rawCandles[i];
     if (
@@ -44,6 +96,7 @@ export function detectPatterns(rawCandles) {
         close: c.close,
         volume: typeof c.volume === 'number' && !isNaN(c.volume) ? c.volume : 0,
       });
+      origIndices.push(i);
     }
   }
 
@@ -53,9 +106,11 @@ export function detectPatterns(rawCandles) {
   }
 
   // 3. Lookback window: up to max_lookback_bars (250)
-  const candles = cleaned.length > PATTERN_PARAMS.max_lookback_bars
-    ? cleaned.slice(-PATTERN_PARAMS.max_lookback_bars)
-    : cleaned;
+  const offset = cleaned.length > PATTERN_PARAMS.max_lookback_bars
+    ? cleaned.length - PATTERN_PARAMS.max_lookback_bars
+    : 0;
+  const candles = cleaned.slice(offset);
+  const candleOrigIdx = origIndices.slice(offset);
 
   const n = candles.length;
   if (n < PATTERN_PARAMS.min_history_bars) {
@@ -137,7 +192,10 @@ export function detectPatterns(rawCandles) {
   }
 
   // 9. Cap to max_patterns_returned (8)
-  const finalPatterns = deduplicated.slice(0, PATTERN_PARAMS.max_patterns_returned);
+  const capped = deduplicated.slice(0, PATTERN_PARAMS.max_patterns_returned);
+
+  // 10. Remap indices to original rawCandles coordinates (U7)
+  const finalPatterns = capped.map((p) => remapPatternIndices(p, candleOrigIdx));
 
   return {
     patterns: finalPatterns,

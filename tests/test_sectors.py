@@ -178,6 +178,7 @@ class TestSectorBreadthMath(unittest.TestCase):
                 "decline": 0,
                 "is_high_52w": 0,
                 "is_low_52w": 0,
+                "rs_raw": 50.0,
             })
 
         df_ind = pd.DataFrame(rows)
@@ -227,6 +228,7 @@ class TestSectorBreadthMath(unittest.TestCase):
                 "above_50sma": 1,
                 "above_200sma": 1,
                 "above_20ema": 1,
+                "rs_raw": 50.0,
             })
 
         df_ind = pd.DataFrame(rows)
@@ -284,13 +286,16 @@ class TestSectorBreadthMath(unittest.TestCase):
         # 1. Breadth run before sector compute
         breadth_before = compute_breadth_for_universe(df_ind, "all")
 
-        # 2. Sector metrics compute on a mock connection
+        # 2. Sector metrics compute on a mock connection (enriched with rs_raw)
+        from pipeline.screeners import compute_screener_indicators
+        df_ind_enriched = compute_screener_indicators(df_ind)
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_cursor.fetchall.return_value = [(f"STOCK_{i}", "bank", "Financial Services", "index") for i in range(5)]
         with patch("pipeline.sectors.execute_batch"):
-            compute_sector_metrics(df_ind, conn=mock_conn)
+            compute_sector_metrics(df_ind_enriched, conn=mock_conn)
 
         # 3. Breadth run after sector compute
         breadth_after = compute_breadth_for_universe(df_ind, "all")
@@ -298,6 +303,195 @@ class TestSectorBreadthMath(unittest.TestCase):
         self.assertEqual(len(breadth_before), len(breadth_after))
         for rec_b, rec_a in zip(breadth_before, breadth_after):
             self.assertEqual(rec_b, rec_a, "Every breadth row must be 100% identical")
+
+
+class TestSectorRound3Fixes(unittest.TestCase):
+    """
+    Unit tests for Round 3: U2 (RS rank & Leaders), U3 (Screeners refresh), and U5 (Private Bank rule).
+    """
+
+    def test_u5_private_bank_industry_name_rule(self):
+        """
+        U5: A Nifty 500 stock in Financial Services whose name contains 'Bank' moves to 'bank'
+        with mapped_via = 'industry_name_rule', while finance companies stay in financial_services,
+        and already index-mapped banks remain unchanged.
+        """
+        df_bank = pd.DataFrame([
+            {"Symbol": "SBIN", "ISIN Code": "INE062A01020"},
+        ])
+        tables = {"bank": df_bank}
+
+        nifty500_df = pd.DataFrame([
+            {"Symbol": "SBIN", "ISIN Code": "INE062A01020", "Industry": "Financial Services", "Company Name": "State Bank of India"},
+            {"Symbol": "BANDHANBNK", "ISIN Code": "INE545U01014", "Industry": "Financial Services", "Company Name": "Bandhan Bank Ltd"},
+            {"Symbol": "EQUITASBNK", "ISIN Code": "INE618H01011", "Industry": "Financial Services", "Company Name": "Equitas Small Finance Bank Ltd"},
+            {"Symbol": "BAJAJFIN", "ISIN Code": "INE296A01024", "Industry": "Financial Services", "Company Name": "Bajaj Finance Ltd"},
+            {"Symbol": "INFY", "ISIN Code": "INE009A01021", "Industry": "Information Technology", "Company Name": "Infosys Ltd"},
+        ])
+
+        isin_to_symbol = {
+            "INE062A01020": "SBIN",
+            "INE545U01014": "BANDHANBNK",
+            "INE618H01011": "EQUITASBNK",
+            "INE296A01024": "BAJAJFIN",
+            "INE009A01021": "INFY",
+        }
+        known_symbols = set(isin_to_symbol.values())
+        symbol_to_name = {
+            "SBIN": "State Bank of India",
+            "BANDHANBNK": "Bandhan Bank Ltd",
+            "EQUITASBNK": "Equitas Small Finance Bank Ltd",
+            "BAJAJFIN": "Bajaj Finance Ltd",
+            "INFY": "Infosys Ltd",
+        }
+
+        assigned, stats = assign_stock_sectors(
+            tables,
+            nifty500_df=nifty500_df,
+            isin_to_symbol=isin_to_symbol,
+            known_symbols=known_symbols,
+            symbol_to_name=symbol_to_name,
+        )
+
+        # 1. State Bank of India: index mapped wins
+        self.assertEqual(assigned["SBIN"]["sector"], "bank")
+        self.assertEqual(assigned["SBIN"]["mapped_via"], "index")
+
+        # 2. Bandhan Bank Ltd: Financial Services + Bank -> bank via industry_name_rule
+        self.assertEqual(assigned["BANDHANBNK"]["sector"], "bank")
+        self.assertEqual(assigned["BANDHANBNK"]["mapped_via"], "industry_name_rule")
+
+        # 3. Equitas Small Finance Bank: Financial Services + Small Finance Bank -> bank
+        self.assertEqual(assigned["EQUITASBNK"]["sector"], "bank")
+        self.assertEqual(assigned["EQUITASBNK"]["mapped_via"], "industry_name_rule")
+
+        # 4. Bajaj Finance Ltd: Financial Services -> financial_services via industry
+        self.assertEqual(assigned["BAJAJFIN"]["sector"], "financial_services")
+        self.assertEqual(assigned["BAJAJFIN"]["mapped_via"], "industry")
+
+        # 5. Infosys: IT -> it via industry
+        self.assertEqual(assigned["INFY"]["sector"], "it")
+        self.assertEqual(assigned["INFY"]["mapped_via"], "industry")
+
+    def test_u2_rs_raw_missing_raises_error(self):
+        """
+        U2: compute_sector_metrics must raise if rs_raw is missing, not publish NULLs.
+        """
+        df_ind = pd.DataFrame([
+            {"token": 1, "symbol": "S1", "trade_date": "2026-11-20", "close": 100, "volume": 50000, "in_universe": True}
+        ])
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_cursor.fetchall.return_value = [("S1", "bank", "Financial Services", "index")]
+        with self.assertRaises(ValueError):
+            compute_sector_metrics(df_ind, conn=mock_conn)
+
+    def test_u2_rs_rank_consistency_with_screeners(self):
+        """
+        U2: rs_rank in sector_stock_metrics equals calculate_rs_rank over the exact same eligible universe.
+        """
+        from pipeline.screeners import calculate_rs_rank, SCREENER_PARAMS
+
+        # Create 10 stocks on 2026-11-20 with full trading history
+        n_stocks = 10
+        records = []
+        p_trad = SCREENER_PARAMS["tradability"]
+
+        for i in range(n_stocks):
+            tok = 1000 + i
+            sym = f"STK_{i}"
+            for session in range(1, 260):
+                d = f"2026-01-{session:03d}"
+                records.append({
+                    "token": tok,
+                    "symbol": sym,
+                    "trade_date": d,
+                    "open": 100.0 + i,
+                    "high": 105.0 + i,
+                    "low": 95.0 + i,
+                    "close": 100.0 + i + session * 0.1,
+                    "volume": 200000,
+                    "vol_sma_50": 200000.0,
+                    "has_valid_50sma": 1,
+                    "has_valid_200sma": 1,
+                    "has_valid_20ema": 1,
+                    "above_50sma": 1,
+                    "above_200sma": 1,
+                    "above_20ema": 1,
+                    "high_52w": 200.0,
+                    "low_52w": 50.0,
+                    "in_universe": True,
+                    "session_idx": session,
+                    "rs_raw": float(i * 10),
+                    "ret_1d_pct": 1.0,
+                    "ret_5d": 2.0,
+                    "ret_22d": 5.0,
+                    "ret_64d": 10.0,
+                    "ret_126d": 15.0,
+                })
+
+        df_ind = pd.DataFrame(records)
+        latest_d = df_ind["trade_date"].max()
+        df_target = df_ind[df_ind["trade_date"] == latest_d]
+
+        tradable_mask = (
+            (df_target["close"] >= p_trad["min_close"]) &
+            (df_target["vol_sma_50"] >= p_trad["min_vol_sma_50"]) &
+            ((df_target["close"] * df_target["vol_sma_50"]) >= p_trad["min_traded_value"]) &
+            (df_target["session_idx"] >= p_trad["min_history_sessions"])
+        )
+        expected_rs = calculate_rs_rank(df_target, tradable_mask)
+
+        # Assert expected_rs has non-null values for all eligible stocks
+        self.assertTrue(expected_rs.notna().all())
+
+        # Test compute_sector_metrics with mock DB capture
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Mock stock_sector mappings for tokens
+        mock_cursor.fetchall.side_effect = [
+            [(f"STK_{i}", "bank", "Financial Services", "index") for i in range(n_stocks)], # stock_sector mapping
+            [], # daily_screener_results
+            [(f"STK_{i}", f"Stock {i} Ltd") for i in range(n_stocks)], # instruments name
+        ]
+
+        captured_records = []
+        def capture_batch(cur, sql, batch, page_size=1000):
+            if "sector_stock_metrics" in sql:
+                captured_records.extend(batch)
+
+        with patch("pipeline.sectors.execute_batch", side_effect=capture_batch):
+            compute_sector_metrics(df_ind, conn=mock_conn)
+
+        self.assertEqual(len(captured_records), n_stocks)
+        # Check rs_rank matches exactly
+        for rec in captured_records:
+            # rec[19] is rs_rank
+            tok = rec[1]
+            exp_val = int(expected_rs[df_target["token"] == tok].iloc[0])
+            self.assertEqual(rec[19], exp_val, f"RS rank for token {tok} must match calculate_rs_rank")
+
+    def test_u3_refresh_sector_stock_screeners(self):
+        """
+        U3: refresh_sector_stock_screeners updates screeners array in sector_stock_metrics.
+        """
+        from pipeline.sectors import refresh_sector_stock_screeners
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_cursor.rowcount = 42
+
+        count = refresh_sector_stock_screeners(mock_conn, "2026-11-20")
+        self.assertEqual(count, 42)
+        mock_cursor.execute.assert_called_once()
+        sql_called = mock_cursor.execute.call_args[0][0]
+        self.assertIn("UPDATE sector_stock_metrics", sql_called)
+        self.assertIn("daily_screener_results", sql_called)
+
 
 
 if __name__ == "__main__":

@@ -38,3 +38,16 @@ raw_cache/
 
 .agents/    
 skills-lock.json
+
+# Antigravity prompts & reviews
+docs/ANTIGRAVITY_*
+**/ANTIGRAVITY_*.md
+docs/newchanges.md
+docs/round*
+docs/round*.md
+docs/round *.md
+docs/tab*.md
+docs/tab *.md
+docs/*round*
+docs/*prompt*
+docs/*PROMPT*

@@ -50,7 +50,7 @@ export async function GET(request) {
           benchmark: null,
           sectors: [],
           stocks: [],
-          coverage: { n_mapped: 0, n_in_universe: 0, total_nifty500: 501, uncovered: 0 },
+          coverage: { n_mapped: 0, n_in_universe: 0, total_nifty500: null, uncovered: 0 },
           leader_rules: SECTOR_LEADER_RULES,
         },
         { headers: { "Cache-Control": "private, max-age=300" } }
@@ -334,24 +334,30 @@ export async function GET(request) {
       sec.leaders_count = secStocks.filter((s) => s.leader).length;
     });
 
-    // Coverage stats (T7.2)
+    // Coverage stats (T7.2, U4: dynamically computed, no hardcoded totals)
     const coverageRes = await queryWithRetry(`
       SELECT
         COUNT(DISTINCT symbol)::int as n_mapped,
         COUNT(DISTINCT CASE WHEN mapped_via = 'index' THEN symbol END)::int as n_index,
-        COUNT(DISTINCT CASE WHEN mapped_via = 'industry' THEN symbol END)::int as n_industry
+        COUNT(DISTINCT CASE WHEN mapped_via IN ('industry', 'industry_name_rule') THEN symbol END)::int as n_industry,
+        (SELECT COUNT(DISTINCT symbol)::int FROM index_constituents WHERE index_name = 'nifty500' AND is_active = TRUE) as total_nifty500,
+        (SELECT COUNT(DISTINCT s.symbol)::int FROM stock_sector s JOIN index_constituents c ON s.symbol = c.symbol WHERE c.index_name = 'nifty500' AND c.is_active = TRUE) as n_mapped_nifty500
       FROM stock_sector;
     `);
     const cov = coverageRes.rows[0] || {};
     const nInUnivTotal = rawStocks.filter((s) => s.in_universe).length;
+    const totalN500 = cov.total_nifty500 != null ? Number(cov.total_nifty500) : null;
+    const nMappedN500 = cov.n_mapped_nifty500 != null ? Number(cov.n_mapped_nifty500) : null;
+    const uncovered = totalN500 != null && nMappedN500 != null ? Math.max(0, totalN500 - nMappedN500) : 0;
 
     const coverage = {
       n_mapped: Number(cov.n_mapped || rawStocks.length),
       n_index: Number(cov.n_index || 0),
       n_industry: Number(cov.n_industry || 0),
       n_in_universe: nInUnivTotal,
-      total_nifty500: 501,
-      uncovered: Math.max(0, 501 - Number(cov.n_mapped || 0)),
+      total_nifty500: totalN500,
+      n_mapped_nifty500: nMappedN500,
+      uncovered,
     };
 
     return NextResponse.json(
