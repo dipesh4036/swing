@@ -418,7 +418,7 @@ export default function ScreenerPage() {
                     : "text-text-secondary hover:text-text"
                 }`}
               >
-                List View
+                All Stocks
               </button>
               <button
                 type="button"
