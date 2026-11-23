@@ -171,10 +171,11 @@ console.log('4. U7: Testing original array index alignment...');
       close: 100,
       volume: 1000,
     }));
-    // Inject ceiling touches
-    const t1 = Math.floor(barCount * 0.4);
+    // Inject ceiling touches (3 touches for min_touches_line: 3)
+    const t0 = Math.floor(barCount * 0.25);
+    const t1 = Math.floor(barCount * 0.45);
     const t2 = Math.floor(barCount * 0.7);
-    for (const bar of [t1, t2]) {
+    for (const bar of [t0, t1, t2]) {
       bars[bar].high = 125;
       bars[bar].close = 123;
       for (let d = -3; d <= 3; d++) {
@@ -203,8 +204,8 @@ console.log('4. U7: Testing original array index alignment...');
     low: 98,
     close: 100,
   }));
-  // Touch at bar 1150 and 1185 (within last 40 bars)
-  for (const bar of [1150, 1185]) {
+  // Touches at bars 1120, 1150 and 1185 (within last 80 bars)
+  for (const bar of [1120, 1150, 1185]) {
     mockCandles[bar].high = 140;
     mockCandles[bar].close = 138;
     for (let d = -3; d <= 3; d++) {
@@ -276,7 +277,7 @@ console.log('5. U8: Testing status aging and single event caps...');
     close: 100,
     volume: 1000,
   }));
-  for (const bar of [20, 45]) {
+  for (const bar of [10, 25, 45]) {
     candlesHist[bar].high = 120;
     candlesHist[bar].close = 118;
     for (let d = -3; d <= 3; d++) {
@@ -302,7 +303,7 @@ console.log('5. U8: Testing status aging and single event caps...');
     close: 100,
     volume: 1000,
   }));
-  for (const bar of [60, 90]) {
+  for (const bar of [30, 60, 90]) {
     candlesActive[bar].high = 120;
     candlesActive[bar].close = 118;
     for (let d = -3; d <= 3; d++) {
@@ -365,7 +366,7 @@ console.log('5. U8: Testing status aging and single event caps...');
     close: 100,
     volume: 1000,
   }));
-  for (const bar of [10, 25]) {
+  for (const bar of [10, 18, 26]) {
     candlesOld[bar].high = 120;
     candlesOld[bar].close = 118;
     for (let d = -3; d <= 3; d++) {
@@ -525,6 +526,137 @@ console.log('8. U11: Testing Base + Pivot constraints...');
   assert.ok(Math.abs(baseFull.metrics.base_depth_pct - 20.8) <= 0.2, 'Base depth must measure lowest low to last bar');
 
   console.log('✓ U11: Base + pivot age, depth, and status constraints verified');
+}
+
+// 8b. V2 — Current vs Historical Partitioning
+console.log('8b. V2: Testing current vs historical partitioning...');
+{
+  // (a) Old 5-touch line (historical, broke 50 bars ago) and a newer 3-touch line of same type
+  // Both must be returned, the newer one in the current group
+  const n = 150;
+  const candles = Array.from({ length: n }, (_, i) => ({
+    date: formatDate(i),
+    open: 100,
+    high: 102,
+    low: 98,
+    close: 100,
+    volume: 1000,
+  }));
+  // Old ceiling at 120 with 5 touches (bars 10, 20, 30, 40, 50), breakout at bar 60
+  for (const bar of [10, 20, 30, 40, 50]) {
+    candles[bar].high = 120;
+    candles[bar].close = 118;
+    for (let d = -3; d <= 3; d++) {
+      if (d !== 0 && candles[bar + d]) candles[bar + d].high = 115;
+    }
+  }
+  // Breakout at bar 60, trading at 125 through the end of the series
+  for (let bar = 60; bar < n; bar++) {
+    candles[bar].close = 125;
+    candles[bar].high = 127;
+  }
+  // Newer ceiling at 140 with 3 touches (bars 110, 125, 140) forming
+  for (const bar of [110, 125, 140]) {
+    candles[bar].high = 140;
+    candles[bar].close = 125;
+    for (let d = -3; d <= 3; d++) {
+      if (d !== 0 && candles[bar + d]) candles[bar + d].high = 134;
+    }
+  }
+
+  const res = detectPatterns(candles);
+  const ceilings = res.patterns.filter((p) => p.type === 'horizontal_ceiling');
+  assert.ok(ceilings.length >= 2, 'Expected both old and newer ceilings to be returned');
+  const currentCeil = ceilings.find((p) => p.status !== 'historical');
+  const histCeil = ceilings.find((p) => p.status === 'historical');
+  assert.ok(currentCeil, 'Current ceiling missing');
+  assert.ok(histCeil, 'Historical ceiling missing');
+  // Current must appear before historical in returned patterns
+  const currIdx = res.patterns.indexOf(currentCeil);
+  const histIdx = res.patterns.indexOf(histCeil);
+  assert.ok(currIdx < histIdx, 'Current patterns must precede historical patterns');
+
+  console.log('✓ V2: Partitioning, deduplication protection, and capping verified');
+}
+
+// 8c. V3 — Minimum Touches & Base Max Depth
+console.log('8c. V3: Testing min_touches_line: 3 and base_max_depth_pct: 25%...');
+{
+  const n = 100;
+  // (a) 2-touch horizontal floor must NOT be returned, 3-touch floor MUST be returned
+  const candles2T = Array.from({ length: n }, (_, i) => ({
+    date: formatDate(i),
+    open: 100,
+    high: 102,
+    low: 98,
+    close: 100,
+    volume: 1000,
+  }));
+  for (const bar of [60, 85]) {
+    candles2T[bar].low = 80;
+    candles2T[bar].close = 82;
+    for (let d = -3; d <= 3; d++) {
+      if (d !== 0 && candles2T[bar + d]) candles2T[bar + d].low = 86;
+    }
+  }
+  const res2T = detectPatterns(candles2T);
+  const floor2T = res2T.patterns.find((p) => p.type === 'horizontal_floor');
+  assert.equal(floor2T, undefined, '2-touch horizontal floor must NOT be returned');
+
+  // Add 3rd touch at bar 35
+  const candles3T = JSON.parse(JSON.stringify(candles2T));
+  candles3T[35].low = 80;
+  candles3T[35].close = 82;
+  for (let d = -3; d <= 3; d++) {
+    if (d !== 0 && candles3T[35 + d]) candles3T[35 + d].low = 86;
+  }
+  const res3T = detectPatterns(candles3T);
+  const floor3T = res3T.patterns.find((p) => p.type === 'horizontal_floor');
+  assert.ok(floor3T, '3-touch horizontal floor must be returned');
+
+  // (b) Base 30% deep is NOT returned; base 20% deep IS returned
+  const candlesBase30 = Array.from({ length: 100 }, (_, i) => ({
+    date: formatDate(i),
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100,
+    volume: 1000,
+  }));
+  candlesBase30[40].low = 70;
+  candlesBase30[40].close = 72;
+  for (let d = -3; d <= 3; d++) {
+    if (d !== 0 && candlesBase30[40 + d]) candlesBase30[40 + d].low = 75;
+  }
+  // Pivot at bar 65: high 120
+  candlesBase30[65].high = 120;
+  candlesBase30[65].close = 118;
+  for (let d = -3; d <= 3; d++) {
+    if (d !== 0 && candlesBase30[65 + d]) candlesBase30[65 + d].high = 115;
+  }
+  // Deep base: low 80 at bar 75 -> depth = (120 - 80) / 120 = 33.3% > 25%
+  // Keep highs <= 95 so no new 20% leg is formed after bar 75
+  for (let bar = 66; bar < 100; bar++) {
+    candlesBase30[bar].high = 92;
+    candlesBase30[bar].low = 86;
+    candlesBase30[bar].close = 88;
+  }
+  candlesBase30[75].low = 80;
+  const resBase30 = detectPatterns(candlesBase30);
+  assert.equal(resBase30.patterns.find((p) => p.type === 'base_pivot'), undefined, 'Base 33% deep must be rejected');
+
+  // Moderate base: low 96 at bar 75 -> depth = (120 - 96) / 120 = 20.0% <= 25%
+  const candlesBase20 = JSON.parse(JSON.stringify(candlesBase30));
+  for (let bar = 66; bar < 100; bar++) {
+    candlesBase20[bar].high = 112;
+    candlesBase20[bar].low = 98;
+    candlesBase20[bar].close = 105;
+  }
+  candlesBase20[75].low = 96;
+  const resBase20 = detectPatterns(candlesBase20);
+  assert.ok(resBase20.patterns.find((p) => p.type === 'base_pivot'), 'Base 20% deep must be accepted');
+
+  console.log('✓ V3: min_touches_line: 3 and base_max_depth_pct: 25% verified');
 }
 
 // 9. Banned Words Scan

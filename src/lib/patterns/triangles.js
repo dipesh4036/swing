@@ -12,8 +12,8 @@ export function findTriangles(candles, atrs, pivots) {
   if (n < PATTERN_PARAMS.min_history_bars) return [];
   const triangles = [];
 
-  const highs = pivots.highs.slice(-25);
-  const lows = pivots.lows.slice(-25);
+  const highs = pivots.highs.slice(-25).map((h) => ({ ...h, lnP: Math.log(h.price) }));
+  const lows = pivots.lows.slice(-25).map((l) => ({ ...l, lnP: Math.log(l.price) }));
 
   if (highs.length < 2 || lows.length < 2) return [];
 
@@ -25,19 +25,35 @@ export function findTriangles(candles, atrs, pivots) {
       const hB = highs[j];
       const span = hB.idx - hA.idx;
       if (span < 5 || span > PATTERN_PARAMS.max_span_bars) continue;
-      const slope = (Math.log(hB.price) - Math.log(hA.price)) / span;
+      const slope = (hB.lnP - hA.lnP) / span;
       if (Math.abs(slope) > PATTERN_PARAMS.max_slope_pct_per_bar) continue;
 
       // Count touches
       const touches = [];
+      const lnHA = hA.lnP;
       for (const h of highs) {
-        const expectedP = getLinePrice(hA.idx, hA.price, slope, h.idx);
+        const expectedP = Math.exp(lnHA + slope * (h.idx - hA.idx));
         if (Math.abs(h.price - expectedP) / (h.atr || 1) <= PATTERN_PARAMS.touch_tol) {
           touches.push(h);
         }
       }
       if (touches.length >= 2) {
-        upperLines.push({ hA, hB, slope, touches, span });
+        // Pre-validate no-pierce for upper candidate line over upFirst .. upLast
+        const upFirst = touches[0].idx;
+        const upLast = touches[touches.length - 1].idx;
+        let upPierced = false;
+        for (let bar = upFirst; bar <= upLast; bar++) {
+          const c = candles[bar];
+          const barAtr = atrs[bar] || 1;
+          const lineP = Math.exp(lnHA + slope * (bar - hA.idx));
+          if (c.close - lineP > PATTERN_PARAMS.pierce_tol * barAtr) {
+            upPierced = true;
+            break;
+          }
+        }
+        if (!upPierced) {
+          upperLines.push({ hA, hB, slope, touches, span, upFirst, upLast });
+        }
       }
     }
   }
@@ -50,18 +66,34 @@ export function findTriangles(candles, atrs, pivots) {
       const lB = lows[j];
       const span = lB.idx - lA.idx;
       if (span < 5 || span > PATTERN_PARAMS.max_span_bars) continue;
-      const slope = (Math.log(lB.price) - Math.log(lA.price)) / span;
+      const slope = (lB.lnP - lA.lnP) / span;
       if (Math.abs(slope) > PATTERN_PARAMS.max_slope_pct_per_bar) continue;
 
       const touches = [];
+      const lnLA = lA.lnP;
       for (const l of lows) {
-        const expectedP = getLinePrice(lA.idx, lA.price, slope, l.idx);
+        const expectedP = Math.exp(lnLA + slope * (l.idx - lA.idx));
         if (Math.abs(l.price - expectedP) / (l.atr || 1) <= PATTERN_PARAMS.touch_tol) {
           touches.push(l);
         }
       }
       if (touches.length >= 2) {
-        lowerLines.push({ lA, lB, slope, touches, span });
+        // Pre-validate no-pierce for lower candidate line over lowFirst .. lowLast
+        const lowFirst = touches[0].idx;
+        const lowLast = touches[touches.length - 1].idx;
+        let lowPierced = false;
+        for (let bar = lowFirst; bar <= lowLast; bar++) {
+          const c = candles[bar];
+          const barAtr = atrs[bar] || 1;
+          const lineP = Math.exp(lnLA + slope * (bar - lA.idx));
+          if (lineP - c.close > PATTERN_PARAMS.pierce_tol * barAtr) {
+            lowPierced = true;
+            break;
+          }
+        }
+        if (!lowPierced) {
+          lowerLines.push({ lA, lB, slope, touches, span, lowFirst, lowLast });
+        }
       }
     }
   }
@@ -69,10 +101,10 @@ export function findTriangles(candles, atrs, pivots) {
   // Pair upper and lower lines
   for (const up of upperLines) {
     for (const low of lowerLines) {
-      const upFirst = up.touches[0].idx;
-      const upLast = up.touches[up.touches.length - 1].idx;
-      const lowFirst = low.touches[0].idx;
-      const lowLast = low.touches[low.touches.length - 1].idx;
+      const upFirst = up.upFirst;
+      const upLast = up.upLast;
+      const lowFirst = low.lowFirst;
+      const lowLast = low.lowLast;
 
       const startIdx = Math.min(upFirst, lowFirst);
       const endIdx = Math.max(upLast, lowLast);
@@ -82,31 +114,7 @@ export function findTriangles(candles, atrs, pivots) {
         continue;
       }
 
-      // U9: Validate no-pierce rule over the drawn span for BOTH upper and lower lines
-      let upPierced = false;
-      for (let bar = upFirst; bar <= upLast; bar++) {
-        const c = candles[bar];
-        const barAtr = atrs[bar] || 1;
-        const lineP = getLinePrice(up.hA.idx, up.hA.price, up.slope, bar);
-        if (c.close - lineP > PATTERN_PARAMS.pierce_tol * barAtr) {
-          upPierced = true;
-          break;
-        }
-      }
-      if (upPierced) continue;
-
-      let lowPierced = false;
-      for (let bar = lowFirst; bar <= lowLast; bar++) {
-        const c = candles[bar];
-        const barAtr = atrs[bar] || 1;
-        const lineP = getLinePrice(low.lA.idx, low.lA.price, low.slope, bar);
-        if (lineP - c.close > PATTERN_PARAMS.pierce_tol * barAtr) {
-          lowPierced = true;
-          break;
-        }
-      }
-      if (lowPierced) continue;
-
+      // Upper and lower lines are already guaranteed unpierced over their own spans.
       const upStartP = getLinePrice(up.hA.idx, up.hA.price, up.slope, upFirst);
       const lowStartP = getLinePrice(low.lA.idx, low.lA.price, low.slope, lowFirst);
       const upEndP = getLinePrice(up.hA.idx, up.hA.price, up.slope, upLast);

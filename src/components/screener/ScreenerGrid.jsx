@@ -12,12 +12,74 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 import { detectPatterns } from "@/lib/patterns";
 import { PatternSeriesPrimitive } from "@/components/charts/patternLayers";
 
+// Module-level pattern cache keyed by symbol + last candle date (V4)
+const gridPatternCache = new Map();
+
 /**
  * Individual Mini Chart Card for Fast Scan Grid
  */
 function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false, onSelectStock }) {
+  const cardContainerRef = useRef(null);
   const chartContainerRef = useRef(null);
   const chartInstanceRef = useRef(null);
+  const [isInView, setIsInView] = useState(false);
+  const [patternResult, setPatternResult] = useState(null);
+
+  // Viewport intersection observer (V4 lazy detection)
+  useEffect(() => {
+    if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
+      setIsInView(true);
+      return;
+    }
+    const el = cardContainerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setIsInView(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: "150px" }
+    );
+    observer.observe(el);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Lazy pattern detection scheduled in idle task (V4)
+  useEffect(() => {
+    if (!isInView || !candles || candles.length === 0) return;
+    const lastDate = candles[candles.length - 1]?.date || "";
+    const cacheKey = `${stock.symbol}_${lastDate}`;
+
+    if (gridPatternCache.has(cacheKey)) {
+      setPatternResult(gridPatternCache.get(cacheKey));
+      return;
+    }
+
+    const scheduleTask =
+      typeof window !== "undefined" && typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback
+        : (fn) => setTimeout(fn, 0);
+
+    const cancelTask =
+      typeof window !== "undefined" && typeof window.cancelIdleCallback === "function"
+        ? window.cancelIdleCallback
+        : clearTimeout;
+
+    const id = scheduleTask(() => {
+      const res = detectPatterns(candles);
+      gridPatternCache.set(cacheKey, res);
+      setPatternResult(res);
+    });
+
+    return () => cancelTask(id);
+  }, [isInView, candles, stock.symbol]);
 
   // Compute 30-day low from recent consolidation swing low (lookback 30 sessions, R27)
   const low30dPrice = useMemo(() => {
@@ -34,13 +96,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
     return minLow !== null ? Number(minLow.toFixed(2)) : null;
   }, [candles]);
 
-  // Pure JavaScript pattern detection on grid candles (detect once per tile with useMemo, P3)
-  const patternResult = useMemo(() => {
-    if (!candles || candles.length === 0) return { patterns: [] };
-    return detectPatterns(candles);
-  }, [candles]);
-
-  const topPattern = patternResult.patterns[0] || null;
+  const topPattern = patternResult?.patterns?.[0] || null;
 
   useEffect(() => {
     if (!chartContainerRef.current || !candles || candles.length === 0) return;
@@ -265,7 +321,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
   const hasCandles = candles && candles.length > 0;
 
   return (
-    <div className="bg-surface rounded-lg border border-border flex flex-col overflow-hidden hover:border-primary/50 transition-colors shadow-sm">
+    <div ref={cardContainerRef} className="bg-surface rounded-lg border border-border flex flex-col overflow-hidden hover:border-primary/50 transition-colors shadow-sm">
       {/* Card Header */}
       <div className="p-2.5 border-b border-border bg-bg-secondary/40 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0 flex-wrap">

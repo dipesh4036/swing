@@ -143,59 +143,73 @@ export function detectPatterns(rawCandles) {
     };
   });
 
-  // 7. Ordering (geometric relevance, NOT a score):
-  //    (1) patterns with an event or at_line in the last 3 bars first
-  //    (2) more touches
-  //    (3) longer span
+  // 7. Partition into current and historical BEFORE ordering (V2)
+  //    Current: forming, at_line, broke_out, broke_down, failed_break
+  //    Historical: historical
   const lastBarIdx = n - 1;
-  enriched.sort((a, b) => {
-    const aRecentEvent = (a.status === 'at_line') ||
-      a.events.some((ev) => ev.idx >= lastBarIdx - 3);
-    const bRecentEvent = (b.status === 'at_line') ||
-      b.events.some((ev) => ev.idx >= lastBarIdx - 3);
+  const currentList = enriched.filter((p) => p.status !== 'historical');
+  const historicalList = enriched.filter((p) => p.status === 'historical');
 
-    if (aRecentEvent && !bRecentEvent) return -1;
-    if (!aRecentEvent && bRecentEvent) return 1;
+  function orderDeduplicateAndCap(patternsList, maxCap) {
+    // (a) Ordering (geometric relevance, NOT a score):
+    //     (1) patterns with an event or at_line in the last 3 bars first
+    //     (2) more touches
+    //     (3) longer span
+    const sorted = [...patternsList].sort((a, b) => {
+      const aRecentEvent = (a.status === 'at_line') ||
+        a.events.some((ev) => ev.idx >= lastBarIdx - 3);
+      const bRecentEvent = (b.status === 'at_line') ||
+        b.events.some((ev) => ev.idx >= lastBarIdx - 3);
 
-    if (b.metrics.touches !== a.metrics.touches) {
-      return b.metrics.touches - a.metrics.touches;
-    }
-    return b.metrics.span_bars - a.metrics.span_bars;
-  });
+      if (aRecentEvent && !bRecentEvent) return -1;
+      if (!aRecentEvent && bRecentEvent) return 1;
 
-  // 8. Deduplicate: at most 1 per (type, side, overlapping window)
-  //    and if two patterns share >= 70% of the same line, keep the higher-ranked one.
-  const deduplicated = [];
-  for (const pat of enriched) {
-    const mainLine = pat.lines[0];
-    const isDup = deduplicated.some((existing) => {
-      // Check 1 per (type, side, overlapping window)
-      if (existing.type === pat.type && existing.side === pat.side) {
-        const startOverlap = Math.max(existing.lines[0].idx1, mainLine.idx1);
-        const endOverlap = Math.min(existing.lines[0].idx2, mainLine.idx2);
-        if (endOverlap > startOverlap) return true;
+      if (b.metrics.touches !== a.metrics.touches) {
+        return b.metrics.touches - a.metrics.touches;
       }
-
-      // Check if they share >= 70% of the same line
-      const exLine = existing.lines[0];
-      const startOverlap = Math.max(exLine.idx1, mainLine.idx1);
-      const endOverlap = Math.min(exLine.idx2, mainLine.idx2);
-      if (endOverlap <= startOverlap) return false;
-      const overlapLen = endOverlap - startOverlap;
-      const minSpan = Math.min(exLine.idx2 - exLine.idx1, mainLine.idx2 - mainLine.idx1);
-      return minSpan > 0 && overlapLen / minSpan >= PATTERN_PARAMS.line_overlap_threshold;
+      return b.metrics.span_bars - a.metrics.span_bars;
     });
 
-    if (!isDup) {
-      deduplicated.push(pat);
+    // (b) Deduplicate: at most 1 per (type, side, overlapping window)
+    //     and if two patterns share >= 70% of the same line, keep the higher-ranked one.
+    const deduplicated = [];
+    for (const pat of sorted) {
+      const mainLine = pat.lines[0];
+      const isDup = deduplicated.some((existing) => {
+        // Check 1 per (type, side, overlapping window)
+        if (existing.type === pat.type && existing.side === pat.side) {
+          const startOverlap = Math.max(existing.lines[0].idx1, mainLine.idx1);
+          const endOverlap = Math.min(existing.lines[0].idx2, mainLine.idx2);
+          if (endOverlap > startOverlap) return true;
+        }
+
+        // Check if they share >= 70% of the same line
+        const exLine = existing.lines[0];
+        const startOverlap = Math.max(exLine.idx1, mainLine.idx1);
+        const endOverlap = Math.min(exLine.idx2, mainLine.idx2);
+        if (endOverlap <= startOverlap) return false;
+        const overlapLen = endOverlap - startOverlap;
+        const minSpan = Math.min(exLine.idx2 - exLine.idx1, mainLine.idx2 - mainLine.idx1);
+        return minSpan > 0 && overlapLen / minSpan >= PATTERN_PARAMS.line_overlap_threshold;
+      });
+
+      if (!isDup) {
+        deduplicated.push(pat);
+      }
     }
+
+    // (c) Cap to maxCap
+    return deduplicated.slice(0, maxCap);
   }
 
-  // 9. Cap to max_patterns_returned (8)
-  const capped = deduplicated.slice(0, PATTERN_PARAMS.max_patterns_returned);
+  // Current capped to max_patterns_returned (8), Historical capped to 4 (V2)
+  const currentCapped = orderDeduplicateAndCap(currentList, PATTERN_PARAMS.max_patterns_returned);
+  const historicalCapped = orderDeduplicateAndCap(historicalList, 4);
+
+  const combined = [...currentCapped, ...historicalCapped];
 
   // 10. Remap indices to original rawCandles coordinates (U7)
-  const finalPatterns = capped.map((p) => remapPatternIndices(p, candleOrigIdx));
+  const finalPatterns = combined.map((p) => remapPatternIndices(p, candleOrigIdx));
 
   return {
     patterns: finalPatterns,

@@ -124,10 +124,13 @@ export function findTrendlines(candles, atrs, pivots) {
   ];
 
   for (const { name: side, type, title, points } of sides) {
-    if (points.length < PATTERN_PARAMS.min_touches) continue;
+    if (points.length < PATTERN_PARAMS.min_touches_line) continue;
 
-    // Cap points to 30 most recent
-    const activePoints = points.slice(-30);
+    // Cap points to 30 most recent and precompute lnP for fast math
+    const activePoints = points.slice(-30).map((pt) => ({
+      ...pt,
+      lnP: Math.log(pt.price),
+    }));
     const validLines = [];
     const isResistance = side === 'resistance';
 
@@ -141,15 +144,16 @@ export function findTrendlines(candles, atrs, pivots) {
           continue;
         }
 
-        const slope = (Math.log(pB.price) - Math.log(pA.price)) / spanBars;
+        const slope = (pB.lnP - pA.lnP) / spanBars;
         if (Math.abs(slope) > PATTERN_PARAMS.max_slope_pct_per_bar) {
           continue;
         }
 
         // Count touches across all activePoints
         const touches = [];
+        const lnPA = pA.lnP;
         for (const pt of activePoints) {
-          const expectedP = getLinePrice(pA.idx, pA.price, slope, pt.idx);
+          const expectedP = Math.exp(lnPA + slope * (pt.idx - pA.idx));
           const distAtr = Math.abs(pt.price - expectedP) / (pt.atr || 1);
           if (distAtr <= PATTERN_PARAMS.touch_tol) {
             touches.push(pt);
@@ -167,7 +171,7 @@ export function findTrendlines(candles, atrs, pivots) {
           }
         }
 
-        if (spacedTouches.length < PATTERN_PARAMS.min_touches) {
+        if (spacedTouches.length < PATTERN_PARAMS.min_touches_line) {
           continue;
         }
 
@@ -182,11 +186,12 @@ export function findTrendlines(candles, atrs, pivots) {
         // U9: Validate no-pierce rule over the FULL drawn span firstTouch.idx .. lastTouch.idx
         let pierced = false;
         let nearPierces = 0;
+        const lnFirst = firstTouch.lnP;
 
         for (let bar = firstTouch.idx; bar <= lastTouch.idx; bar++) {
           const c = candles[bar];
           const barAtr = atrs[bar] || 1;
-          const lineP = getLinePrice(firstTouch.idx, firstTouch.price, slope, bar);
+          const lineP = Math.exp(lnFirst + slope * (bar - firstTouch.idx));
 
           if (isResistance) {
             const diff = c.close - lineP;

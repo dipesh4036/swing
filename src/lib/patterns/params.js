@@ -17,7 +17,8 @@ export const PATTERN_PARAMS = {
   // Common Line Geometry
   touch_tol: 0.35,                 // Distance in ATR units to count a swing point as a line touch
   pierce_tol: 0.2,                 // Maximum ATR penetration of a line between anchors before breakout
-  min_touches: 2,                  // Minimum number of distinct touches for a valid line
+  min_touches: 2,                  // Minimum number of distinct touches per side for triangles
+  min_touches_line: 3,             // Minimum touches for sloped trendlines and horizontal lines (V3)
   min_bars_between_touches: 5,     // Minimum bar separation between consecutive touches
   min_span_bars: 10,               // Minimum length of pattern line in bars
   max_span_bars: 120,              // Maximum length of pattern line in bars
@@ -42,7 +43,7 @@ export const PATTERN_PARAMS = {
   leg_max_bars: 60,                // Upward thrust must occur within 60 bars
   base_min_bars: 5,                // Minimum consolidation length in bars
   base_max_bars: 40,               // Maximum consolidation length in bars
-  base_max_depth_pct: 35.0,        // Maximum depth: (pivot - base_low)/pivot <= 35%
+  base_max_depth_pct: 25.0,        // Maximum depth: (pivot - base_low)/pivot <= 25% (V3)
   volume_avg_bars: 50,             // Simple moving average volume benchmark
 
   // Output Caps & Selection

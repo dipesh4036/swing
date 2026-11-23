@@ -114,7 +114,7 @@ export function findHorizontalPatterns(candles, atrs, pivots) {
   ];
 
   for (const { name: side, type, title, points } of sides) {
-    if (points.length < PATTERN_PARAMS.min_touches) continue;
+    if (points.length < PATTERN_PARAMS.min_touches_line) continue;
 
     // Cluster swing points by proximity in ATR units
     const clusters = [];
@@ -132,7 +132,7 @@ export function findHorizontalPatterns(candles, atrs, pivots) {
         }
       }
 
-      if (cluster.length >= PATTERN_PARAMS.min_touches) {
+      if (cluster.length >= PATTERN_PARAMS.min_touches_line) {
         // Enforce touch separation
         const validTouches = [cluster[0]];
         for (let k = 1; k < cluster.length; k++) {
@@ -141,7 +141,7 @@ export function findHorizontalPatterns(candles, atrs, pivots) {
           }
         }
 
-        if (validTouches.length >= PATTERN_PARAMS.min_touches) {
+        if (validTouches.length >= PATTERN_PARAMS.min_touches_line) {
           clusters.push(validTouches);
           for (const p of validTouches) {
             const origIdx = points.findIndex((pt) => pt.idx === p.idx);

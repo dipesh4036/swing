@@ -51,3 +51,4 @@ docs/tab *.md
 docs/*round*
 docs/*prompt*
 docs/*PROMPT*
+*.dmg
