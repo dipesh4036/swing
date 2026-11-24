@@ -366,6 +366,15 @@ def run_daily_workflow(
             send_telegram_alert(msg)
             return {"status": "failed", "step": "ingest_equities", "error": str(e), "trimmed": False}
 
+        # 6b. sync_mcap (Tab 3 Industry Rotation I1)
+        logger.info("Step 6b: sync_stock_mcap (bulk market cap and issue size)")
+        try:
+            from pipeline.industries import sync_stock_mcap
+            res_mcap = sync_stock_mcap(conn=conn)
+            logger.info(f"Step 6b sync_stock_mcap result: {res_mcap}")
+        except Exception as _mcap_err:
+            logger.warning(f"Step 6b sync_stock_mcap encountered error (non-fatal): {_mcap_err}")
+
         # 7. adjust
         logger.info("Step 7/9: adjust (no Angel calls)")
         t0 = time.time()

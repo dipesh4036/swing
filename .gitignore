@@ -26,6 +26,8 @@ venv/
 
 # Temporary runtime working data & raw cache
 /data/
+data/industry_map.csv
+data/industry_unmapped.csv
 .cache/
 raw_cache/
 

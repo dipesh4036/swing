@@ -47,9 +47,17 @@ jobs:
 
       - name: Verify no prompt files committed
         run: |
-          PROMPT_FILES=$(git ls-files | grep -iE 'ANTIGRAVITY_|docs/.*round|docs/.*prompt' || true)
+          PROMPT_FILES=$(git ls-files | grep -iE 'ANTIGRAVITY_|docs/.*round|docs/.*prompt|probe_output' || true)
           if [ -n "$PROMPT_FILES" ]; then
             echo "Error: Forbidden prompt files tracked in git: $PROMPT_FILES"
+            exit 1
+          fi
+
+      - name: Verify no data files committed
+        run: |
+          DATA_FILES=$(git ls-files 'data/*' | grep -v '\.gitkeep$' || true)
+          if [ -n "$DATA_FILES" ]; then
+            echo "Error: Forbidden data files tracked in git: $DATA_FILES"
             exit 1
           fi
 
