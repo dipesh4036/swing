@@ -246,34 +246,8 @@ def fetch_symbol_industry(
         except Exception:
             pass
 
-    # 2. Fallback endpoint
-    time.sleep(1.0)
-    url2 = f"https://www.nseindia.com/api/quote-equity?symbol={enc_sym}"
-    try:
-        resp2 = session.get(url2, headers=api_hdrs, timeout=12)
-        st2 = resp2.status_code
-        if st2 in (403, 429):
-            return st2, None, "BLOCKED"
-        if st2 == 200:
-            data2 = resp2.json()
-            ind_info = data2.get("industryInfo", {})
-            if ind_info and isinstance(ind_info, dict):
-                macro = str(ind_info.get("macro") or "").strip()
-                sector = str(ind_info.get("sector") or "").strip()
-                ind = str(ind_info.get("industry") or "").strip()
-                basic = str(ind_info.get("basicIndustry") or "").strip()
-                if macro and sector and ind and basic:
-                    return 200, {
-                        "macro": macro,
-                        "sector": sector,
-                        "industry": ind,
-                        "basic_industry": basic,
-                    }, None
-            return 200, None, "missing_secInfo_or_industryInfo"
-        else:
-            return st2, None, f"http_{st2}"
-    except Exception as e:
-        return 0, None, f"fallback_error: {e}"
+    # If not found or secInfo missing in GetQuoteApi, mark as unmapped
+    return 200, None, "missing_secInfo"
 
 
 def main():
@@ -283,6 +257,8 @@ def main():
     parser.add_argument("--new-only", action="store_true", help="Skip symbols already present in CSVs")
     parser.add_argument("--no-be", action="store_true", help="Exclude BE series symbols (fetch EQ only)")
     parser.add_argument("--checkpoint-interval", type=int, default=25, help="Flush to CSV every N symbols (default: 25)")
+    parser.add_argument("--batch-size", type=int, default=500, help="Number of symbols per batch before taking a rest (default: 500)")
+    parser.add_argument("--batch-rest", type=int, default=300, help="Rest duration in seconds between batches (default: 300)")
     args = parser.parse_args()
 
     print("=" * 65)
@@ -344,8 +320,17 @@ def main():
             time.sleep(DELAY_SECONDS)
             req_counter += 1
 
-            # Refresh home cookies every 200 requests
-            if req_counter % COOKIE_REFRESH_INTERVAL == 0:
+            # Check if batch rest is due
+            if args.batch_size > 0 and req_counter % args.batch_size == 0 and idx < total_to_run:
+                append_checkpoint(mapped_buffer, unmapped_buffer)
+                print(f"\n[BATCH REST] Completed batch of {args.batch_size} requests. Resting for {args.batch_rest}s ({args.batch_rest/60.0:.1f} min)...")
+                time.sleep(args.batch_rest)
+                print("[BATCH RESUME] Rest complete. Refreshing session cookies...")
+                if not refresh_home_cookies(session):
+                    print("[STOP] Cookie refresh failed or was blocked after rest. Halting.")
+                    break
+            elif req_counter % COOKIE_REFRESH_INTERVAL == 0:
+                # Refresh home cookies every 200 requests within a batch
                 print(f"[COOKIE] Refreshing home session cookies at request #{req_counter}...")
                 if not refresh_home_cookies(session):
                     print("[STOP] Cookie refresh failed or was blocked. Halting.")

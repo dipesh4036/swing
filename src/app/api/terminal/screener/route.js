@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { SECTOR_KEYS } from "@/lib/sector-math";
+import { resolveScreenerSectorParam } from "@/lib/screener-sector-adapter";
 
 const VALID_SCREENERS = [
   "stage2_breakout",
@@ -24,7 +24,8 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const screener = searchParams.get("screener") || "stage2_breakout";
     const universe = (searchParams.get("universe") || "all").toLowerCase();
-    const sector = (searchParams.get("sector") || "all").toLowerCase();
+    const rawSector = searchParams.get("sector") || "all";
+    const groupId = searchParams.get("groupId")?.trim() || null;
 
     if (!VALID_SCREENERS.includes(screener)) {
       return NextResponse.json(
@@ -40,11 +41,54 @@ export async function GET(request) {
       );
     }
 
-    if (sector !== "all" && !SECTOR_KEYS.includes(sector)) {
-      return NextResponse.json(
-        { error: `Invalid sector '${sector}'. Allowed: all, ${SECTOR_KEYS.join(", ")}` },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
+    let filterClause = null;
+    let filterParams = [];
+
+    if (groupId) {
+      const grpRes = await queryWithRetry(
+        `SELECT level, macro_label, sector_label, industry_label, basic_industry_label, label
+         FROM industry_groups WHERE group_id = $1;`,
+        [groupId]
       );
+      const g = grpRes.rows[0];
+      if (!g) {
+        return NextResponse.json(
+          { error: `Unknown industry groupId '${groupId}'.` },
+          { status: 400, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      if (g.level === "macro") {
+        filterClause = "inst.macro_sector = $PARAM";
+        filterParams = [g.macro_label];
+      } else if (g.level === "sector") {
+        filterClause = "inst.macro_sector = $PARAM AND inst.sector = $PARAM2";
+        filterParams = [g.macro_label, g.sector_label];
+      } else if (g.level === "industry") {
+        filterClause = "inst.macro_sector = $PARAM AND inst.sector = $PARAM2 AND inst.industry = $PARAM3";
+        filterParams = [g.macro_label, g.sector_label, g.industry_label];
+      } else {
+        filterClause = "inst.macro_sector = $PARAM AND inst.sector = $PARAM2 AND inst.industry = $PARAM3 AND inst.basic_industry = $PARAM4";
+        filterParams = [g.macro_label, g.sector_label, g.industry_label, g.basic_industry_label];
+      }
+    } else if (rawSector && rawSector.toLowerCase() !== "all") {
+      const resolved = resolveScreenerSectorParam(rawSector);
+      if (resolved.mode === "unsupported") {
+        return NextResponse.json(
+          { error: resolved.message, unsupportedFilter: true },
+          { status: 400, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      if (resolved.mode === "mapped") {
+        const colMap = {
+          macro: "inst.macro_sector",
+          sector: "inst.sector",
+          industry: "inst.industry",
+          basic_industry: "inst.basic_industry",
+        };
+        const col = colMap[resolved.type] || "inst.sector";
+        filterClause = `${col} = $PARAM`;
+        filterParams = [resolved.value];
+      }
     }
 
     // 1. Get latest trade date from daily_screener_results
@@ -78,11 +122,11 @@ export async function GET(request) {
     );
     const latestRegime = regimeRes.rows[0]?.regime || null;
 
-    // 3. Fetch screener counts for the as-of date (filtered by universe and sector)
+    // 3. Fetch screener counts for the as-of date (filtered by universe and classification)
     let countsQuery = `
       SELECT sr.screener, COUNT(*)::int as count
       FROM daily_screener_results sr
-      LEFT JOIN stock_sector ss ON sr.symbol = ss.symbol
+      LEFT JOIN instruments inst ON sr.token = inst.token
       WHERE sr.trade_date = $1
     `;
     const countsParams = [asOfStr];
@@ -91,10 +135,17 @@ export async function GET(request) {
     if (universe === "nifty500") {
       countsQuery += " AND sr.in_nifty500 = TRUE";
     }
-    if (sector !== "all") {
-      countsQuery += ` AND ss.sector = $${pIdx}`;
-      countsParams.push(sector);
-      pIdx++;
+    if (filterClause) {
+      let bound = filterClause;
+      for (const val of filterParams) {
+        if (bound.includes("$PARAM4")) bound = bound.replace("$PARAM4", `$${pIdx}`);
+        else if (bound.includes("$PARAM3")) bound = bound.replace("$PARAM3", `$${pIdx}`);
+        else if (bound.includes("$PARAM2")) bound = bound.replace("$PARAM2", `$${pIdx}`);
+        else bound = bound.replace("$PARAM", `$${pIdx}`);
+        countsParams.push(val);
+        pIdx++;
+      }
+      countsQuery += ` AND (${bound})`;
     }
     countsQuery += " GROUP BY sr.screener;";
 
@@ -111,9 +162,9 @@ export async function GET(request) {
       SELECT
         sr.trade_date, sr.screener, sr.token, sr.symbol, sr.close, sr.ret_1d_pct, sr.vol_ratio,
         sr.pct_from_52w_high, sr.pivot, sr.dist_to_pivot_pct, sr.rs_rank, sr.stage, sr.in_nifty500, sr.extra,
-        ss.sector
+        inst.sector, inst.industry
       FROM daily_screener_results sr
-      LEFT JOIN stock_sector ss ON sr.symbol = ss.symbol
+      LEFT JOIN instruments inst ON sr.token = inst.token
       WHERE sr.trade_date = $1 AND sr.screener = $2
     `;
     const rowsParams = [asOfStr, screener];
@@ -122,10 +173,17 @@ export async function GET(request) {
     if (universe === "nifty500") {
       rowsQuery += " AND sr.in_nifty500 = TRUE";
     }
-    if (sector !== "all") {
-      rowsQuery += ` AND ss.sector = $${rowPIdx}`;
-      rowsParams.push(sector);
-      rowPIdx++;
+    if (filterClause) {
+      let bound = filterClause;
+      for (const val of filterParams) {
+        if (bound.includes("$PARAM4")) bound = bound.replace("$PARAM4", `$${rowPIdx}`);
+        else if (bound.includes("$PARAM3")) bound = bound.replace("$PARAM3", `$${rowPIdx}`);
+        else if (bound.includes("$PARAM2")) bound = bound.replace("$PARAM2", `$${rowPIdx}`);
+        else bound = bound.replace("$PARAM", `$${rowPIdx}`);
+        rowsParams.push(val);
+        rowPIdx++;
+      }
+      rowsQuery += ` AND (${bound})`;
     }
 
     // Ordering rules per spec:

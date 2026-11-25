@@ -75,6 +75,26 @@ def main():
     backfill_ind_parser = subparsers.add_parser("backfill-industry", help="Backfill daily_industry_breadth and index for last 250 sessions")
     backfill_ind_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
 
+    # Classification bootstrap command
+    cls_boot_parser = subparsers.add_parser("classification-bootstrap", help="Bootstrap 4-level NSE classification from pinned seed CSV + overrides")
+    cls_boot_parser.add_argument("--dry-run", action="store_true", help="Preview matches without writing to DB")
+
+    # Classification incremental sync command
+    cls_sync_parser = subparsers.add_parser("classification-sync", help="Incrementally sync missing/new NSE 4-level classifications")
+    cls_sync_parser.add_argument("--dry-run", action="store_true", help="Preview queue without writing or calling per-stock APIs")
+    cls_sync_parser.add_argument("--retry-missing", action="store_true", help="Include previously failed/unmapped symbols in queue")
+    cls_sync_parser.add_argument("--refresh", default=None, help="Force refresh a specific symbol")
+
+    # Industry RS_STS recompute command
+    ind_recompute_parser = subparsers.add_parser("industry-recompute", help="Recompute latest 4-level industry RS_STS snapshot from Parquet")
+    ind_recompute_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
+
+    # Industry RS_STS backfill command
+    ind_backfill_parser = subparsers.add_parser("industry-backfill", help="Backfill 4-level daily_industry_strength history from Parquet")
+    ind_backfill_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
+    ind_backfill_parser.add_argument("--from", dest="from_date", default=None, help="Start date YYYY-MM-DD")
+    ind_backfill_parser.add_argument("--sessions", type=int, default=125, help="Trailing sessions to backfill if --from omitted")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -264,6 +284,65 @@ def main():
             res = backfill_industry_metrics(parquet_path=args.path)
             print(json.dumps(res, indent=2))
             sys.exit(0 if res.get("status") == "success" else 1)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "classification-bootstrap":
+        logger.info("Executing 'classification-bootstrap' command...")
+        try:
+            from pipeline.classification import bootstrap_classification
+            res = bootstrap_classification(dry_run=args.dry_run)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "classification-sync":
+        logger.info("Executing 'classification-sync' command...")
+        try:
+            from pipeline.classification import sync_classification
+            res = sync_classification(
+                dry_run=args.dry_run,
+                retry_missing=args.retry_missing,
+                refresh_symbol=args.refresh,
+                fetch_equity=True,
+            )
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "industry-recompute":
+        logger.info("Executing 'industry-recompute' command...")
+        try:
+            download_parquet_store(args.path)
+            import pandas as pd
+            from pipeline.industry_publish import run_industry_strength_job
+            df = pd.read_parquet(args.path)
+            res = run_industry_strength_job(df)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "industry-backfill":
+        logger.info("Executing 'industry-backfill' command...")
+        try:
+            download_parquet_store(args.path)
+            import pandas as pd
+            from pipeline.industry_publish import backfill_industry_strength
+            df = pd.read_parquet(args.path)
+            res = backfill_industry_strength(
+                df,
+                from_date=args.from_date,
+                sessions=args.sessions,
+            )
+            print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback
             traceback.print_exc()

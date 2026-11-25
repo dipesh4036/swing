@@ -133,36 +133,22 @@ node scripts/create-user.mjs owner@example.com
 
 ---
 
-## 🧭 Tab 3: Sector Rotation
+## 🧭 Tab 3: Industries Relative Strength (`RS_STS`)
 
-The **Sector Rotation** dashboard answers the institutional question: *"Where is money moving?"* by tracking the flow of capital across 12 canonical NSE sectors against the NIFTY 500 benchmark.
+The **Industries** dashboard tracks capital flow across NSE's 4-level industry classification hierarchy (**Macro → Sector → Industry → Basic Industry**) against the **NIFTY 500** benchmark, adapted from `dopawire/nse-relative-strength` (MIT).
 
-### 1. Canonical Taxonomy & Assignment
-- Stocks are mapped to sectors using official NSE index constituent lists fetched directly from `niftyindices.com`.
-- **Assignment Priority:** Specific sectors precede broad ones (e.g., Bank takes priority over Financial Services).
-- **Matching:** ISIN-first matching prevents missing symbols across symbol rename events.
-- **Minimum Stock Threshold (`MIN_SECTOR_STOCKS = 8`):** If a sector has fewer than 8 liquid constituents with valid indicators (e.g. Healthcare), breadth percentages (>50 DMA, >200 DMA, >20 EMA) and equal-weight returns are kept as `NULL` (rendered as `—`) to prevent statistical distortion from tiny sample sizes. Counts (advances, declines) remain recorded.
+### 1. 4-Level Classification & Incremental Sync
+- **Bootstrap Seed**: `pipeline/data/nse_stock_master.csv` + `nse_classification_overrides.csv` (see `pipeline/data/CLASSIFICATION_SOURCE.md`), matched **ISIN-first** then uppercase symbol+exchange.
+- **Incremental Daily Sync**: `classification-sync` checks `EQUITY_L.csv`, applies local seed/overrides first, and queues only missing/incomplete symbols via rate-limited `GetQuoteApi` lookups (zero per-stock calls when all instruments are mapped).
 
-### 2. Relative Strength & RS Trend Quadrants
-- **Relative Strength (RS):** Aligned on common trading dates:
-  $$\text{RS}_t = \frac{\text{Sector Close}_t}{\text{NIFTY 500 Close}_t}$$
-- **RS Trend Quadrants (Simplified RRG):**
-  - **x-axis (RS vs 50 DMA %):** $\left(\frac{\text{RS}_t}{\text{SMA}_{50}(\text{RS})} - 1\right) \times 100$
-  - **y-axis (10-Session RS Momentum %):** $\left(\frac{\text{RS}_t}{\text{RS}_{t-10}} - 1\right) \times 100$
-  - **Leading:** $x > 0, y > 0$ (strong trend, strong momentum)
-  - **Weakening:** $x > 0, y \le 0$ (above 50-day RS mean, but losing short-term momentum)
-  - **Lagging:** $x \le 0, y \le 0$ (underperforming benchmark and decelerating)
-  - **Improving:** $x \le 0, y > 0$ (below 50-day RS mean, but gaining short-term momentum)
-  - Minimum 60 common sessions required to compute quadrant; sectors with insufficient history are listed in the footer and omitted from the scatter plot.
+### 2. Equal-Weight `RS_STS` Formula & Eligibility
+- **Group Equal-Weight Index**: Full-window constituents (26 sessions, excluding new IPO listings inside the window and corporate-action jumps > 40%) are normalized to base 100 on session `d0` and averaged across constituents.
+- **Relative Strength (`RS_STS%`)**: $\text{RS}_t = \frac{\text{Group EW Index}_t}{\text{NIFTY 500 Norm}_t}$, scored via `PERCENTRANK.INC(RS_series, RS_latest) × 100` (0–100%).
+- **Trend & Breadth**: 21-day EMA on RS line, SMA-seeded EMA 20/50/200 participation (valid-observation denominators; zero denominator = `null` / `—`), `ADR%` (20 sessions excluding zero-range bars), and lazy paginated constituent drill-down.
 
-### 3. Official Indices vs. Equal-Weight Fallback
-- For sectors with official spot index tokens on Angel One (`NIFTY BANK`, `NIFTY IT`, `NIFTY PHARMA`, `NIFTY AUTO`, `NIFTY FMCG`, `NIFTY METAL`, `NIFTY REALTY`, `NIFTY MEDIA`, `NIFTY FINANCIAL SERVICES`), official 3-year daily candles are synchronized into `daily_index_ohlcv`.
-- For sectors without official spot index tokens on Angel One (`NIFTY HEALTHCARE`, `NIFTY CONSUMER DURABLES`, `NIFTY OIL & GAS`), an equal-weight index series is synthesized from constituent daily returns compounded from base 100.
-- In the UI, equal-weight sectors display an amber **EW** badge with the tooltip: *"Equal-weight of constituents, not the official NSE index"*. Official index sectors show no badge.
-
-### 4. Screener Integration
-- Every sector in the ranking table and detail panel provides a 1-click **"View in Screener"** action (`/screener?sector=<key>`).
-- The Screener page reads the query parameter, displays a removable active filter chip (`Sector: <Label> [x]`), and displays the sector tag alongside RS rank in candidate cards.
+### 3. Screener & CLI Commands
+- Deep links from group details open `/screener?groupId=<id>` (with legacy `/screener?sector=<key>` compatibility adapter).
+- CLI commands: `classification-bootstrap`, `classification-sync`, `industry-recompute`, `industry-backfill`. See `docs/SECTOR_INDUSTRY.md` for full operational & rollback details.
 
 ---
 

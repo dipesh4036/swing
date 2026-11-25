@@ -784,6 +784,8 @@ def compute_industry_metrics(
                         updated_at = NOW();
                 """
                 execute_values(cur, insert_sm_sql, stock_metrics_records, page_size=1000)
+                # Purge stale snapshot rows from prior dates
+                cur.execute("DELETE FROM industry_stock_metrics WHERE trade_date < %s;", (latest_d,))
             conn.commit()
             logger.info(f"Upserted {len(stock_metrics_records)} rows into industry_stock_metrics for date {latest_d}.")
 

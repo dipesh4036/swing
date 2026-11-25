@@ -261,6 +261,9 @@ const sectorMockRequire = (id) => {
       useSearchParams: () => new URLSearchParams("view=map&metric=1m"),
     };
   }
+  if (id === "@/components/industry-strength/SectorDashboard") {
+    return () => React.createElement("div", { id: "mock-sector-dashboard" }, "Industries Relative Strength");
+  }
   if (id === "@/components/sectors/SectorTreeMap" || id === "@/components/sectors/IndustryTreeMap") {
     return ({ sectors, industries, stocks }) => React.createElement("div", { id: "mock-treemap" }, `Treemap with ${(sectors || industries)?.length || 0} items, ${stocks?.length || 0} stocks`);
   }

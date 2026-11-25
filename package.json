@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:js": "node tests/test_auth.mjs && node tests/test_indicators.mjs && node tests/test_tapetide.mjs && node tests/test_round2.mjs && node tests/test_round8.mjs && node tests/test_render.mjs && node tests/test_sectors.mjs && node tests/test_treemap.mjs && node tests/test_patterns.mjs && node tests/test_industries_api.mjs && node tests/test_render_industries.mjs"
+    "verify:industries": "node scripts/verify_industry_api.mjs && node scripts/ui_smoke_industries.mjs && (.venv/bin/python scripts/verify_industry_rotation.py || python3 scripts/verify_industry_rotation.py)",
+    "test:js": "node tests/test_auth.mjs && node tests/test_indicators.mjs && node tests/test_tapetide.mjs && node tests/test_round2.mjs && node tests/test_round8.mjs && node tests/test_render.mjs && node tests/test_sectors.mjs && node tests/test_treemap.mjs && node tests/test_patterns.mjs && node tests/test_industries_api.mjs && node tests/test_render_industries.mjs && node tests/test_industry_strength_api.mjs"
   },
   "dependencies": {
     "@types/pg": "^8.23.1",

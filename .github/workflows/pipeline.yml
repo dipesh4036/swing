@@ -27,6 +27,10 @@ on:
           - test-connection
           - verify-bhavcopy
           - dedupe-store
+          - classification-bootstrap
+          - classification-sync
+          - industry-recompute
+          - industry-backfill
       source:
         description: "Equities daily source (bhavcopy or angel)"
         required: false

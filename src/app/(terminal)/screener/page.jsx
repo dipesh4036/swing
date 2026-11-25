@@ -12,7 +12,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { isDataStale } from "@/lib/freshness";
-import { SECTORS, SECTOR_KEYS } from "@/lib/sector-math";
+import { resolveScreenerSectorParam } from "@/lib/screener-sector-adapter";
 
 // Load lightweight-charts chart via dynamic import with ssr: false
 const ScreenerChart = dynamic(
@@ -136,13 +136,27 @@ export default function ScreenerPage() {
   const [mobileView, setMobileView] = useState("list"); // "list" | "chart"
   const [showFundamentals, setShowFundamentals] = useState(true);
 
-  // Read optional ?sector= query param on mount
+  const [groupFilter, setGroupFilter] = useState(null);
+  const [groupLabel, setGroupLabel] = useState(null);
+  const [unsupportedSectorMsg, setUnsupportedSectorMsg] = useState(null);
+
+  // Read optional ?sector= or ?groupId= query param on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      const gId = params.get("groupId");
+      const gLabel = params.get("groupLabel");
       const s = params.get("sector");
-      if (s && SECTOR_KEYS.includes(s.toLowerCase())) {
-        setSectorFilter(s.toLowerCase());
+      if (gId) {
+        setGroupFilter(gId);
+        setGroupLabel(gLabel || gId);
+      } else if (s && s.toLowerCase() !== "all") {
+        const resolved = resolveScreenerSectorParam(s);
+        if (resolved.mode === "unsupported") {
+          setUnsupportedSectorMsg(resolved.message);
+        } else {
+          setSectorFilter(s);
+        }
       }
     }
   }, []);
@@ -168,7 +182,11 @@ export default function ScreenerPage() {
     setListError(null);
 
     try {
-      const sectorQuery = sectorFilter !== "all" ? `&sector=${sectorFilter}` : "";
+      const sectorQuery = groupFilter
+        ? `&groupId=${encodeURIComponent(groupFilter)}`
+        : sectorFilter !== "all"
+          ? `&sector=${encodeURIComponent(sectorFilter)}`
+          : "";
       const res = await fetch(
         `/api/terminal/screener?screener=${activeScreener}&universe=${universe}${sectorQuery}`,
         { signal: controller.signal }
@@ -206,7 +224,7 @@ export default function ScreenerPage() {
         setLoadingList(false);
       }
     }
-  }, [activeScreener, universe, sectorFilter]);
+  }, [activeScreener, universe, sectorFilter, groupFilter]);
 
   useEffect(() => {
     fetchScreenerList();
@@ -470,18 +488,47 @@ export default function ScreenerPage() {
           </div>
         )}
 
-        {/* Active Sector Filter Chip */}
-        {sectorFilter !== "all" && (
+        {/* Unsupported Legacy Sector Filter Warning */}
+        {unsupportedSectorMsg && (
+          <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center justify-between gap-2">
+            <span>{unsupportedSectorMsg}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setUnsupportedSectorMsg(null);
+                if (typeof window !== "undefined") {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete("sector");
+                  window.history.replaceState({}, "", url.pathname);
+                }
+              }}
+              className="hover:opacity-70"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Active Sector / Industry Group Filter Chip */}
+        {(sectorFilter !== "all" || groupFilter) && (
           <div className="mx-4 mb-2 flex items-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-semibold">
-              <span>Sector: {SECTORS.find((s) => s.key === sectorFilter)?.label || sectorFilter}</span>
+              <span>
+                {groupFilter
+                  ? `Group: ${groupLabel || groupFilter}`
+                  : `Sector: ${resolveScreenerSectorParam(sectorFilter).label || sectorFilter}`}
+              </span>
               <button
                 type="button"
                 onClick={() => {
                   setSectorFilter("all");
+                  setGroupFilter(null);
+                  setGroupLabel(null);
                   if (typeof window !== "undefined") {
                     const url = new URL(window.location.href);
                     url.searchParams.delete("sector");
+                    url.searchParams.delete("groupId");
+                    url.searchParams.delete("groupLabel");
                     window.history.replaceState({}, "", url.pathname);
                   }
                 }}

@@ -232,6 +232,16 @@ def run_daily_workflow(
             send_telegram_alert(msg)
             return {"status": "failed", "step": "sync_instruments", "error": str(e), "trimmed": False}
 
+        # Step 1b. Incremental NSE 4-level classification sync (non-fatal: preserves prior valid mappings)
+        if sync_instruments_fn is None:
+            try:
+                from pipeline.classification import sync_classification
+                cls_res = sync_classification(fetch_equity=True)
+                logger.info(f"Step 1b complete: classification sync ({cls_res}).")
+            except Exception as ce:
+                logger.warning(f"Step 1b (sync_classification) failed, preserving prior mappings: {ce}")
+                degraded_steps.append("sync_classification")
+
         # 2. sync_constituents (non-core: degraded if stored constituents exist)
         logger.info("Step 2/9: sync_constituents")
         t0 = time.time()

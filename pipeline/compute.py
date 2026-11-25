@@ -687,6 +687,16 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             logger.warning(f"Industry metrics computation notice (non-fatal): {ie}", exc_info=True)
             industry_degraded = True
 
+        # Compute 4-level RS_STS industry strength snapshot (non-fatal, degraded)
+        try:
+            from pipeline.industry_publish import run_industry_strength_job
+            logger.info("Computing 4-level industry RS_STS snapshot...")
+            rs_snap_res = run_industry_strength_job(df_ind, conn=conn)
+            logger.info(f"Industry RS_STS snapshot published: {rs_snap_res}")
+        except Exception as rse:
+            logger.warning(f"Industry RS_STS computation notice (non-fatal): {rse}", exc_info=True)
+            industry_degraded = True
+
         # Trigger screener calculation for the latest trade date
         latest_date = max(all_trade_dates)
         try:

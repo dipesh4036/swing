@@ -145,3 +145,15 @@ Distribution sessions expire from the count after 25 trading sessions or when th
 - **Overlap Verification:** Daily ingest re-fetches an overlapping 10-session window. If any close differs by $> 1\%$ from stored values, a corporate action is detected; the pipeline re-fetches the full 3-year history for that token, replaces stored rows in `equity_ohlcv.parquet`, and logs the action to `price_adjustments`.
 - **Large Move Logging:** Any single-day move $\ge 20\%$ is logged to `price_adjustments` as `LARGE_MOVE_20PCT` for auditability.
 
+
+
+---
+
+## NSE 4-Level Industry Classification & `RS_STS` (`rs_sts_v1`)
+
+Adapted from `dopawire/nse-relative-strength` (MIT License):
+- **Hierarchy**: `Macro` (12 official NSE groups) → `Sector` → `Industry` → `Basic Industry`, deterministically keyed by `(level, full_path)`.
+- **RS_STS%**: Over the trailing `WINDOW = 26` market sessions aligned to `NIFTY 500`, full-window non-break constituents are normalized to base 100 on session `d0` and averaged equally to form `ewi[t]`. `RS[t] = ewi[t] / bench_norm[t]`, and `RS_STS% = PERCENTRANK.INC(RS, RS[-1]) × 100`.
+- **Corporate Action Guard**: Any single-session return jump `|ret| > 40%` (`CORP_ACTION_JUMP = 0.40`) marks a discontinuity; period returns across that boundary return `NULL`, and the stock is excluded from the group equal-weight index for that window.
+- **New Listings / IPOs**: Stocks listed inside the 26-session window are displayed immediately in group constituent tables with an `IPO` badge and listing-close relative RS, while excluded from full-window group equal-weight averages until they have 26 sessions.
+- **Null & Bias Policy**: Missing indicators, insufficient history (`< 20/50/200` bars), or zero valid denominators return `NULL` (rendered as `—`). Historical `daily_industry_strength` backfills use current instrument classification (current-membership survivorship bias documented).
