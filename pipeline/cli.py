@@ -71,6 +71,10 @@ def main():
     sync_mcap_parser = subparsers.add_parser("sync-mcap", help="Sync latest market cap & issue size from PR bhavcopy zip into stock_mcap")
     sync_mcap_parser.add_argument("--date", default=None, help="Target date YYYY-MM-DD (defaults to latest)")
 
+    # Backfill Industry command (I2)
+    backfill_ind_parser = subparsers.add_parser("backfill-industry", help="Backfill daily_industry_breadth and index for last 250 sessions")
+    backfill_ind_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -245,6 +249,19 @@ def main():
             from pipeline.industries import sync_stock_mcap
             t_date = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else None
             res = sync_stock_mcap(target_date=t_date)
+            print(json.dumps(res, indent=2))
+            sys.exit(0 if res.get("status") == "success" else 1)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "backfill-industry":
+        logger.info("Executing 'backfill-industry' command...")
+        try:
+            download_parquet_store(args.path)
+            from pipeline.industries import backfill_industry_metrics
+            res = backfill_industry_metrics(parquet_path=args.path)
             print(json.dumps(res, indent=2))
             sys.exit(0 if res.get("status") == "success" else 1)
         except Exception as e:

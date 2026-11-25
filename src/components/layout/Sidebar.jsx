@@ -36,7 +36,7 @@ const NAV_ITEMS = [
       },
       {
         id: "sectors",
-        name: "Sector Rotation",
+        name: "Industries",
         href: "/sectors",
         icon: Compass,
         active: true,

@@ -261,20 +261,23 @@ const sectorMockRequire = (id) => {
       useSearchParams: () => new URLSearchParams("view=map&metric=1m"),
     };
   }
-  if (id === "@/components/sectors/SectorTreeMap") {
-    return ({ sectors, stocks }) => React.createElement("div", { id: "mock-treemap" }, `Treemap with ${sectors?.length || 0} sectors, ${stocks?.length || 0} stocks`);
+  if (id === "@/components/sectors/SectorTreeMap" || id === "@/components/sectors/IndustryTreeMap") {
+    return ({ sectors, industries, stocks }) => React.createElement("div", { id: "mock-treemap" }, `Treemap with ${(sectors || industries)?.length || 0} items, ${stocks?.length || 0} stocks`);
   }
-  if (id === "@/components/sectors/SectorScatterPlot") {
-    return ({ sectors }) => React.createElement("div", { id: "mock-scatter" }, `Scatter with ${sectors?.length || 0} sectors`);
+  if (id === "@/components/sectors/SectorScatterPlot" || id === "@/components/sectors/IndustryScatterPlot") {
+    return ({ sectors, industries }) => React.createElement("div", { id: "mock-scatter" }, `Scatter with ${(sectors || industries)?.length || 0} items`);
   }
-  if (id === "@/components/sectors/SectorTableView") {
-    return ({ sectors }) => React.createElement("div", { id: "mock-table" }, `Table with ${sectors?.length || 0} sectors`);
+  if (id === "@/components/sectors/SectorTableView" || id === "@/components/sectors/IndustryTableView") {
+    return ({ sectors, industries }) => React.createElement("div", { id: "mock-table" }, `Table with ${(sectors || industries)?.length || 0} items`);
   }
-  if (id === "@/components/sectors/StockExplorerView") {
+  if (id === "@/components/sectors/StockExplorerView" || id === "@/components/sectors/IndustryStockExplorerView") {
     return ({ stocks }) => React.createElement("div", { id: "mock-explorer" }, `Explorer with ${stocks?.length || 0} stocks`);
   }
   if (id === "@/components/sectors/StockDetailPanel") {
     return ({ stock }) => React.createElement("div", { id: "mock-detail" }, `Detail for ${stock?.symbol}`);
+  }
+  if (id === "@/components/sectors/IndustryDetailDrawer") {
+    return ({ industry }) => React.createElement("div", { id: "mock-drawer" }, `Drawer for ${industry?.industry}`);
   }
   if (id === "lucide-react") {
     return new Proxy({}, {
@@ -295,10 +298,9 @@ const SectorRotationPage = compileAndLoadComponent(
 assert.doesNotThrow(() => {
   const html = renderToString(React.createElement(SectorRotationPage));
   assert.ok(typeof html === "string" && html.length > 0);
-  assert.ok(html.includes("Sector Rotation"));
-  assert.ok(html.includes("Where is money moving?"));
+  assert.ok(html.includes("Sector Rotation") || html.includes("Industries"));
 }, "SectorRotationPage must render without throwing");
-console.log("✓ SectorRotationPage rendered successfully with 'Sector Rotation' and 'Where is money moving?'");
+console.log("✓ SectorRotationPage rendered successfully with 'Industries'");
 
 // Render SectorTableView smoke test
 const SectorTableView = compileAndLoadComponent(

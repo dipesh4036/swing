@@ -1,3 +1,5 @@
+// DEPRECATED: Tab 3 has migrated to Industry Rotation (/api/terminal/industries).
+// This route is retained for backward compatibility and test stability. Removal scheduled in a future round.
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";

@@ -676,6 +676,17 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             logger.error(f"Sector breadth computation encountered an error: {sce}", exc_info=True)
             sector_degraded = True
 
+        # Compute industry breadth & equal-weight metrics (I2 - non-fatal, degraded)
+        industry_degraded = False
+        try:
+            from pipeline.industries import compute_industry_metrics
+            logger.info("Computing industry breadth and ranking metrics (I2)...")
+            ind_res = compute_industry_metrics(df_ind, conn=conn, publish_floor_date=publish_floor_date)
+            logger.info(f"Industry computation finished: {ind_res}")
+        except Exception as ie:
+            logger.warning(f"Industry metrics computation notice (non-fatal): {ie}", exc_info=True)
+            industry_degraded = True
+
         # Trigger screener calculation for the latest trade date
         latest_date = max(all_trade_dates)
         try:
