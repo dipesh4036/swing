@@ -18,9 +18,29 @@ import {
   StrengthPeriod,
   StrengthUniverse,
 } from "@/lib/industry-types";
+import { ChartCard } from "@/components/ui/card";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { CHART_THEME } from "@/lib/chart-theme";
 
-const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
-const PERIOD_OPTIONS: StrengthPeriod[] = ["1m", "3m", "6m", "1y"];
+const SERIES_COLORS = [
+  CHART_THEME.colors.primary,
+  CHART_THEME.colors.bullish,
+  "#F59E0B",
+  CHART_THEME.colors.bearish,
+  "#8B5CF6",
+];
+
+const METRIC_OPTIONS = [
+  { id: "rsSts", label: "RS_STS%" },
+  { id: "rsLine", label: "RS Line" },
+];
+
+const PERIOD_OPTIONS: { id: StrengthPeriod; label: string }[] = [
+  { id: "1m", label: "1M" },
+  { id: "3m", label: "3M" },
+  { id: "6m", label: "6M" },
+  { id: "1y", label: "1Y" },
+];
 
 interface RotationChartProps {
   selectedGroups: { groupId: string; label: string }[];
@@ -86,109 +106,98 @@ export default function RotationChart({
     return Object.values(byDate).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }, [selectedGroups, histories, metricKey]);
 
-  if (selectedGroups.length === 0) {
-    return (
-      <div className="p-4 rounded-xl border border-dashed border-border bg-surface-elevated text-center text-xs text-text-muted">
-        Click the chart icon on any group row to plot its historical relative strength vs NIFTY 500.
-      </div>
-    );
-  }
-
   return (
-    <div className="p-4 rounded-xl border border-border bg-surface-elevated">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <ChartCard
+      title="Group Relative Strength vs NIFTY 500"
+      info="26-session equal-weight group index relative to NIFTY 500"
+      subtitle={
+        selectedGroups.length > 0
+          ? `${selectedGroups.length} selected (click chart icon in table to add/remove)`
+          : "Select up to 5 groups from the table"
+      }
+      action={
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-text-primary">
-            Group RS vs NIFTY 500
-          </span>
-          {selectedGroups.map((g, idx) => (
-            <span
-              key={g.groupId}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-border bg-surface"
-            >
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}
-              />
-              <span>{g.label}</span>
-              <button
-                type="button"
-                onClick={() => onRemoveGroup(g.groupId)}
-                aria-label={`Remove ${g.label} from chart`}
-                className="hover:text-rose-500"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
+          <SegmentedControl
+            options={METRIC_OPTIONS as never[]}
+            value={metricKey}
+            onChange={(val: "rsSts" | "rsLine") => setMetricKey(val)}
+            size="xs"
+          />
+          <SegmentedControl
+            options={PERIOD_OPTIONS as never[]}
+            value={period}
+            onChange={(val: StrengthPeriod) => setPeriod(val)}
+            size="xs"
+          />
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-[11px]">
-            <button
-              type="button"
-              onClick={() => setMetricKey("rsSts")}
-              className={`px-2 py-1 rounded ${
-                metricKey === "rsSts" ? "bg-primary text-white" : "text-text-secondary"
-              }`}
-            >
-              RS_STS%
-            </button>
-            <button
-              type="button"
-              onClick={() => setMetricKey("rsLine")}
-              className={`px-2 py-1 rounded ${
-                metricKey === "rsLine" ? "bg-primary text-white" : "text-text-secondary"
-              }`}
-            >
-              RS Line
-            </button>
-          </div>
-
-          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-[11px]">
-            {PERIOD_OPTIONS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPeriod(p)}
-                className={`px-2 py-1 rounded uppercase ${
-                  period === p ? "bg-primary text-white" : "text-text-secondary"
-                }`}
+      }
+      legend={
+        selectedGroups.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedGroups.map((g, idx) => (
+              <span
+                key={g.groupId}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium border border-border bg-bg-secondary text-text"
               >
-                {p}
-              </button>
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: SERIES_COLORS[idx % SERIES_COLORS.length] }}
+                />
+                <span>{g.label}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveGroup(g.groupId)}
+                  aria-label={`Remove ${g.label} from chart`}
+                  className="text-text-muted hover:text-bearish cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
             ))}
           </div>
+        ) : undefined
+      }
+    >
+      {selectedGroups.length === 0 ? (
+        <div className="h-44 flex items-center justify-center text-xs text-text-muted border border-dashed border-border rounded-md">
+          Click the chart icon on any group row to plot its historical relative strength vs NIFTY 500.
         </div>
-      </div>
-
-      {loading && chartData.length === 0 ? (
-        <div className="h-56 flex items-center justify-center gap-2 text-xs text-text-muted">
-          <RefreshCw className="w-4 h-4 animate-spin" />
+      ) : loading && chartData.length === 0 ? (
+        <div className="h-60 flex items-center justify-center gap-2 text-xs text-text-muted">
+          <RefreshCw className="w-4 h-4 animate-spin text-primary" />
           <span>Loading historical RS series...</span>
         </div>
       ) : (
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={24} />
+              <CartesianGrid
+                stroke={CHART_THEME.grid.stroke}
+                strokeDasharray={CHART_THEME.grid.strokeDasharray}
+                vertical={CHART_THEME.grid.vertical}
+              />
+              <XAxis
+                dataKey="date"
+                tick={CHART_THEME.axis.tick}
+                axisLine={CHART_THEME.axis.line}
+                tickLine={CHART_THEME.axis.tickLine}
+                minTickGap={24}
+              />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={CHART_THEME.axis.tick}
+                axisLine={CHART_THEME.axis.line}
+                tickLine={CHART_THEME.axis.tickLine}
                 domain={metricKey === "rsSts" ? [0, 100] : ["auto", "auto"]}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--surface-elevated, #0f172a)",
-                  borderColor: "var(--border, #334155)",
-                  fontSize: "11px",
-                }}
+                wrapperStyle={CHART_THEME.tooltip.wrapperStyle}
+                contentStyle={CHART_THEME.tooltip.contentStyle}
               />
               <Legend wrapperStyle={{ fontSize: "11px" }} />
               <ReferenceLine
                 y={metricKey === "rsSts" ? 50 : 1.0}
-                stroke="rgba(148,163,184,0.5)"
-                strokeDasharray="4 4"
+                stroke={CHART_THEME.referenceLine.stroke}
+                strokeDasharray={CHART_THEME.referenceLine.strokeDasharray}
               />
               {selectedGroups.map((g, idx) => (
                 <Line
@@ -196,9 +205,9 @@ export default function RotationChart({
                   type="monotone"
                   dataKey={g.groupId}
                   name={g.label}
-                  stroke={CHART_COLORS[idx % CHART_COLORS.length]}
-                  dot={false}
-                  strokeWidth={2}
+                  stroke={SERIES_COLORS[idx % SERIES_COLORS.length]}
+                  dot={CHART_THEME.line.dot}
+                  strokeWidth={CHART_THEME.line.strokeWidth}
                   connectNulls
                 />
               ))}
@@ -206,6 +215,6 @@ export default function RotationChart({
           </ResponsiveContainer>
         </div>
       )}
-    </div>
+    </ChartCard>
   );
 }

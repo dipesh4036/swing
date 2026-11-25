@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, RefreshCw, X } from "lucide-react";
+import { ExternalLink, RefreshCw, Search, X } from "lucide-react";
 import {
   ConstituentStockRow,
   GroupConstituentsResponse,
   StrengthUniverse,
 } from "@/lib/industry-types";
+import { SectionCard } from "@/components/ui/card";
 
 interface GroupDetailsProps {
   groupId: string;
@@ -20,22 +21,22 @@ function fmtSigned(val: number | null, dec = 2) {
   if (val === null || val === undefined || !Number.isFinite(val)) {
     return <span className="text-text-muted">—</span>;
   }
-  const cls = val > 0 ? "text-emerald-500" : val < 0 ? "text-rose-500" : "text-text-secondary";
-  return <span className={cls}>{`${val > 0 ? "+" : ""}${val.toFixed(dec)}%`}</span>;
+  const cls = val > 0 ? "text-bullish font-medium" : val < 0 ? "text-bearish font-medium" : "text-text-secondary";
+  return <span className={`tabular-nums ${cls}`}>{`${val > 0 ? "+" : ""}${val.toFixed(dec)}%`}</span>;
 }
 
 function emaPill(flag: boolean | null, label: string) {
   if (flag === null) {
     return (
-      <span className="px-1 py-0.5 rounded bg-surface text-text-muted text-[10px]" title="Insufficient history">
+      <span className="px-1.5 py-0.5 rounded-[4px] bg-bg-secondary text-text-muted text-[10px] tabular-nums" title="Insufficient history">
         {label}:—
       </span>
     );
   }
   return (
     <span
-      className={`px-1 py-0.5 rounded text-[10px] font-mono ${
-        flag ? "bg-emerald-500/15 text-emerald-500" : "bg-rose-500/15 text-rose-500"
+      className={`px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold tabular-nums ${
+        flag ? "bg-bullish-bg text-bullish" : "bg-bearish-bg text-bearish"
       }`}
     >
       {label}
@@ -50,12 +51,15 @@ export default function GroupDetails({
   onSelectStock,
 }: GroupDetailsProps) {
   const [page, setPage] = useState(1);
+  const [stockSearch, setStockSearch] = useState("");
+  const [onlyAbove50, setOnlyAbove50] = useState(false);
   const [data, setData] = useState<GroupConstituentsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setPage(1);
+    setStockSearch("");
   }, [groupId, universe]);
 
   useEffect(() => {
@@ -97,34 +101,31 @@ export default function GroupDetails({
     };
   }, [groupId, page, universe]);
 
-  return (
-    <div className="rounded-xl border border-border bg-surface-elevated overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-2 bg-surface">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text-primary">
-              {data?.group.label || "Loading constituents..."}
-            </h3>
-            {data && (
-              <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-mono">
-                {data.totalCount} stocks
-              </span>
-            )}
-          </div>
-          {data?.group.fullPath && (
-            <p className="text-[11px] text-text-muted mt-0.5">{data.group.fullPath}</p>
-          )}
-        </div>
+  const filteredStocks = useMemo(() => {
+    if (!data?.stocks) return [];
+    const q = stockSearch.trim().toLowerCase();
+    return data.stocks.filter((st) => {
+      if (onlyAbove50 && st.above50dma !== true) return false;
+      if (q && !st.symbol.toLowerCase().includes(q) && !st.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [data, stockSearch, onlyAbove50]);
 
+  return (
+    <SectionCard
+      title={data ? `${data.group.label} (${data.totalCount} constituents)` : "Loading constituents..."}
+      subtitle={data?.group.fullPath}
+      info="Click any stock row to open full technical & price details"
+      action={
         <div className="flex items-center gap-2">
           {data && (
             <Link
               href={`/screener?groupId=${encodeURIComponent(groupId)}&groupLabel=${encodeURIComponent(
                 data.group.label
               )}`}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-medium hover:bg-primary/20"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-primary-subtle border border-accent-border text-primary text-[11px] font-semibold hover:bg-bg-selected transition-colors"
             >
-              <span>Open in Screener</span>
+              <span>View in Screener</span>
               <ExternalLink className="w-3 h-3" />
             </Link>
           )}
@@ -132,25 +133,49 @@ export default function GroupDetails({
             type="button"
             onClick={onClose}
             aria-label="Close group details"
-            className="p-1.5 rounded-lg border border-border text-text-muted hover:text-text-primary"
+            className="p-1.5 rounded-[6px] border border-border text-text-muted hover:text-text hover:bg-bg-hover cursor-pointer transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
-      </div>
-
+      }
+    >
       {loading && !data ? (
         <div className="py-10 flex items-center justify-center gap-2 text-xs text-text-muted">
-          <RefreshCw className="w-4 h-4 animate-spin" />
+          <RefreshCw className="w-4 h-4 animate-spin text-primary" />
           <span>Loading constituents...</span>
         </div>
       ) : error ? (
-        <div className="p-4 text-xs text-rose-500">{error}</div>
+        <div className="p-3 rounded-md bg-bearish-bg text-bearish text-xs">{error}</div>
       ) : data ? (
-        <>
-          <div className="overflow-x-auto max-h-[420px]">
-            <table className="w-full text-xs border-collapse">
-              <thead className="sticky top-0 bg-surface border-b border-border text-[11px] text-text-muted uppercase">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="relative w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={stockSearch}
+                onChange={(e) => setStockSearch(e.target.value)}
+                placeholder="Filter symbol or name..."
+                className="w-full h-7 pl-8 pr-3 text-[11px] rounded-[6px] bg-bg-secondary border border-border text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setOnlyAbove50((v) => !v)}
+              className={`h-7 px-2.5 rounded-[6px] text-[11px] font-medium border cursor-pointer transition-colors ${
+                onlyAbove50
+                  ? "bg-bullish-bg border-bullish-border text-bullish"
+                  : "bg-bg-secondary border-border text-text-secondary hover:text-text"
+              }`}
+            >
+              Above 50 DMA only
+            </button>
+          </div>
+
+          <div className="overflow-x-auto max-h-[420px] rounded-md border border-border">
+            <table className="w-full text-[12px] border-collapse">
+              <thead className="sticky top-0 bg-bg-secondary border-b border-border text-[11px] text-text-secondary uppercase tracking-[0.04em]">
                 <tr>
                   <th className="px-3 py-2 text-left">Symbol</th>
                   <th className="px-3 py-2 text-right">Close</th>
@@ -166,64 +191,72 @@ export default function GroupDetails({
                   <th className="px-3 py-2 text-right">Turnover (Cr)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
-                {data.stocks.map((st) => (
-                  <tr
-                    key={st.token}
-                    onClick={() => onSelectStock?.(st)}
-                    className="hover:bg-surface-hover cursor-pointer"
-                  >
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-text-primary">{st.symbol}</span>
-                        {st.isNewListing && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 text-[10px] font-semibold">
-                            IPO ({st.listingSessions}d)
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-text-muted truncate max-w-[180px]">
-                        {st.name}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {st.close !== null ? st.close.toFixed(2) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {st.rsSts !== null ? `${st.rsSts.toFixed(1)}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {st.rsRating !== null ? st.rsRating : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">{fmtSigned(st.ret1d)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmtSigned(st.ret1w)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmtSigned(st.ret1m)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmtSigned(st.ret3m)}</td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {st.pctFrom52wHigh !== null ? `${st.pctFrom52wHigh.toFixed(1)}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {st.adrPct !== null ? `${st.adrPct.toFixed(1)}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center justify-center gap-1">
-                        {emaPill(st.above20ema, "20")}
-                        {emaPill(st.above50dma, "50")}
-                        {emaPill(st.above200dma, "200")}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-text-secondary">
-                      {st.avgTurnoverCr !== null ? st.avgTurnoverCr.toFixed(2) : "—"}
+              <tbody className="divide-y divide-border-subtle">
+                {filteredStocks.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-8 text-center text-text-muted text-xs">
+                      No matching constituents on this page.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredStocks.map((st) => (
+                    <tr
+                      key={st.token}
+                      onClick={() => onSelectStock?.(st)}
+                      className="hover:bg-bg-hover cursor-pointer transition-colors"
+                    >
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-text">{st.symbol}</span>
+                          {st.isNewListing && (
+                            <span className="px-1.5 py-0.5 rounded-[4px] bg-warning-bg text-warning text-[10px] font-semibold">
+                              IPO ({st.listingSessions}d)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-text-muted truncate max-w-[180px]">
+                          {st.name}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-text">
+                        {st.close !== null ? `₹${st.close.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-text">
+                        {st.rsSts !== null ? `${st.rsSts.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
+                        {st.rsRating !== null ? st.rsRating : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right">{fmtSigned(st.ret1d)}</td>
+                      <td className="px-3 py-2 text-right">{fmtSigned(st.ret1w)}</td>
+                      <td className="px-3 py-2 text-right">{fmtSigned(st.ret1m)}</td>
+                      <td className="px-3 py-2 text-right">{fmtSigned(st.ret3m)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
+                        {st.pctFrom52wHigh !== null ? `${st.pctFrom52wHigh.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
+                        {st.adrPct !== null ? `${st.adrPct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          {emaPill(st.above20ema, "20")}
+                          {emaPill(st.above50dma, "50")}
+                          {emaPill(st.above200dma, "200")}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
+                        {st.avgTurnoverCr !== null ? `₹${st.avgTurnoverCr.toFixed(2)}` : "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           {data.totalPages > 1 && (
-            <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-xs text-text-muted">
-              <span>
+            <div className="flex items-center justify-between text-[11px] text-text-secondary pt-1">
+              <span className="tabular-nums">
                 Page {data.page} of {data.totalPages} ({data.totalCount} total)
               </span>
               <div className="flex items-center gap-2">
@@ -231,7 +264,7 @@ export default function GroupDetails({
                   type="button"
                   disabled={data.page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 rounded border border-border disabled:opacity-40 hover:bg-surface-hover"
+                  className="px-2.5 py-1 rounded-[6px] border border-border disabled:opacity-40 hover:bg-bg-hover cursor-pointer"
                 >
                   Prev
                 </button>
@@ -239,15 +272,15 @@ export default function GroupDetails({
                   type="button"
                   disabled={data.page >= data.totalPages}
                   onClick={() => setPage((p) => p + 1)}
-                  className="px-2.5 py-1 rounded border border-border disabled:opacity-40 hover:bg-surface-hover"
+                  className="px-2.5 py-1 rounded-[6px] border border-border disabled:opacity-40 hover:bg-bg-hover cursor-pointer"
                 >
                   Next
                 </button>
               </div>
             </div>
           )}
-        </>
+        </div>
       ) : null}
-    </div>
+    </SectionCard>
   );
 }

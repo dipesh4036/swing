@@ -3,6 +3,7 @@
 import React from "react";
 import { ArrowDown, ArrowUp, ChevronRight, LineChart as LineChartIcon } from "lucide-react";
 import { ClassificationLevel, IndustryGroupRow } from "@/lib/industry-types";
+import { BaseCard } from "@/components/ui/card";
 
 interface RankingTableProps {
   groups: IndustryGroupRow[];
@@ -28,19 +29,19 @@ function fmtPct(val: number | null, decimals = 1, signed = false) {
   const prefix = signed && val > 0 ? "+" : "";
   const cls = signed
     ? val > 0
-      ? "text-emerald-500"
+      ? "text-bullish font-medium"
       : val < 0
-        ? "text-rose-500"
+        ? "text-bearish font-medium"
         : "text-text-secondary"
-    : "text-text-primary";
-  return <span className={cls}>{`${prefix}${val.toFixed(decimals)}%`}</span>;
+    : "text-text";
+  return <span className={`tabular-nums ${cls}`}>{`${prefix}${val.toFixed(decimals)}%`}</span>;
 }
 
 function rsBadgeClass(rs: number | null) {
-  if (rs === null) return "bg-surface text-text-muted border-border";
-  if (rs >= 75) return "bg-emerald-500/15 text-emerald-500 border-emerald-500/30";
-  if (rs >= 50) return "bg-amber-500/15 text-amber-500 border-amber-500/30";
-  return "bg-rose-500/15 text-rose-500 border-rose-500/30";
+  if (rs === null) return "bg-bg-secondary text-text-muted border-border";
+  if (rs >= 75) return "bg-bullish-bg text-bullish border-bullish-border";
+  if (rs >= 50) return "bg-warning-bg text-warning border-border";
+  return "bg-bearish-bg text-bearish border-bearish-border";
 }
 
 export default function RankingTable({
@@ -62,24 +63,24 @@ export default function RankingTable({
     return (
       <th
         key={key}
-        className={`px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted whitespace-nowrap cursor-pointer select-none hover:text-text-primary ${
+        className={`px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-secondary whitespace-nowrap cursor-pointer select-none hover:text-text transition-colors ${
           align === "left" ? "text-left" : "text-right"
         }`}
         onClick={() => onSortChange(key)}
       >
         <span className="inline-flex items-center gap-1">
           {label}
-          {active && (sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+          {active && (sortDir === "asc" ? <ArrowUp className="w-3 h-3 text-primary" /> : <ArrowDown className="w-3 h-3 text-primary" />)}
         </span>
       </th>
     );
   };
 
   return (
-    <div className="rounded-xl border border-border bg-surface-elevated overflow-hidden">
+    <BaseCard padding="p-0" className="overflow-hidden">
       <div className="overflow-x-auto max-h-[540px]">
-        <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 z-10 bg-surface border-b border-border">
+        <table className="w-full text-[12px] border-collapse">
+          <thead className="sticky top-0 z-10 bg-bg-secondary border-b border-border">
             <tr>
               {renderHeader("rank", "#", "left")}
               {renderHeader("label", "Group", "left")}
@@ -90,31 +91,31 @@ export default function RankingTable({
               {renderHeader("ret_1m", "1M")}
               {renderHeader("ret_3m", "3M")}
               {renderHeader("ret_6m", "6M")}
-              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted text-right whitespace-nowrap">
+              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-secondary text-right whitespace-nowrap">
                 A / D
               </th>
-              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted text-right whitespace-nowrap">
+              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-secondary text-right whitespace-nowrap">
                 &gt;20E
               </th>
               {renderHeader("pct_above_50dma", ">50D")}
               {renderHeader("pct_above_200dma", ">200D")}
-              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted text-center whitespace-nowrap">
-                RS Trend
+              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-secondary text-center whitespace-nowrap">
+                RS vs 21E
               </th>
-              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted text-center whitespace-nowrap">
+              <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-secondary text-center whitespace-nowrap">
                 Chart
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/60">
+          <tbody className="divide-y divide-border-subtle">
             {groups.length === 0 ? (
               <tr>
-                <td colSpan={15} className="px-4 py-10 text-center text-text-muted">
-                  No matching classification groups for the selected filters.
+                <td colSpan={15} className="px-4 py-12 text-center text-text-muted">
+                  No classification groups match your current filter criteria.
                 </td>
               </tr>
             ) : (
-              groups.map((g) => {
+              groups.map((g, idx) => {
                 const isSelected = selectedGroupId === g.groupId;
                 const inChart = chartGroupIds.includes(g.groupId);
                 return (
@@ -122,16 +123,20 @@ export default function RankingTable({
                     key={g.groupId}
                     onClick={() => onSelectGroup(g)}
                     className={`cursor-pointer transition-colors ${
-                      isSelected ? "bg-primary/10" : "hover:bg-surface-hover"
+                      isSelected
+                        ? "bg-bg-selected border-l-2 border-l-primary"
+                        : idx % 2 === 1
+                          ? "bg-bg-secondary/35 hover:bg-bg-hover"
+                          : "hover:bg-bg-hover"
                     }`}
                   >
-                    <td className="px-3 py-2.5 font-mono text-text-muted whitespace-nowrap">
+                    <td className="px-3 py-2.5 tabular-nums font-medium text-text-muted whitespace-nowrap">
                       {g.rank ?? "—"}
                     </td>
-                    <td className="px-3 py-2.5 min-w-[200px]">
+                    <td className="px-3 py-2.5 min-w-[210px]">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="font-semibold text-text-primary truncate">{g.label}</div>
+                          <div className="font-semibold text-text truncate">{g.label}</div>
                           {level !== "macro" && (
                             <div className="text-[10px] text-text-muted truncate" title={g.fullPath}>
                               {g.fullPath}
@@ -147,60 +152,52 @@ export default function RankingTable({
                               e.stopPropagation();
                               onDrillDown?.(g);
                             }}
-                            className="p-1 rounded hover:bg-primary/15 text-text-muted hover:text-primary shrink-0"
+                            className="p-1 rounded-[4px] hover:bg-primary-subtle text-text-muted hover:text-primary shrink-0 cursor-pointer transition-colors"
                           >
                             <ChevronRight className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-text-secondary whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary whitespace-nowrap">
                       {g.eligibleCount}/{g.stockCount}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-semibold ${rsBadgeClass(
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border text-[11px] font-semibold ${rsBadgeClass(
                           g.rsSts
                         )}`}
                       >
                         {g.rsSts !== null ? `${g.rsSts.toFixed(1)}%` : "—"}
+                        {g.rsTrend === "improving" && <span className="text-[9px]">▲</span>}
+                        {g.rsTrend === "weakening" && <span className="text-[9px]">▼</span>}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                      {fmtPct(g.ret1d, 2, true)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                      {fmtPct(g.ret1w, 2, true)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                      {fmtPct(g.ret1m, 2, true)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                      {fmtPct(g.ret3m, 2, true)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                      {fmtPct(g.ret6m, 2, true)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                      <span className="text-emerald-500">{g.adv}</span>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtPct(g.ret1d, 2, true)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtPct(g.ret1w, 2, true)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtPct(g.ret1m, 2, true)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtPct(g.ret3m, 2, true)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtPct(g.ret6m, 2, true)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                      <span className="text-bullish font-medium">{g.adv}</span>
                       <span className="text-text-muted">/</span>
-                      <span className="text-rose-500">{g.dec}</span>
+                      <span className="text-bearish font-medium">{g.dec}</span>
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono whitespace-nowrap"
-                      title={`Valid: ${g.nValid20ema}/${g.stockCount}`}
+                      className="px-3 py-2.5 text-right whitespace-nowrap"
+                      title={`Valid observations: ${g.nValid20ema}/${g.stockCount}`}
                     >
                       {fmtPct(g.pctAbove20ema, 0, false)}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono whitespace-nowrap"
-                      title={`Valid: ${g.nValid50dma}/${g.stockCount}`}
+                      className="px-3 py-2.5 text-right whitespace-nowrap"
+                      title={`Valid observations: ${g.nValid50dma}/${g.stockCount}`}
                     >
                       {fmtPct(g.pctAbove50dma, 0, false)}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono whitespace-nowrap"
-                      title={`Valid: ${g.nValid200dma}/${g.stockCount}`}
+                      className="px-3 py-2.5 text-right whitespace-nowrap"
+                      title={`Valid observations: ${g.nValid200dma}/${g.stockCount}`}
                     >
                       {fmtPct(g.pctAbove200dma, 0, false)}
                     </td>
@@ -210,12 +207,12 @@ export default function RankingTable({
                           —
                         </span>
                       ) : g.rsAboveEma21 ? (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 text-[10px] font-semibold">
-                          &gt;21E
+                        <span className="px-1.5 py-0.5 rounded-[4px] bg-bullish-bg text-bullish border border-bullish-border text-[10px] font-semibold">
+                          ▲ &gt;21E
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500 text-[10px] font-semibold">
-                          &lt;21E
+                        <span className="px-1.5 py-0.5 rounded-[4px] bg-bearish-bg text-bearish border border-bearish-border text-[10px] font-semibold">
+                          ▼ &lt;21E
                         </span>
                       )}
                     </td>
@@ -227,10 +224,10 @@ export default function RankingTable({
                           e.stopPropagation();
                           onToggleChartGroup(g);
                         }}
-                        className={`p-1 rounded border transition-colors ${
+                        className={`p-1 rounded-[4px] border cursor-pointer transition-colors ${
                           inChart
-                            ? "bg-primary/20 border-primary text-primary"
-                            : "border-border text-text-muted hover:text-text-primary"
+                            ? "bg-primary-subtle border-accent-border text-primary"
+                            : "border-border text-text-muted hover:text-text hover:bg-bg-hover"
                         }`}
                       >
                         <LineChartIcon className="w-3.5 h-3.5" />
@@ -243,6 +240,6 @@ export default function RankingTable({
           </tbody>
         </table>
       </div>
-    </div>
+    </BaseCard>
   );
 }

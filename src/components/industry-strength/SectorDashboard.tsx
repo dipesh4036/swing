@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, HelpCircle, RefreshCw } from "lucide-react";
 import {
   BreadcrumbItem,
   ClassificationLevel,
@@ -10,7 +10,10 @@ import {
   RankingsResponse,
   StrengthUniverse,
 } from "@/lib/industry-types";
-import ClassificationTabs from "./ClassificationTabs";
+import PageContainer, { SectionHeader } from "@/components/shared/PageContainer";
+import { BaseCard } from "@/components/ui/card";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import ClassificationTabs, { QuickPreset } from "./ClassificationTabs";
 import SummaryCards from "./SummaryCards";
 import RankingTable from "./RankingTable";
 import GroupDetails from "./GroupDetails";
@@ -24,13 +27,20 @@ const NEXT_LEVEL: Record<ClassificationLevel, ClassificationLevel | null> = {
   basic_industry: null,
 };
 
+const UNIVERSE_OPTIONS: { id: StrengthUniverse; label: string }[] = [
+  { id: "all", label: "All NSE" },
+  { id: "liquid", label: "Liquid Only" },
+];
+
 export default function SectorDashboard() {
   const [level, setLevel] = useState<ClassificationLevel>("industry");
   const [universe, setUniverse] = useState<StrengthUniverse>("all");
+  const [preset, setPreset] = useState<QuickPreset>("all");
   const [parentId, setParentId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("rank");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showGuide, setShowGuide] = useState(false);
 
   const [data, setData] = useState<RankingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +49,8 @@ export default function SectorDashboard() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [chartGroups, setChartGroups] = useState<{ groupId: string; label: string }[]>([]);
   const [selectedStock, setSelectedStock] = useState<ConstituentStockRow | null>(null);
+
+  const detailsRef = useRef<HTMLDivElement | null>(null);
 
   const fetchRankings = useCallback(async () => {
     setLoading(true);
@@ -75,10 +87,35 @@ export default function SectorDashboard() {
     fetchRankings();
   }, [fetchRankings]);
 
+  // Seed chart with top 3 groups once on initial load so the chart is immediately informative
+  useEffect(() => {
+    if (data?.groups && data.groups.length > 0 && chartGroups.length === 0) {
+      setChartGroups(
+        data.groups.slice(0, 3).map((g) => ({ groupId: g.groupId, label: g.label }))
+      );
+    }
+  }, [data, chartGroups.length]);
+
+  const filteredGroups = useMemo(() => {
+    if (!data?.groups) return [];
+    if (preset === "all") return data.groups;
+    if (preset === "outperforming") {
+      return data.groups.filter((g) => g.rsAboveEma21 === true);
+    }
+    if (preset === "improving") {
+      return data.groups.filter((g) => g.rsTrend === "improving");
+    }
+    if (preset === "leaders") {
+      return data.groups.filter((g) => g.rsSts !== null && g.rsSts >= 75);
+    }
+    return data.groups;
+  }, [data, preset]);
+
   const handleLevelChange = (nextLevel: ClassificationLevel) => {
     setLevel(nextLevel);
     setParentId(null);
     setSelectedGroupId(null);
+    setChartGroups([]);
   };
 
   const handleDrillDown = (group: IndustryGroupRow) => {
@@ -87,17 +124,20 @@ export default function SectorDashboard() {
     setParentId(group.groupId);
     setLevel(next);
     setSelectedGroupId(null);
+    setChartGroups([]);
   };
 
   const handleBreadcrumbSelect = (crumb: BreadcrumbItem | null) => {
     if (!crumb) {
       setParentId(null);
+      setChartGroups([]);
       return;
     }
     const next = NEXT_LEVEL[crumb.level];
     if (next) {
       setParentId(crumb.groupId);
       setLevel(next);
+      setChartGroups([]);
     }
   };
 
@@ -108,6 +148,18 @@ export default function SectorDashboard() {
       setSortBy(col);
       setSortDir(col === "rank" || col === "label" ? "asc" : "desc");
     }
+  };
+
+  const handleSelectGroup = (groupId: string) => {
+    setSelectedGroupId((cur) => {
+      const next = cur === groupId ? null : groupId;
+      if (next) {
+        setTimeout(() => {
+          detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 80);
+      }
+      return next;
+    });
   };
 
   const handleToggleChartGroup = (g: IndustryGroupRow) => {
@@ -121,80 +173,99 @@ export default function SectorDashboard() {
 
   if (loading && !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-        <span className="text-sm text-text-muted">Loading NSE 4-level industry strength...</span>
-      </div>
+      <PageContainer>
+        <div className="space-y-4 animate-pulse">
+          <div className="h-10 rounded-lg bg-bg-secondary border border-border" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 rounded-lg bg-bg-secondary border border-border" />
+            ))}
+          </div>
+          <div className="h-80 rounded-lg bg-bg-secondary border border-border" />
+        </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 max-w-[1600px] mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg md:text-xl font-bold text-text-primary">
-            Industries Relative Strength (RS_STS)
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            {data?.snapshotDate
-              ? `Snapshot: ${data.snapshotDate} · Method: ${data.methodologyVersion} · Coverage: ${
-                  data.coverage.classifiedStocks
-                }/${data.coverage.totalStocks} (${data.coverage.coveragePct ?? "—"}%)`
-              : "No completed snapshot available yet"}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-border bg-surface-elevated p-0.5 text-xs">
+    <PageContainer>
+      <SectionHeader
+        title="Industries Relative Strength (RS_STS)"
+        info="4-level NSE taxonomy ranked by 26-session equal-weight RS_STS% vs NIFTY 500"
+        subtitle={
+          data?.snapshotDate
+            ? `Snapshot: ${data.snapshotDate} · Coverage: ${data.coverage.classifiedStocks}/${
+                data.coverage.totalStocks
+              } (${data.coverage.coveragePct ?? "—"}%)`
+            : "No completed snapshot available"
+        }
+        action={
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              options={UNIVERSE_OPTIONS as never[]}
+              value={universe}
+              onChange={(val: StrengthUniverse) => setUniverse(val)}
+              size="sm"
+            />
             <button
               type="button"
-              onClick={() => setUniverse("all")}
-              className={`px-3 py-1 rounded-md font-medium ${
-                universe === "all" ? "bg-primary text-white" : "text-text-secondary"
+              onClick={() => setShowGuide((v) => !v)}
+              aria-label="Toggle RS_STS methodology guide"
+              className={`p-1.5 rounded-[6px] border cursor-pointer transition-colors ${
+                showGuide
+                  ? "bg-primary-subtle border-accent-border text-primary"
+                  : "border-border bg-surface text-text-secondary hover:text-text"
               }`}
             >
-              All NSE
+              <HelpCircle className="w-4 h-4" />
             </button>
             <button
               type="button"
-              onClick={() => setUniverse("liquid")}
-              className={`px-3 py-1 rounded-md font-medium ${
-                universe === "liquid" ? "bg-primary text-white" : "text-text-secondary"
-              }`}
+              onClick={fetchRankings}
+              disabled={loading}
+              aria-label="Refresh rankings"
+              className="p-1.5 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer transition-colors"
             >
-              Liquid Only
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
+        }
+      />
 
-          <button
-            type="button"
-            onClick={fetchRankings}
-            disabled={loading}
-            aria-label="Refresh rankings"
-            className="p-2 rounded-lg border border-border bg-surface-elevated text-text-secondary hover:text-text-primary disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
+      {showGuide && (
+        <BaseCard padding="p-3.5" bg="bg-bg-secondary">
+          <div className="text-[12px] text-text-secondary space-y-1">
+            <div className="font-semibold text-text">How RS_STS% Works</div>
+            <p>
+              Each group builds a 26-session equal-weight index of full-window constituents (excluding
+              corporate-action jumps &gt;40% and fresh IPOs &lt;26 sessions) divided by NIFTY 500.{" "}
+              <strong className="text-text">RS_STS%</strong> is the percentile rank (0–100%) of the
+              latest RS value within that 26-session window. Click any row to inspect constituents or
+              use the chevron to drill down through Macro &rarr; Sector &rarr; Industry &rarr; Basic Industry.
+            </p>
+          </div>
+        </BaseCard>
+      )}
 
       {error && (
-        <div className="px-3.5 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
+        <BaseCard padding="p-3" bg="bg-warning-bg" className="text-warning text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{error}{data ? " (showing last completed snapshot)" : ""}</span>
-        </div>
+        </BaseCard>
       )}
 
       {data && (
         <>
           <SummaryCards
             summary={data.summary}
-            onSelectGroup={(gid) => setSelectedGroupId(gid)}
+            onSelectGroup={(gid) => handleSelectGroup(gid)}
           />
 
           <ClassificationTabs
             level={level}
             onLevelChange={handleLevelChange}
+            preset={preset}
+            onPresetChange={setPreset}
             breadcrumbs={data.breadcrumbs}
             onBreadcrumbSelect={handleBreadcrumbSelect}
             search={search}
@@ -202,27 +273,27 @@ export default function SectorDashboard() {
           />
 
           <RankingTable
-            groups={data.groups}
+            groups={filteredGroups}
             level={level}
             sortBy={sortBy}
             sortDir={sortDir}
             onSortChange={handleSortChange}
             selectedGroupId={selectedGroupId}
-            onSelectGroup={(g) =>
-              setSelectedGroupId((cur) => (cur === g.groupId ? null : g.groupId))
-            }
+            onSelectGroup={(g) => handleSelectGroup(g.groupId)}
             onDrillDown={handleDrillDown}
             chartGroupIds={chartGroups.map((g) => g.groupId)}
             onToggleChartGroup={handleToggleChartGroup}
           />
 
           {selectedGroupId && (
-            <GroupDetails
-              groupId={selectedGroupId}
-              universe={universe}
-              onClose={() => setSelectedGroupId(null)}
-              onSelectStock={(st) => setSelectedStock(st)}
-            />
+            <div ref={detailsRef}>
+              <GroupDetails
+                groupId={selectedGroupId}
+                universe={universe}
+                onClose={() => setSelectedGroupId(null)}
+                onSelectStock={(st) => setSelectedStock(st)}
+              />
+            </div>
           )}
 
           <RotationChart
@@ -264,6 +335,6 @@ export default function SectorDashboard() {
           onClose={() => setSelectedStock(null)}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }
