@@ -98,10 +98,14 @@ export async function POST(request) {
 
     // On success: update the recorded attempt to success=true
     if (attemptId) {
-      await queryWithRetry(
-        `UPDATE login_attempts SET success = true WHERE id = $1;`,
-        [attemptId]
-      );
+      try {
+        await queryWithRetry(
+          `UPDATE login_attempts SET success = true WHERE id = $1;`,
+          [attemptId]
+        );
+      } catch (updateErr) {
+        console.warn("Failed to mark login attempt as successful:", updateErr.message);
+      }
     }
 
     // 4. Issue signed JWT session cookie
