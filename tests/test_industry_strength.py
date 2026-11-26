@@ -92,3 +92,40 @@ def test_4_level_snapshot_with_ipo_and_corp_action_break():
     # Zero denominator on 200DMA -> None
     assert pvb_all["n_valid_200dma"] == 0
     assert pvb_all["pct_above_200dma"] is None
+
+
+def test_trend_rank_math_fixture():
+    from pipeline.industry_strength import compute_trend_ranks
+
+    rows = [
+        {
+            "group_id": "g1", "n_stocks": 10, "n_eligible": 10,
+            "median_1m": 8.0, "median_3m": 15.0, "median_6m": 25.0,
+            "pct_above_50dma": 80.0, "pct_above_200dma": 75.0, "_leader_share": 0.6,
+        },
+        {
+            "group_id": "g2", "n_stocks": 8, "n_eligible": 8,
+            "median_1m": 4.0, "median_3m": 10.0, "median_6m": 12.0,
+            "pct_above_50dma": 50.0, "pct_above_200dma": 45.0, "_leader_share": 0.3,
+        },
+        {
+            "group_id": "g3_tie", "n_stocks": 12, "n_eligible": 10,
+            "median_1m": 4.0, "median_3m": 10.0, "median_6m": 12.0,
+            "pct_above_50dma": 50.0, "pct_above_200dma": 45.0, "_leader_share": 0.3,
+        },
+        {
+            "group_id": "g4_small", "n_stocks": 3, "n_eligible": 3,
+            "median_1m": 20.0, "median_3m": 40.0, "median_6m": 60.0,
+            "pct_above_50dma": 100.0, "pct_above_200dma": 100.0, "_leader_share": 1.0,
+        },
+    ]
+    labels = {"g1": "Strongest", "g2": "Alpha", "g3_tie": "Beta", "g4_small": "Tiny"}
+    compute_trend_ranks(rows, labels)
+
+    by_id = {r["group_id"]: r for r in rows}
+    assert by_id["g1"]["rank_trend"] == 1
+    # Tie on final -> n_stocks desc puts g3_tie (12) ahead of g2 (8)
+    assert by_id["g3_tie"]["rank_trend"] == 2
+    assert by_id["g2"]["rank_trend"] == 3
+    # < 5 eligible rule: small group gets None even with highest returns
+    assert by_id["g4_small"]["rank_trend"] is None

@@ -11,6 +11,8 @@ export const VALID_LEVELS: readonly ClassificationLevel[] = [
 
 export const VALID_UNIVERSES: readonly StrengthUniverse[] = ["all", "liquid"];
 export const VALID_PERIODS: readonly StrengthPeriod[] = ["1d", "1w", "1m", "3m", "6m", "1y"];
+export type ExtendedPeriod = StrengthPeriod | "ytd";
+export const VALID_EXTENDED_PERIODS: readonly ExtendedPeriod[] = ["1d", "1w", "1m", "3m", "6m", "1y", "ytd"];
 
 export interface CoverageSummary {
   totalStocks: number;
@@ -31,11 +33,16 @@ export interface IndustryGroupRow {
   industryLabel: string | null;
   basicIndustryLabel: string | null;
   rank: number | null;
+  rankTrend: number | null;
+  rankTrendPrev5: number | null;
+  rankTrendChange: number | null;
   stockCount: number;
   eligibleCount: number;
   adv: number;
   dec: number;
   unch: number;
+  n20dHigh: number;
+  n20dLow: number;
   rsSts: number | null;
   rsStsPrev: number | null;
   rsDelta: number | null;
@@ -47,6 +54,13 @@ export interface IndustryGroupRow {
   ret1m: number | null;
   ret3m: number | null;
   ret6m: number | null;
+  median1d: number | null;
+  median1w: number | null;
+  median1m: number | null;
+  median3m: number | null;
+  median6m: number | null;
+  median1y: number | null;
+  medianYtd: number | null;
   pctAbove20ema: number | null;
   pctAbove50dma: number | null;
   pctAbove200dma: number | null;
@@ -104,6 +118,10 @@ export interface ConstituentStockRow {
   ret1m: number | null;
   ret3m: number | null;
   ret6m: number | null;
+  ret1y: number | null;
+  retYtd: number | null;
+  at20dHigh: boolean | null;
+  at20dLow: boolean | null;
   pctFrom52wHigh: number | null;
   adrPct: number | null;
   above20ema: boolean | null;

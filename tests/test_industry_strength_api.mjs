@@ -147,7 +147,7 @@ function makeChartRoute(queryImpl) {
     if (id === "next/server") return { NextResponse };
     if (id === "@/lib/db") return { queryWithRetry: queryImpl };
     if (id === "@/lib/auth") return { requireAuth: async () => ({ id: 1, email: "u@test" }) };
-    if (id === "@/lib/smartapi") return { fetchAllCandlesFromSmartAPI: async () => null };
+    if (id === "@/lib/smartapi") return { fetchAllCandlesFromSmartAPI: async () => null, hasAngelCredentials: () => false };
     if (id === "@/lib/indicators") return { attachEMAs: (c) => c };
     return {};
   };
@@ -262,3 +262,28 @@ assert.ok(panelHtml.includes("RELIANCE"), "StockDetailPanel must render symbol")
 assert.ok(!panelHtml.includes("(illiquid)"), "StockDetailPanel must receive in_universe: true");
 assert.ok(panelSrc.includes("source=${encodeURIComponent(source)}"), "StockDetailPanel must pass source param to chart API");
 console.log("✓ X1.6(a) StockDetailPanel token & source=industry SSR Test Passed!");
+
+// 6. X2 Tests: 4-state header cycle, >5 places rule, and timeframe independence
+const fmtLib = loadTsModule("src/lib/industry-formatters.ts");
+assert.equal(fmtLib.nextRankCycleState("normal"), "climbers");
+assert.equal(fmtLib.nextRankCycleState("climbers"), "fallers");
+assert.equal(fmtLib.nextRankCycleState("fallers"), "normal");
+
+assert.equal(fmtLib.shouldShowRankMove(5, "normal"), false);
+assert.equal(fmtLib.shouldShowRankMove(-5, "normal"), false);
+assert.equal(fmtLib.shouldShowRankMove(6, "normal"), true);
+assert.equal(fmtLib.shouldShowRankMove(-6, "normal"), true);
+assert.equal(fmtLib.shouldShowRankMove(2, "climbers"), true);
+assert.equal(fmtLib.shouldShowRankMove(-1, "fallers"), true);
+assert.equal(fmtLib.formatRankMove(7, "normal"), "+7");
+assert.equal(fmtLib.formatRankMove(3, "normal"), null);
+assert.equal(fmtLib.formatRankMove(3, "climbers"), "+3");
+
+// Timeframe buttons do not change rank order (rank_trend order identical across all periods)
+const rankResults = [];
+for (const tf of ["1d", "1w", "1m", "3m", "6m", "1y", "ytd"]) {
+  const r = await strengthLib.getRankings({ level: "industry", period: tf, universe: "all" }, mockQuery);
+  rankResults.push(r.groups.map((g) => g.groupId).join(","));
+}
+assert.equal(new Set(rankResults).size, 1, "Rank order must be identical across all timeframes");
+console.log("✓ X2 Rank Cycle, >5 Move Rule & Timeframe Invariance Tests Passed!");

@@ -4,6 +4,15 @@ import crypto from "crypto";
  * Constants & Configuration
  */
 export const CHART_HISTORY_YEARS = 5;
+
+export function hasAngelCredentials() {
+  return Boolean(
+    process.env.API_KEY &&
+      process.env.CLIENT_ID &&
+      process.env.PIN &&
+      process.env.TOTP_SECRET
+  );
+}
 export const MAX_DAYS_PER_REQUEST_ONE_DAY = 400; // SmartAPI ONE_DAY chunk size
 const CANDLE_CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours in-memory cache
 const MAX_CANDLE_CACHE_TOKENS = 100; // Cap candle cache at 100 tokens

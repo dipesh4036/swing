@@ -4,6 +4,7 @@ import {
   ClassificationLevel,
   ConstituentStockRow,
   CoverageSummary,
+  ExtendedPeriod,
   GroupConstituentsResponse,
   GroupHistoryPoint,
   GroupHistoryResponse,
@@ -12,8 +13,8 @@ import {
   RankingsSummary,
   StrengthPeriod,
   StrengthUniverse,
+  VALID_EXTENDED_PERIODS,
   VALID_LEVELS,
-  VALID_PERIODS,
   VALID_UNIVERSES,
 } from "@/lib/industry-types";
 
@@ -45,15 +46,25 @@ export function validateUniverse(raw: string | null): StrengthUniverse {
 }
 
 export function validatePeriod(raw: string | null): StrengthPeriod {
-  if (raw && (VALID_PERIODS as readonly string[]).includes(raw)) {
+  if (raw && (VALID_EXTENDED_PERIODS as readonly string[]).includes(raw)) {
     return raw as StrengthPeriod;
   }
   return "1m";
 }
 
 const RANKING_SORT_ALLOWLIST: Record<string, string> = {
+  rank_trend: "COALESCE(d.rank_trend, 999999)",
+  rank_trend_change: "d.rank_trend_change",
   rank: "COALESCE(d.rank, 999999)",
   rs_sts: "COALESCE(d.rs_sts, -999)",
+  n_20d_high: "d.n_20d_high",
+  median_1d: "COALESCE(d.median_1d, -999)",
+  median_1w: "COALESCE(d.median_1w, -999)",
+  median_1m: "COALESCE(d.median_1m, -999)",
+  median_3m: "COALESCE(d.median_3m, -999)",
+  median_6m: "COALESCE(d.median_6m, -999)",
+  median_1y: "COALESCE(d.median_1y, -999)",
+  median_ytd: "COALESCE(d.median_ytd, -999)",
   ret_1d: "COALESCE(d.ret_1d, -999)",
   ret_1w: "COALESCE(d.ret_1w, -999)",
   ret_1m: "COALESCE(d.ret_1m, -999)",
@@ -162,6 +173,7 @@ export async function getRankings(
     search?: string | null;
     sortBy?: string | null;
     sortDir?: string | null;
+    showSmall?: boolean;
   },
   q: QueryFn = queryWithRetry
 ): Promise<RankingsResponse> {
@@ -171,8 +183,10 @@ export async function getRankings(
   const parentId = params.parentId?.trim() || null;
   const search = params.search?.trim() || null;
 
-  const sortCol = RANKING_SORT_ALLOWLIST[params.sortBy || "rank"] || RANKING_SORT_ALLOWLIST.rank;
+  const sortKey = params.sortBy || "rank_trend";
+  const sortCol = RANKING_SORT_ALLOWLIST[sortKey] || RANKING_SORT_ALLOWLIST.rank_trend;
   const sortDir = params.sortDir === "desc" ? "DESC" : "ASC";
+  const nullsClause = sortKey === "rank_trend_change" ? "NULLS LAST" : "";
 
   const snap = await getLatestCompletedSnapshot(q);
   const coverage = getCoverageFromSnapshot(snap);
@@ -210,6 +224,9 @@ export async function getRankings(
   const sqlParams: unknown[] = [tradeDate, universe, level];
   let idx = 4;
 
+  if (params.showSmall === false) {
+    conditions.push("d.n_eligible >= 5");
+  }
   if (parentId) {
     conditions.push(`g.parent_id = $${idx}`);
     sqlParams.push(parentId);
@@ -226,16 +243,18 @@ export async function getRankings(
       `
       SELECT g.group_id, g.level, g.label, g.parent_id, g.full_path,
              g.macro_label, g.sector_label, g.industry_label, g.basic_industry_label,
-             d.rank, d.n_stocks, d.n_eligible, d.adv, d.dec, d.unch,
+             d.rank, d.rank_trend, d.rank_trend_prev5, d.rank_trend_change,
+             d.n_stocks, d.n_eligible, d.adv, d.dec, d.unch, d.n_20d_high, d.n_20d_low,
              d.rs_sts, d.rs_sts_prev, d.rs_line, d.rs_above_ema21,
              d.ret_1d, d.ret_1w, d.ret_1m, d.ret_3m, d.ret_6m,
+             d.median_1d, d.median_1w, d.median_1m, d.median_3m, d.median_6m, d.median_1y, d.median_ytd,
              d.pct_above_20ema, d.pct_above_50dma, d.pct_above_200dma,
              d.n_valid_20ema, d.n_valid_50dma, d.n_valid_200dma,
              d.mcap_cr
       FROM daily_industry_strength d
       JOIN industry_groups g ON g.group_id = d.group_id
       WHERE ${conditions.join(" AND ")}
-      ORDER BY ${sortCol} ${sortDir}, g.label ASC;
+      ORDER BY ${sortCol} ${sortDir} ${nullsClause}, d.n_stocks DESC, g.label ASC;
       `,
       sqlParams
     ),
@@ -262,11 +281,16 @@ export async function getRankings(
       industryLabel: r.industry_label ? String(r.industry_label) : null,
       basicIndustryLabel: r.basic_industry_label ? String(r.basic_industry_label) : null,
       rank: r.rank !== null && r.rank !== undefined ? toInt(r.rank) : null,
+      rankTrend: r.rank_trend !== null && r.rank_trend !== undefined ? toInt(r.rank_trend) : null,
+      rankTrendPrev5: r.rank_trend_prev5 !== null && r.rank_trend_prev5 !== undefined ? toInt(r.rank_trend_prev5) : null,
+      rankTrendChange: r.rank_trend_change !== null && r.rank_trend_change !== undefined ? toInt(r.rank_trend_change) : null,
       stockCount: toInt(r.n_stocks),
       eligibleCount: toInt(r.n_eligible),
       adv: toInt(r.adv),
       dec: toInt(r.dec),
       unch: toInt(r.unch),
+      n20dHigh: toInt(r.n_20d_high),
+      n20dLow: toInt(r.n_20d_low),
       rsSts,
       rsStsPrev: rsPrev,
       rsDelta,
@@ -278,6 +302,13 @@ export async function getRankings(
       ret1m: toFiniteNumber(r.ret_1m),
       ret3m: toFiniteNumber(r.ret_3m),
       ret6m: toFiniteNumber(r.ret_6m),
+      median1d: toFiniteNumber(r.median_1d),
+      median1w: toFiniteNumber(r.median_1w),
+      median1m: toFiniteNumber(r.median_1m),
+      median3m: toFiniteNumber(r.median_3m),
+      median6m: toFiniteNumber(r.median_6m),
+      median1y: toFiniteNumber(r.median_1y),
+      medianYtd: toFiniteNumber(r.median_ytd),
       pctAbove20ema: toFiniteNumber(r.pct_above_20ema),
       pctAbove50dma: toFiniteNumber(r.pct_above_50dma),
       pctAbove200dma: toFiniteNumber(r.pct_above_200dma),
@@ -415,6 +446,7 @@ export async function getGroupConstituents(
            m.macro, m.sector, m.industry, m.basic_industry,
            m.is_liquid, m.is_new_listing, m.listing_sessions,
            m.close, m.ret_1d, m.ret_1w, m.ret_1m, m.ret_3m, m.ret_6m,
+           m.ret_1y, m.ret_ytd, m.at_20d_high, m.at_20d_low,
            m.pct_from_52w_high, m.adr_pct,
            m.above_20ema, m.above_50dma, m.above_200dma,
            m.rs_sts, m.rs_above_ema21, m.rs_rating,
@@ -445,6 +477,10 @@ export async function getGroupConstituents(
     ret1m: toFiniteNumber(r.ret_1m),
     ret3m: toFiniteNumber(r.ret_3m),
     ret6m: toFiniteNumber(r.ret_6m),
+    ret1y: toFiniteNumber(r.ret_1y),
+    retYtd: toFiniteNumber(r.ret_ytd),
+    at20dHigh: r.at_20d_high === null || r.at_20d_high === undefined ? null : Boolean(r.at_20d_high),
+    at20dLow: r.at_20d_low === null || r.at_20d_low === undefined ? null : Boolean(r.at_20d_low),
     pctFrom52wHigh: toFiniteNumber(r.pct_from_52w_high),
     adrPct: toFiniteNumber(r.adr_pct),
     above20ema: r.above_20ema === null ? null : Boolean(r.above_20ema),

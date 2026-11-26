@@ -20,6 +20,7 @@ from pipeline.industry_strength import (
     ComputedIndustrySnapshot,
     METHODOLOGY_VERSION,
     compute_industry_strength_snapshot,
+    prepare_stock_arrays,
 )
 
 logger = logging.getLogger("pipeline.industry_publish")
@@ -126,31 +127,16 @@ def publish_industry_snapshot(
             if snapshot.daily_strength_rows:
                 str_tuples = [
                     (
-                        r["trade_date"],
-                        r["group_id"],
-                        r["universe"],
-                        r["n_stocks"],
-                        r["n_eligible"],
-                        r["adv"],
-                        r["dec"],
-                        r["unch"],
-                        r["ret_1d"],
-                        r["ret_1w"],
-                        r["ret_1m"],
-                        r["ret_3m"],
-                        r["ret_6m"],
-                        r["rs_sts"],
-                        r["rs_sts_prev"],
-                        r["rs_line"],
-                        r["rs_above_ema21"],
-                        r["pct_above_20ema"],
-                        r["pct_above_50dma"],
-                        r["pct_above_200dma"],
-                        r["n_valid_20ema"],
-                        r["n_valid_50dma"],
-                        r["n_valid_200dma"],
-                        r["mcap_cr"],
-                        r["rank"],
+                        r["trade_date"], r["group_id"], r["universe"], r["n_stocks"], r["n_eligible"],
+                        r["adv"], r["dec"], r["unch"], r.get("n_20d_high", 0), r.get("n_20d_low", 0),
+                        r["ret_1d"], r["ret_1w"], r["ret_1m"], r["ret_3m"], r["ret_6m"],
+                        r.get("median_1d"), r.get("median_1w"), r.get("median_1m"),
+                        r.get("median_3m"), r.get("median_6m"), r.get("median_1y"), r.get("median_ytd"),
+                        r["rs_sts"], r["rs_sts_prev"], r["rs_line"], r["rs_above_ema21"],
+                        r["pct_above_20ema"], r["pct_above_50dma"], r["pct_above_200dma"],
+                        r["n_valid_20ema"], r["n_valid_50dma"], r["n_valid_200dma"],
+                        r["mcap_cr"], r["rank"],
+                        r.get("rank_trend"), r.get("rank_trend_prev5"), r.get("rank_trend_change"),
                     )
                     for r in snapshot.daily_strength_rows
                 ]
@@ -159,10 +145,13 @@ def publish_industry_snapshot(
                     """
                     INSERT INTO daily_industry_strength (
                         trade_date, group_id, universe, n_stocks, n_eligible,
-                        adv, dec, unch, ret_1d, ret_1w, ret_1m, ret_3m, ret_6m,
+                        adv, dec, unch, n_20d_high, n_20d_low,
+                        ret_1d, ret_1w, ret_1m, ret_3m, ret_6m,
+                        median_1d, median_1w, median_1m, median_3m, median_6m, median_1y, median_ytd,
                         rs_sts, rs_sts_prev, rs_line, rs_above_ema21,
                         pct_above_20ema, pct_above_50dma, pct_above_200dma,
-                        n_valid_20ema, n_valid_50dma, n_valid_200dma, mcap_cr, rank
+                        n_valid_20ema, n_valid_50dma, n_valid_200dma, mcap_cr, rank,
+                        rank_trend, rank_trend_prev5, rank_trend_change
                     ) VALUES %s
                     ON CONFLICT (trade_date, group_id, universe) DO UPDATE SET
                         n_stocks = EXCLUDED.n_stocks,
@@ -170,11 +159,20 @@ def publish_industry_snapshot(
                         adv = EXCLUDED.adv,
                         dec = EXCLUDED.dec,
                         unch = EXCLUDED.unch,
+                        n_20d_high = EXCLUDED.n_20d_high,
+                        n_20d_low = EXCLUDED.n_20d_low,
                         ret_1d = EXCLUDED.ret_1d,
                         ret_1w = EXCLUDED.ret_1w,
                         ret_1m = EXCLUDED.ret_1m,
                         ret_3m = EXCLUDED.ret_3m,
                         ret_6m = EXCLUDED.ret_6m,
+                        median_1d = EXCLUDED.median_1d,
+                        median_1w = EXCLUDED.median_1w,
+                        median_1m = EXCLUDED.median_1m,
+                        median_3m = EXCLUDED.median_3m,
+                        median_6m = EXCLUDED.median_6m,
+                        median_1y = EXCLUDED.median_1y,
+                        median_ytd = EXCLUDED.median_ytd,
                         rs_sts = EXCLUDED.rs_sts,
                         rs_sts_prev = EXCLUDED.rs_sts_prev,
                         rs_line = EXCLUDED.rs_line,
@@ -186,7 +184,10 @@ def publish_industry_snapshot(
                         n_valid_50dma = EXCLUDED.n_valid_50dma,
                         n_valid_200dma = EXCLUDED.n_valid_200dma,
                         mcap_cr = EXCLUDED.mcap_cr,
-                        rank = EXCLUDED.rank;
+                        rank = EXCLUDED.rank,
+                        rank_trend = EXCLUDED.rank_trend,
+                        rank_trend_prev5 = EXCLUDED.rank_trend_prev5,
+                        rank_trend_change = EXCLUDED.rank_trend_change;
                     """,
                     str_tuples,
                     page_size=1000,
@@ -196,36 +197,13 @@ def publish_industry_snapshot(
             if snapshot.stock_metric_rows:
                 sm_tuples = [
                     (
-                        snapshot_id,
-                        r["trade_date"],
-                        r["token"],
-                        r["symbol"],
-                        r["name"],
-                        r["isin"],
-                        r["macro"],
-                        r["sector"],
-                        r["industry"],
-                        r["basic_industry"],
-                        r["in_universe"],
-                        r["is_liquid"],
-                        r["is_new_listing"],
-                        r["listing_sessions"],
-                        r["close"],
-                        r["ret_1d"],
-                        r["ret_1w"],
-                        r["ret_1m"],
-                        r["ret_3m"],
-                        r["ret_6m"],
-                        r["pct_from_52w_high"],
-                        r["adr_pct"],
-                        r["above_20ema"],
-                        r["above_50dma"],
-                        r["above_200dma"],
-                        r["rs_sts"],
-                        r["rs_above_ema21"],
-                        r["rs_rating"],
-                        r["avg_turnover_cr"],
-                        r["mcap_cr"],
+                        snapshot_id, r["trade_date"], r["token"], r["symbol"], r["name"], r["isin"],
+                        r["macro"], r["sector"], r["industry"], r["basic_industry"],
+                        r["in_universe"], r["is_liquid"], r["is_new_listing"], r["listing_sessions"],
+                        r["close"], r["ret_1d"], r["ret_1w"], r["ret_1m"], r["ret_3m"], r["ret_6m"],
+                        r.get("ret_1y"), r.get("ret_ytd"), r.get("at_20d_high"), r.get("at_20d_low"),
+                        r["pct_from_52w_high"], r["adr_pct"], r["above_20ema"], r["above_50dma"], r["above_200dma"],
+                        r["rs_sts"], r["rs_above_ema21"], r["rs_rating"], r["avg_turnover_cr"], r["mcap_cr"],
                     )
                     for r in snapshot.stock_metric_rows
                 ]
@@ -237,6 +215,7 @@ def publish_industry_snapshot(
                         macro, sector, industry, basic_industry,
                         in_universe, is_liquid, is_new_listing, listing_sessions,
                         close, ret_1d, ret_1w, ret_1m, ret_3m, ret_6m,
+                        ret_1y, ret_ytd, at_20d_high, at_20d_low,
                         pct_from_52w_high, adr_pct, above_20ema, above_50dma, above_200dma,
                         rs_sts, rs_above_ema21, rs_rating, avg_turnover_cr, mcap_cr
                     ) VALUES %s
@@ -445,6 +424,32 @@ def run_industry_strength_job(
             mcap_by_symbol=mcap_map,
             as_of_date=as_of_date,
         )
+        # Populate rank_trend_prev5 and rank_trend_change from 5 sessions prior
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT trade_date::text
+                FROM daily_industry_strength
+                WHERE trade_date < %s
+                ORDER BY trade_date DESC
+                LIMIT 5;
+                """,
+                (snapshot.trade_date,),
+            )
+            prior_dates = [str(r[0]).split("T")[0] for r in cur.fetchall()]
+            if len(prior_dates) >= 5:
+                prev5_date = prior_dates[4]
+                cur.execute(
+                    "SELECT group_id, universe, rank_trend FROM daily_industry_strength WHERE trade_date = %s;",
+                    (prev5_date,),
+                )
+                prev5_map = {(r[0], r[1]): r[2] for r in cur.fetchall() if r[2] is not None}
+                for row in snapshot.daily_strength_rows:
+                    p5 = prev5_map.get((row["group_id"], row["universe"]))
+                    row["rank_trend_prev5"] = p5
+                    if p5 is not None and row.get("rank_trend") is not None:
+                        row["rank_trend_change"] = int(p5) - int(row["rank_trend"])
+
         pub_res = publish_industry_snapshot(snapshot, conn=conn)
         try:
             liquid_tokens = [
@@ -465,11 +470,12 @@ def backfill_industry_strength(
     df_ohlcv,
     conn=None,
     from_date: Optional[str] = None,
-    sessions: int = 125,
+    sessions: int = 250,
 ) -> Dict[str, Any]:
     """
-    Backfill daily_industry_strength across historical sessions (for RotationChart history)
-    and publish the latest completed snapshot atomically.
+    Backfill daily_industry_strength across historical sessions (default 250)
+    with rank_trend, rank_trend_prev5, rank_trend_change, 20D H/L, and medians,
+    then publish the latest completed snapshot atomically.
     """
     should_close = False
     if conn is None:
@@ -520,27 +526,37 @@ def backfill_industry_strength(
         if not target_dates:
             return {"status": "skipped", "reason": "no_target_dates"}
 
-        all_groups: Dict[str, Dict[str, Any]] = {}
-        all_strength_rows: List[Dict[str, Any]] = []
-        latest_snap: Optional[ComputedIndustrySnapshot] = None
-
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1;")
-            # Close idle connection while computing across sessions; reopen fresh for publish
         if should_close:
             conn.close()
             conn = None
 
+        prepared = prepare_stock_arrays(df_ohlcv, classifications)
+        all_groups: Dict[str, Dict[str, Any]] = {}
+        all_strength_rows: List[Dict[str, Any]] = []
+        latest_snap: Optional[ComputedIndustrySnapshot] = None
+        rank_history: Dict[tuple, List[Optional[int]]] = {}
+
         for d in target_dates:
             snap = compute_industry_strength_snapshot(
-                df_ohlcv=df_ohlcv,
+                df_ohlcv=None,
                 classifications=classifications,
                 bench_series=bench_series,
                 mcap_by_symbol=mcap_map,
                 as_of_date=d,
+                prepared_stocks=prepared,
             )
             for g in snap.groups:
                 all_groups[g["group_id"]] = g
+            for row in snap.daily_strength_rows:
+                key = (row["group_id"], row["universe"])
+                hist = rank_history.setdefault(key, [])
+                cur_rt = row.get("rank_trend")
+                if len(hist) >= 5:
+                    p5 = hist[-5]
+                    row["rank_trend_prev5"] = p5
+                    if p5 is not None and cur_rt is not None:
+                        row["rank_trend_change"] = int(p5) - int(cur_rt)
+                hist.append(cur_rt)
             all_strength_rows.extend(snap.daily_strength_rows)
             latest_snap = snap
 
@@ -580,16 +596,24 @@ def backfill_industry_strength(
                     """
                     INSERT INTO daily_industry_strength (
                         trade_date, group_id, universe, n_stocks, n_eligible,
-                        adv, dec, unch, ret_1d, ret_1w, ret_1m, ret_3m, ret_6m,
+                        adv, dec, unch, n_20d_high, n_20d_low,
+                        ret_1d, ret_1w, ret_1m, ret_3m, ret_6m,
+                        median_1d, median_1w, median_1m, median_3m, median_6m, median_1y, median_ytd,
                         rs_sts, rs_sts_prev, rs_line, rs_above_ema21,
                         pct_above_20ema, pct_above_50dma, pct_above_200dma,
-                        n_valid_20ema, n_valid_50dma, n_valid_200dma, mcap_cr, rank
+                        n_valid_20ema, n_valid_50dma, n_valid_200dma, mcap_cr, rank,
+                        rank_trend, rank_trend_prev5, rank_trend_change
                     ) VALUES %s
                     ON CONFLICT (trade_date, group_id, universe) DO UPDATE SET
                         n_stocks = EXCLUDED.n_stocks, n_eligible = EXCLUDED.n_eligible,
                         adv = EXCLUDED.adv, dec = EXCLUDED.dec, unch = EXCLUDED.unch,
+                        n_20d_high = EXCLUDED.n_20d_high, n_20d_low = EXCLUDED.n_20d_low,
                         ret_1d = EXCLUDED.ret_1d, ret_1w = EXCLUDED.ret_1w, ret_1m = EXCLUDED.ret_1m,
                         ret_3m = EXCLUDED.ret_3m, ret_6m = EXCLUDED.ret_6m,
+                        median_1d = EXCLUDED.median_1d, median_1w = EXCLUDED.median_1w,
+                        median_1m = EXCLUDED.median_1m, median_3m = EXCLUDED.median_3m,
+                        median_6m = EXCLUDED.median_6m, median_1y = EXCLUDED.median_1y,
+                        median_ytd = EXCLUDED.median_ytd,
                         rs_sts = EXCLUDED.rs_sts, rs_sts_prev = EXCLUDED.rs_sts_prev,
                         rs_line = EXCLUDED.rs_line, rs_above_ema21 = EXCLUDED.rs_above_ema21,
                         pct_above_20ema = EXCLUDED.pct_above_20ema,
@@ -598,16 +622,23 @@ def backfill_industry_strength(
                         n_valid_20ema = EXCLUDED.n_valid_20ema,
                         n_valid_50dma = EXCLUDED.n_valid_50dma,
                         n_valid_200dma = EXCLUDED.n_valid_200dma,
-                        mcap_cr = EXCLUDED.mcap_cr, rank = EXCLUDED.rank;
+                        mcap_cr = EXCLUDED.mcap_cr, rank = EXCLUDED.rank,
+                        rank_trend = EXCLUDED.rank_trend,
+                        rank_trend_prev5 = EXCLUDED.rank_trend_prev5,
+                        rank_trend_change = EXCLUDED.rank_trend_change;
                     """,
                     [
                         (
                             r["trade_date"], r["group_id"], r["universe"], r["n_stocks"], r["n_eligible"],
-                            r["adv"], r["dec"], r["unch"], r["ret_1d"], r["ret_1w"], r["ret_1m"],
-                            r["ret_3m"], r["ret_6m"], r["rs_sts"], r["rs_sts_prev"], r["rs_line"],
+                            r["adv"], r["dec"], r["unch"], r.get("n_20d_high", 0), r.get("n_20d_low", 0),
+                            r["ret_1d"], r["ret_1w"], r["ret_1m"], r["ret_3m"], r["ret_6m"],
+                            r.get("median_1d"), r.get("median_1w"), r.get("median_1m"),
+                            r.get("median_3m"), r.get("median_6m"), r.get("median_1y"), r.get("median_ytd"),
+                            r["rs_sts"], r["rs_sts_prev"], r["rs_line"],
                             r["rs_above_ema21"], r["pct_above_20ema"], r["pct_above_50dma"],
                             r["pct_above_200dma"], r["n_valid_20ema"], r["n_valid_50dma"],
                             r["n_valid_200dma"], r["mcap_cr"], r["rank"],
+                            r.get("rank_trend"), r.get("rank_trend_prev5"), r.get("rank_trend_change"),
                         )
                         for r in all_strength_rows
                     ],

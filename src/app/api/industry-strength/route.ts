@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       search: searchParams.get("search"),
       sortBy: searchParams.get("sortBy"),
       sortDir: searchParams.get("sortDir"),
+      showSmall: searchParams.get("showSmall") === "true",
     });
 
     return NextResponse.json(payload, {

@@ -11,6 +11,7 @@ Formulas & rules ported from dopawire/nse-relative-strength (MIT License):
 
 import hashlib
 import logging
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -156,6 +157,87 @@ def compute_period_return(
     return ((b / a) - 1.0) * 100.0 if a > 0 else None
 
 
+def compute_ytd_return(
+    dates: List[str],
+    closes: np.ndarray,
+    latest_date: str,
+) -> Optional[float]:
+    """% change from last close of prior calendar year to latest close; None if break or listed this year."""
+    if len(dates) < 2:
+        return None
+    cur_year = latest_date[:4]
+    base_idx = None
+    for idx in range(len(dates) - 1, -1, -1):
+        if dates[idx][:4] < cur_year:
+            base_idx = idx
+            break
+    if base_idx is None or base_idx >= len(dates) - 1:
+        return None
+    for i in range(base_idx + 1, len(dates)):
+        a, b = closes[i - 1], closes[i]
+        if a > 0:
+            r = b / a
+            if r > 1.0 + CORP_ACTION_JUMP or r < 1.0 - CORP_ACTION_JUMP:
+                return None
+    a = float(closes[base_idx])
+    b = float(closes[-1])
+    return ((b / a) - 1.0) * 100.0 if a > 0 else None
+
+
+def compute_trend_ranks(
+    rows_for_level: List[Dict[str, Any]],
+    labels_by_gid: Dict[str, str],
+) -> None:
+    """
+    Blog-style Trend Rank across groups of the same level with >= 5 eligible stocks:
+      trend = mean(percentrank_inc(median_1m), percentrank_inc(median_3m), percentrank_inc(median_6m))
+      breadth = mean(percentrank_inc(pct_above_50dma), percentrank_inc(pct_above_200dma))
+      leaders = percentrank_inc(leader_share)  [eligible stocks with rs_rating >= 70]
+      final = (trend + breadth + leaders) / 3
+    Sets `rank_trend` (1..N) in-place; groups with < 5 eligible stocks get None.
+    Never persists or exposes `final`.
+    """
+    eligible = [r for r in rows_for_level if (r.get("n_eligible") or 0) >= 5]
+    for r in rows_for_level:
+        r["rank_trend"] = None
+    if not eligible:
+        return
+
+    def rank_field(field: str) -> Dict[str, float]:
+        vals = [float(r[field]) for r in eligible if r.get(field) is not None]
+        if not vals:
+            return {}
+        return {
+            r["group_id"]: percentrank_inc(vals, float(r[field]))
+            for r in eligible
+            if r.get(field) is not None
+        }
+
+    r_1m = rank_field("median_1m")
+    r_3m = rank_field("median_3m")
+    r_6m = rank_field("median_6m")
+    r_50 = rank_field("pct_above_50dma")
+    r_200 = rank_field("pct_above_200dma")
+    r_lead = rank_field("_leader_share")
+
+    scored: List[Tuple[float, int, str, Dict[str, Any]]] = []
+    for r in eligible:
+        gid = r["group_id"]
+        t_parts = [m[gid] for m in (r_1m, r_3m, r_6m) if gid in m]
+        b_parts = [m[gid] for m in (r_50, r_200) if gid in m]
+        if not t_parts or not b_parts or gid not in r_lead:
+            continue
+        trend = sum(t_parts) / len(t_parts)
+        breadth = sum(b_parts) / len(b_parts)
+        leaders = r_lead[gid]
+        final = (trend + breadth + leaders) / 3.0
+        scored.append((-final, -(r.get("n_stocks") or 0), labels_by_gid.get(gid, gid), r))
+
+    scored.sort(key=lambda item: (item[0], item[1], item[2]))
+    for idx, (_neg_f, _neg_n, _lbl, r) in enumerate(scored, start=1):
+        r["rank_trend"] = idx
+
+
 def equal_weight_rs_series(
     member_maps: List[Dict[str, float]],
     bench_map: Dict[str, float],
@@ -286,33 +368,62 @@ def _build_group_hierarchy(
     return list(groups_by_id.values()), key_to_id
 
 
-def compute_industry_strength_snapshot(
+def prepare_stock_arrays(
     df_ohlcv: pd.DataFrame,
+    classifications: Dict[int, Dict[str, Any]],
+) -> Dict[int, Dict[str, Any]]:
+    """Pre-extract sorted per-token numpy arrays once for fast multi-date backfills."""
+    df = df_ohlcv.copy()
+    df["trade_date"] = df["trade_date"].astype(str).str.slice(0, 10)
+    df = df.sort_values(["token", "trade_date"])
+
+    prepared: Dict[int, Dict[str, Any]] = {}
+    for token, grp in df.groupby("token", sort=False):
+        tok_int = int(token)
+        cls_info = classifications.get(tok_int) or {}
+        dates = grp["trade_date"].tolist()
+        closes = grp["close"].to_numpy(dtype=float)
+        highs = grp["high"].to_numpy(dtype=float) if "high" in grp else closes
+        lows = grp["low"].to_numpy(dtype=float) if "low" in grp else closes
+        vols = grp["volume"].to_numpy(dtype=float) if "volume" in grp else np.zeros_like(closes)
+        prepared[tok_int] = {
+            "token": tok_int,
+            "symbol": str(grp["symbol"].iloc[-1]).strip().upper(),
+            "dates": dates,
+            "closes": closes,
+            "highs": highs,
+            "lows": lows,
+            "vols": vols,
+            "cls": cls_info,
+        }
+    return prepared
+
+
+def compute_industry_strength_snapshot(
+    df_ohlcv: Optional[pd.DataFrame],
     classifications: Dict[int, Dict[str, Any]],
     bench_series: Dict[str, float],
     mcap_by_symbol: Optional[Dict[str, float]] = None,
     as_of_date: Optional[str] = None,
+    prepared_stocks: Optional[Dict[int, Dict[str, Any]]] = None,
 ) -> ComputedIndustrySnapshot:
     """
     Compute per-stock metrics once and aggregate across all 4 hierarchy levels
     for both 'all' and 'liquid' universes on `as_of_date` (or max available date).
     """
-    if df_ohlcv is None or df_ohlcv.empty:
-        raise ValueError("df_ohlcv is empty")
     if not bench_series:
         raise ValueError("bench_series (NIFTY 500) is required for RS_STS computation")
 
+    if prepared_stocks is None:
+        if df_ohlcv is None or df_ohlcv.empty:
+            raise ValueError("df_ohlcv is empty")
+        prepared_stocks = prepare_stock_arrays(df_ohlcv, classifications)
+
     mcap_map = mcap_by_symbol or {}
-    df = df_ohlcv.copy()
-    df["trade_date"] = df["trade_date"].astype(str).str.slice(0, 10)
     if as_of_date:
-        df = df[df["trade_date"] <= as_of_date]
-
-    if df.empty:
-        raise ValueError("No OHLCV rows up to as_of_date")
-
-    latest_date = str(df["trade_date"].max())
-    df = df.sort_values(["token", "trade_date"])
+        latest_date = as_of_date[:10]
+    else:
+        latest_date = max(d for item in prepared_stocks.values() for d in item["dates"][-1:])
 
     # Market calendar aligned to benchmark dates <= latest_date
     calendar = sorted(d for d in bench_series.keys() if d <= latest_date)
@@ -326,19 +437,20 @@ def compute_industry_strength_snapshot(
     stock_close_maps: Dict[int, Dict[str, float]] = {}
     rs_rating_scores: Dict[int, float] = {}
 
-    for token, grp in df.groupby("token", sort=False):
-        tok_int = int(token)
-        dates = grp["trade_date"].tolist()
-        if dates[-1] != latest_date:
-            continue  # only stocks active on as_of_date enter snapshot
+    for tok_int, item in prepared_stocks.items():
+        all_dates = item["dates"]
+        end_pos = bisect_right(all_dates, latest_date)
+        if end_pos == 0 or all_dates[end_pos - 1] != latest_date:
+            continue  # only stocks active on latest_date enter snapshot
 
-        closes = grp["close"].to_numpy(dtype=float)
-        highs = grp["high"].to_numpy(dtype=float) if "high" in grp else closes
-        lows = grp["low"].to_numpy(dtype=float) if "low" in grp else closes
-        vols = grp["volume"].to_numpy(dtype=float) if "volume" in grp else np.zeros_like(closes)
+        dates = all_dates[:end_pos]
+        closes = item["closes"][:end_pos]
+        highs = item["highs"][:end_pos]
+        lows = item["lows"][:end_pos]
+        vols = item["vols"][:end_pos]
 
-        sym = str(grp["symbol"].iloc[-1]).strip().upper()
-        cls_info = classifications.get(tok_int) or {}
+        sym = item["symbol"]
+        cls_info = item["cls"]
         macro = cls_info.get("macro")
         sector = cls_info.get("sector")
         industry = cls_info.get("industry")
@@ -346,7 +458,7 @@ def compute_industry_strength_snapshot(
         name = cls_info.get("name") or sym
         isin = cls_info.get("isin")
 
-        close_map = {d: float(c) for d, c in zip(dates, closes) if c > 0}
+        close_map = {d: float(c) for d, c in zip(dates[-RS_WINDOW - 5 :], closes[-RS_WINDOW - 5 :]) if c > 0}
         stock_close_maps[tok_int] = close_map
 
         last_close = float(closes[-1])
@@ -356,11 +468,11 @@ def compute_industry_strength_snapshot(
         # Corporate-action discontinuity guard
         brk_date = last_break_index(closes, dates, lookback=252)
         if brk_date:
-            post_mask = [d >= brk_date for d in dates]
-            post_closes = closes[post_mask]
-            post_highs = highs[post_mask]
-            post_lows = lows[post_mask]
-            post_dates = [d for d, m in zip(dates, post_mask) if m]
+            brk_idx = dates.index(brk_date)
+            post_closes = closes[brk_idx:]
+            post_highs = highs[brk_idx:]
+            post_lows = lows[brk_idx:]
+            post_dates = dates[brk_idx:]
         else:
             post_closes = closes
             post_highs = highs
@@ -370,6 +482,10 @@ def compute_industry_strength_snapshot(
         above_20ema = sma_seeded_ema_flag(post_closes, 20)
         above_50dma = sma_seeded_ema_flag(post_closes, 50)
         above_200dma = sma_seeded_ema_flag(post_closes, 200)
+
+        # 20D High / Low on full per-token sequence
+        at_20d_high = bool(len(highs) >= 20 and last_close >= float(np.max(highs[-20:])))
+        at_20d_low = bool(len(lows) >= 20 and last_close <= float(np.min(lows[-20:])))
 
         # 52W off-high from trailing 252 intraday highs (post corporate break)
         hi_window = post_highs[-252:]
@@ -383,6 +499,8 @@ def compute_industry_strength_snapshot(
         ret_1m = compute_period_return(dates, closes, 20, calendar)
         ret_3m = compute_period_return(dates, closes, 63, calendar)
         ret_6m = compute_period_return(dates, closes, 126, calendar)
+        ret_1y = compute_period_return(dates, closes, 252, calendar)
+        ret_ytd = compute_ytd_return(dates, closes, latest_date)
 
         # Avg turnover in Rs Cr (20 sessions)
         if len(vols) >= 10:
@@ -393,7 +511,7 @@ def compute_industry_strength_snapshot(
 
         # RS line EMA21 on common benchmark dates (post break)
         common_ratios = np.array(
-            [close_map[d] / bench_series[d] for d in post_dates if d in bench_series and bench_series[d] > 0],
+            [float(c) / bench_series[d] for d, c in zip(post_dates, post_closes) if d in bench_series and bench_series[d] > 0],
             dtype=float,
         )
         rs_above_ema21 = compute_rs_ema_flag(common_ratios, period=RS_EMA_PERIOD)
@@ -402,7 +520,7 @@ def compute_industry_strength_snapshot(
         first_date = dates[0]
         is_new_listing = bool(len(ref_dates) > 0 and first_date > ref_dates[0])
         eval_dates = [d for d in ref_dates if d >= first_date] if is_new_listing else ref_dates
-        listing_sessions = len([d for d in dates if d in bench_series])
+        listing_sessions = len([d for d in dates[-RS_WINDOW - 5 :] if d in bench_series])
 
         rs_sts = None
         if len(eval_dates) >= 2 and all(d in close_map for d in eval_dates):
@@ -438,6 +556,10 @@ def compute_industry_strength_snapshot(
             "ret_1m": round(ret_1m, 4) if ret_1m is not None else None,
             "ret_3m": round(ret_3m, 4) if ret_3m is not None else None,
             "ret_6m": round(ret_6m, 4) if ret_6m is not None else None,
+            "ret_1y": round(ret_1y, 4) if ret_1y is not None else None,
+            "ret_ytd": round(ret_ytd, 4) if ret_ytd is not None else None,
+            "at_20d_high": at_20d_high,
+            "at_20d_low": at_20d_low,
             "pct_from_52w_high": round(pct_from_52w_high, 2) if pct_from_52w_high is not None else None,
             "adr_pct": round(adr, 2) if adr is not None else None,
             "above_20ema": above_20ema,
@@ -483,13 +605,14 @@ def compute_industry_strength_snapshot(
 
         level_rows_for_rank: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         group_level_by_id = {g["group_id"]: g["level"] for g in groups}
+        group_label_by_id = {g["group_id"]: g["label"] for g in groups}
 
         for gid, members in members_by_group.items():
-            eligible_series = [
-                stock_close_maps[st["token"]]
-                for st in members
+            eligible_members = [
+                st for st in members
                 if not st["is_new_listing"] and not st["_has_break_in_window"]
             ]
+            eligible_series = [stock_close_maps[st["token"]] for st in eligible_members]
             rs_series, n_elig = equal_weight_rs_series(eligible_series, bench_series, ref_dates)
             rs_sts = (percentrank_inc(rs_series, rs_series[-1]) * 100.0) if rs_series else None
             rs_line_val = rs_series[-1] if rs_series else None
@@ -508,6 +631,10 @@ def compute_industry_strength_snapshot(
                 vals = [st[field] for st in members if st[field] is not None]
                 return round(sum(vals) / len(vals), 4) if vals else None
 
+            def median_valid(field: str) -> Optional[float]:
+                vals = [float(st[field]) for st in members if st[field] is not None]
+                return round(float(np.median(vals)), 4) if vals else None
+
             def pct_true(field: str) -> Tuple[Optional[float], int]:
                 vals = [st[field] for st in members if st[field] is not None]
                 if not vals:
@@ -517,6 +644,11 @@ def compute_industry_strength_snapshot(
             adv = sum(1 for st in members if st["ret_1d"] is not None and st["ret_1d"] > 0)
             dec = sum(1 for st in members if st["ret_1d"] is not None and st["ret_1d"] < 0)
             unch = sum(1 for st in members if st["ret_1d"] is not None and st["ret_1d"] == 0)
+            n_20d_high = sum(1 for st in members if st.get("at_20d_high"))
+            n_20d_low = sum(1 for st in members if st.get("at_20d_low"))
+
+            n_leaders = sum(1 for st in eligible_members if (st.get("rs_rating") or 0) >= 70)
+            leader_share = (n_leaders / n_elig) if n_elig > 0 else None
 
             pct_20, n_20 = pct_true("above_20ema")
             pct_50, n_50 = pct_true("above_50dma")
@@ -533,11 +665,20 @@ def compute_industry_strength_snapshot(
                 "adv": adv,
                 "dec": dec,
                 "unch": unch,
+                "n_20d_high": n_20d_high,
+                "n_20d_low": n_20d_low,
                 "ret_1d": mean_valid("ret_1d"),
                 "ret_1w": mean_valid("ret_1w"),
                 "ret_1m": mean_valid("ret_1m"),
                 "ret_3m": mean_valid("ret_3m"),
                 "ret_6m": mean_valid("ret_6m"),
+                "median_1d": median_valid("ret_1d"),
+                "median_1w": median_valid("ret_1w"),
+                "median_1m": median_valid("ret_1m"),
+                "median_3m": median_valid("ret_3m"),
+                "median_6m": median_valid("ret_6m"),
+                "median_1y": median_valid("ret_1y"),
+                "median_ytd": median_valid("ret_ytd"),
                 "rs_sts": round(rs_sts, 4) if rs_sts is not None else None,
                 "rs_sts_prev": round(rs_sts_prev, 4) if rs_sts_prev is not None else None,
                 "rs_line": round(rs_line_val, 6) if rs_line_val is not None else None,
@@ -550,15 +691,23 @@ def compute_industry_strength_snapshot(
                 "n_valid_200dma": n_200,
                 "mcap_cr": round(sum(mcaps), 2) if mcaps else None,
                 "rank": None,
+                "rank_trend": None,
+                "rank_trend_prev5": None,
+                "rank_trend_change": None,
+                "_leader_share": leader_share,
             }
             level_rows_for_rank[group_level_by_id[gid]].append(row_dict)
 
-        # Rank groups per level by rs_sts desc (then ret_1m desc, label asc)
+        # Rank groups per level by rs_sts desc AND compute blog-style rank_trend
         for lvl, rows_list in level_rows_for_rank.items():
             rankable = [r for r in rows_list if r["rs_sts"] is not None]
             rankable.sort(key=lambda r: (-r["rs_sts"], -(r["ret_1m"] or -999.0), r["group_id"]))
             for idx, r in enumerate(rankable, start=1):
                 r["rank"] = idx
+
+            compute_trend_ranks(rows_list, group_label_by_id)
+            for r in rows_list:
+                r.pop("_leader_share", None)
             daily_strength_rows.extend(rows_list)
 
     # Clean internal keys from stock_rows
