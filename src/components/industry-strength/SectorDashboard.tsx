@@ -6,14 +6,16 @@ import {
   BreadcrumbItem,
   ClassificationLevel,
   ConstituentStockRow,
+  ExtendedPeriod,
   IndustryGroupRow,
   RankingsResponse,
   StrengthUniverse,
 } from "@/lib/industry-types";
+import { RankCycleMode, nextRankCycleState } from "@/lib/industry-formatters";
 import PageContainer, { SectionHeader } from "@/components/shared/PageContainer";
 import { BaseCard } from "@/components/ui/card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import ClassificationTabs, { QuickPreset } from "./ClassificationTabs";
+import ClassificationTabs from "./ClassificationTabs";
 import SummaryCards from "./SummaryCards";
 import RankingTable from "./RankingTable";
 import GroupDetails from "./GroupDetails";
@@ -34,11 +36,14 @@ const UNIVERSE_OPTIONS: { id: StrengthUniverse; label: string }[] = [
 
 export default function SectorDashboard() {
   const [level, setLevel] = useState<ClassificationLevel>("industry");
+  const [period, setPeriod] = useState<ExtendedPeriod>("1m");
   const [universe, setUniverse] = useState<StrengthUniverse>("all");
-  const [preset, setPreset] = useState<QuickPreset>("all");
+  const [showSmall, setShowSmall] = useState(false);
+  const [moreColumns, setMoreColumns] = useState(false);
+  const [rankMode, setRankMode] = useState<RankCycleMode>("normal");
   const [parentId, setParentId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("rank");
+  const [sortBy, setSortBy] = useState("rank_trend");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showGuide, setShowGuide] = useState(false);
 
@@ -53,6 +58,26 @@ export default function SectorDashboard() {
 
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const lastRowTriggerRef = useRef<HTMLElement | null>(null);
+
+  // Restore "More columns" preference safely
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("industry_more_columns");
+      if (saved === "true") setMoreColumns(true);
+    } catch {
+      /* ignore storage access error */
+    }
+  }, []);
+
+  const handleMoreColumnsChange = (val: boolean) => {
+    setMoreColumns(val);
+    try {
+      window.localStorage.setItem("industry_more_columns", val ? "true" : "false");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const fetchRankings = useCallback(async () => {
     setLoading(true);
@@ -63,6 +88,7 @@ export default function SectorDashboard() {
         universe,
         sortBy,
         sortDir,
+        showSmall: showSmall ? "true" : "false",
       });
       if (parentId) qs.set("parentId", parentId);
       if (search.trim()) qs.set("search", search.trim());
@@ -83,13 +109,12 @@ export default function SectorDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [level, universe, parentId, search, sortBy, sortDir]);
+  }, [level, universe, showSmall, parentId, search, sortBy, sortDir]);
 
   useEffect(() => {
     fetchRankings();
   }, [fetchRankings]);
 
-  // Seed chart with top 3 groups once on initial load so the chart is immediately informative
   useEffect(() => {
     if (data?.groups && data.groups.length > 0 && chartGroups.length === 0) {
       setChartGroups(
@@ -98,20 +123,35 @@ export default function SectorDashboard() {
     }
   }, [data, chartGroups.length]);
 
-  const filteredGroups = useMemo(() => {
-    if (!data?.groups) return [];
-    if (preset === "all") return data.groups;
-    if (preset === "outperforming") {
-      return data.groups.filter((g) => g.rsAboveEma21 === true);
+  const has1yYtd = useMemo(() => {
+    if (!data?.groups || data.groups.length === 0) return true;
+    return data.groups.some((g) => g.median1y !== null || g.medianYtd !== null);
+  }, [data]);
+
+  const handleRankHeaderClick = () => {
+    const next = nextRankCycleState(rankMode);
+    setRankMode(next);
+    if (next === "normal") {
+      setSortBy("rank_trend");
+      setSortDir("asc");
+    } else if (next === "climbers") {
+      setSortBy("rank_trend_change");
+      setSortDir("desc");
+    } else {
+      setSortBy("rank_trend_change");
+      setSortDir("asc");
     }
-    if (preset === "improving") {
-      return data.groups.filter((g) => g.rsTrend === "improving");
+  };
+
+  const handleSortChange = (col: string) => {
+    setRankMode("normal");
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir(col === "rank_trend" || col === "label" ? "asc" : "desc");
     }
-    if (preset === "leaders") {
-      return data.groups.filter((g) => g.rsSts !== null && g.rsSts >= 75);
-    }
-    return data.groups;
-  }, [data, preset]);
+  };
 
   const handleLevelChange = (nextLevel: ClassificationLevel) => {
     setLevel(nextLevel);
@@ -143,26 +183,25 @@ export default function SectorDashboard() {
     }
   };
 
-  const handleSortChange = (col: string) => {
-    if (sortBy === col) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(col);
-      setSortDir(col === "rank" || col === "label" ? "asc" : "desc");
-    }
-  };
-
-  const handleSelectGroup = (groupId: string) => {
+  const handleSelectGroup = (groupId: string, triggerEl?: HTMLElement | null) => {
+    if (triggerEl) lastRowTriggerRef.current = triggerEl;
     setSelectedGroupId((cur) => {
       const next = cur === groupId ? null : groupId;
       if (next) {
         setTimeout(() => {
           detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }, 80);
+        }, 60);
       }
       return next;
     });
   };
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedGroupId(null);
+    setTimeout(() => {
+      lastRowTriggerRef.current?.focus();
+    }, 20);
+  }, []);
 
   const handleToggleChartGroup = (g: IndustryGroupRow) => {
     setChartGroups((prev) => {
@@ -180,10 +219,15 @@ export default function SectorDashboard() {
     });
   };
 
+  const selectedGroupMeta = useMemo(() => {
+    if (!selectedGroupId || !data?.groups) return null;
+    return data.groups.find((g) => g.groupId === selectedGroupId) || null;
+  }, [selectedGroupId, data]);
+
   if (loading && !data) {
     return (
       <PageContainer>
-        <div className="space-y-4 animate-pulse">
+        <div className="space-y-4">
           <div className="h-10 rounded-lg bg-bg-secondary border border-border" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[1, 2, 3, 4].map((i) => (
@@ -199,13 +243,13 @@ export default function SectorDashboard() {
   return (
     <PageContainer>
       <SectionHeader
-        title="Industries Relative Strength (RS_STS)"
-        info="4-level NSE taxonomy ranked by 26-session equal-weight RS_STS% vs NIFTY 500"
+        title="Industries Rotation & Trend Rank"
+        info="Trend Rank combines 1M/3M/6M trend, >50/>200 SMA breadth, and RS>=70 leader share"
         subtitle={
           data?.snapshotDate
-            ? `Snapshot: ${data.snapshotDate} · Coverage: ${data.coverage.classifiedStocks}/${
-                data.coverage.totalStocks
-              } (${data.coverage.coveragePct ?? "—"}%)`
+            ? `As of ${data.snapshotDate} · ${data.coverage.classifiedStocks.toLocaleString("en-IN")} classified, ${
+                data.coverage.coveragePct ?? "—"
+              }% NSE-verified`
             : "No completed snapshot available"
         }
         action={
@@ -219,21 +263,23 @@ export default function SectorDashboard() {
             <button
               type="button"
               onClick={() => setShowGuide((v) => !v)}
-              aria-label="Toggle RS_STS methodology guide"
-              className={`p-1.5 rounded-[6px] border cursor-pointer transition-colors ${
+              aria-label="How ranks work"
+              title="How ranks work"
+              className={`inline-flex items-center gap-1 h-7 px-2 rounded-[6px] border text-[11px] font-medium cursor-pointer ${
                 showGuide
                   ? "bg-primary-subtle border-accent-border text-primary"
                   : "border-border bg-surface text-text-secondary hover:text-text"
               }`}
             >
-              <HelpCircle className="w-4 h-4" />
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">How ranks work</span>
             </button>
             <button
               type="button"
               onClick={fetchRankings}
               disabled={loading}
               aria-label="Refresh rankings"
-              className="p-1.5 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer transition-colors"
+              className="p-1.5 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             </button>
@@ -243,23 +289,35 @@ export default function SectorDashboard() {
 
       {showGuide && (
         <BaseCard padding="p-3.5" bg="bg-bg-secondary">
-          <div className="text-[12px] text-text-secondary space-y-1">
-            <div className="font-semibold text-text">How RS_STS% Works</div>
+          <div className="text-[12px] text-text-secondary space-y-1.5">
+            <div className="font-semibold text-text">How Ranks Work</div>
             <p>
-              Each group builds a 26-session equal-weight index of full-window constituents (excluding
-              corporate-action jumps &gt;40% and fresh IPOs &lt;26 sessions) divided by NIFTY 500.{" "}
-              <strong className="text-text">RS_STS%</strong> is the percentile rank (0–100%) of the
-              latest RS value within that 26-session window. Click any row to inspect constituents or
-              use the chevron to drill down through Macro &rarr; Sector &rarr; Industry &rarr; Basic Industry.
+              Groups with &ge; 5 eligible stocks at the same level are ranked equally on three components:
+              <strong className="text-text"> Trend</strong> (mean percentile of 1M, 3M, and 6M median returns),
+              <strong className="text-text"> Breadth</strong> (mean percentile of % above 50 SMA and 200 SMA), and
+              <strong className="text-text"> Leaders</strong> (percentile of eligible stocks with RS Rating &ge; 70).
+              Rank order stays fixed across timeframe buttons (timeframe only updates the <strong className="text-text">MED</strong> column).
+            </p>
+            <p>
+              Rank change compares today&apos;s rank against 5 sessions ago (+ = climbed). In normal view, only moves &gt; 5 places are shown; click the <strong className="text-text">Rank</strong> header to cycle through Biggest Climbers and Biggest Fallers to inspect every move.
             </p>
           </div>
         </BaseCard>
       )}
 
       {error && (
-        <BaseCard padding="p-3" bg="bg-warning-bg" className="text-warning text-xs flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{error}{data ? " (showing last completed snapshot)" : ""}</span>
+        <BaseCard padding="p-3" bg="bg-warning-bg" className="text-warning text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}{data ? " (showing last completed snapshot)" : ""}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchRankings}
+            className="px-2.5 py-1 rounded bg-surface border border-border text-text font-medium cursor-pointer"
+          >
+            Retry
+          </button>
         </BaseCard>
       )}
 
@@ -273,8 +331,13 @@ export default function SectorDashboard() {
           <ClassificationTabs
             level={level}
             onLevelChange={handleLevelChange}
-            preset={preset}
-            onPresetChange={setPreset}
+            period={period}
+            onPeriodChange={setPeriod}
+            has1yYtd={has1yYtd}
+            showSmall={showSmall}
+            onShowSmallChange={setShowSmall}
+            moreColumns={moreColumns}
+            onMoreColumnsChange={handleMoreColumnsChange}
             breadcrumbs={data.breadcrumbs}
             onBreadcrumbSelect={handleBreadcrumbSelect}
             search={search}
@@ -282,13 +345,17 @@ export default function SectorDashboard() {
           />
 
           <RankingTable
-            groups={filteredGroups}
+            groups={data.groups}
             level={level}
+            period={period}
+            moreColumns={moreColumns}
+            rankMode={rankMode}
+            onRankHeaderClick={handleRankHeaderClick}
             sortBy={sortBy}
             sortDir={sortDir}
             onSortChange={handleSortChange}
             selectedGroupId={selectedGroupId}
-            onSelectGroup={(g) => handleSelectGroup(g.groupId)}
+            onSelectGroup={(g, el) => handleSelectGroup(g.groupId, el)}
             onDrillDown={handleDrillDown}
             chartGroupIds={chartGroups.map((g) => g.groupId)}
             onToggleChartGroup={handleToggleChartGroup}
@@ -299,7 +366,9 @@ export default function SectorDashboard() {
               <GroupDetails
                 groupId={selectedGroupId}
                 universe={universe}
-                onClose={() => setSelectedGroupId(null)}
+                groupRank={selectedGroupMeta?.rankTrend}
+                groupRankChange={selectedGroupMeta?.rankTrendChange}
+                onClose={handleCloseDrawer}
                 onSelectStock={(st) => setSelectedStock(st)}
               />
             </div>

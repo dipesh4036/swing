@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { ChevronRight, Search, X } from "lucide-react";
-import { BreadcrumbItem, ClassificationLevel } from "@/lib/industry-types";
+import { ChevronRight, Columns3, Search, X } from "lucide-react";
+import { BreadcrumbItem, ClassificationLevel, ExtendedPeriod } from "@/lib/industry-types";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 const LEVEL_OPTIONS: { id: ClassificationLevel; label: string }[] = [
@@ -12,20 +12,26 @@ const LEVEL_OPTIONS: { id: ClassificationLevel; label: string }[] = [
   { id: "basic_industry", label: "Basic Industry" },
 ];
 
-export type QuickPreset = "all" | "outperforming" | "improving" | "leaders";
-
-const PRESET_OPTIONS: { id: QuickPreset; label: string }[] = [
-  { id: "all", label: "All Groups" },
-  { id: "outperforming", label: "RS ≥ 21E" },
-  { id: "improving", label: "Improving" },
-  { id: "leaders", label: "Top RS (≥75%)" },
+const ALL_TIMEFRAME_OPTIONS: { id: ExtendedPeriod; label: string }[] = [
+  { id: "1d", label: "1D" },
+  { id: "1w", label: "1W" },
+  { id: "1m", label: "1M" },
+  { id: "3m", label: "3M" },
+  { id: "6m", label: "6M" },
+  { id: "1y", label: "1Y" },
+  { id: "ytd", label: "YTD" },
 ];
 
 interface ClassificationTabsProps {
   level: ClassificationLevel;
   onLevelChange: (level: ClassificationLevel) => void;
-  preset: QuickPreset;
-  onPresetChange: (preset: QuickPreset) => void;
+  period: ExtendedPeriod;
+  onPeriodChange: (period: ExtendedPeriod) => void;
+  has1yYtd?: boolean;
+  showSmall: boolean;
+  onShowSmallChange: (val: boolean) => void;
+  moreColumns: boolean;
+  onMoreColumnsChange: (val: boolean) => void;
   breadcrumbs: BreadcrumbItem[];
   onBreadcrumbSelect: (crumb: BreadcrumbItem | null) => void;
   search: string;
@@ -35,13 +41,22 @@ interface ClassificationTabsProps {
 export default function ClassificationTabs({
   level,
   onLevelChange,
-  preset,
-  onPresetChange,
+  period,
+  onPeriodChange,
+  has1yYtd = true,
+  showSmall,
+  onShowSmallChange,
+  moreColumns,
+  onMoreColumnsChange,
   breadcrumbs,
   onBreadcrumbSelect,
   search,
   onSearchChange,
 }: ClassificationTabsProps) {
+  const timeframeOptions = has1yYtd
+    ? ALL_TIMEFRAME_OPTIONS
+    : ALL_TIMEFRAME_OPTIONS.filter((t) => t.id !== "1y" && t.id !== "ytd");
+
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -53,33 +68,59 @@ export default function ClassificationTabs({
             size="md"
           />
           <SegmentedControl
-            options={PRESET_OPTIONS as never[]}
-            value={preset}
-            onChange={(val: QuickPreset) => onPresetChange(val)}
+            options={timeframeOptions as never[]}
+            value={period}
+            onChange={(val: ExtendedPeriod) => onPeriodChange(val)}
             size="sm"
           />
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <Search className="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search groups or path..."
-            aria-label="Filter classification groups"
-            className="w-full h-8 pl-8 pr-8 text-xs rounded-md bg-surface border border-border text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => onSearchChange("")}
-              aria-label="Clear group search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary cursor-pointer select-none px-2 py-1 rounded-[6px] border border-border bg-surface hover:bg-bg-hover">
+            <input
+              type="checkbox"
+              checked={showSmall}
+              onChange={(e) => onShowSmallChange(e.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary"
+            />
+            <span>Show small groups (&lt;5)</span>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => onMoreColumnsChange(!moreColumns)}
+            aria-pressed={moreColumns}
+            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[6px] border text-[11px] font-medium cursor-pointer ${
+              moreColumns
+                ? "bg-primary-subtle border-accent-border text-primary"
+                : "bg-surface border-border text-text-secondary hover:text-text hover:bg-bg-hover"
+            }`}
+          >
+            <Columns3 className="w-3.5 h-3.5" />
+            <span>More columns</span>
+          </button>
+
+          <div className="relative flex-1 sm:w-56">
+            <Search className="w-3.5 h-3.5 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search groups..."
+              aria-label="Filter classification groups"
+              className="w-full h-8 pl-8 pr-8 text-xs rounded-md bg-surface border border-border text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                aria-label="Clear group search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -88,7 +129,7 @@ export default function ClassificationTabs({
           <button
             type="button"
             onClick={() => onBreadcrumbSelect(null)}
-            className="px-2 py-0.5 rounded-[4px] bg-bg-secondary border border-border text-text-secondary hover:text-text cursor-pointer transition-colors"
+            className="px-2 py-0.5 rounded-[4px] bg-bg-secondary border border-border text-text-secondary hover:text-text cursor-pointer"
           >
             All NSE
           </button>
@@ -98,7 +139,7 @@ export default function ClassificationTabs({
               <button
                 type="button"
                 onClick={() => onBreadcrumbSelect(crumb)}
-                className="px-2 py-0.5 rounded-[4px] bg-primary-subtle border border-accent-border text-primary font-semibold hover:bg-bg-selected cursor-pointer transition-colors"
+                className="px-2 py-0.5 rounded-[4px] bg-primary-subtle border border-accent-border text-primary font-semibold hover:bg-bg-selected cursor-pointer"
               >
                 {crumb.label}
               </button>
