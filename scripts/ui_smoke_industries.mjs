@@ -63,9 +63,11 @@ async function runUiSmoke() {
     }
   }
 
+  const mode = playwrightAvailable ? "real_browser" : "ssr_only";
   const passed = errors.length === 0;
   const smokeSummary = {
     check: "UI Smoke Industries Check",
+    mode,
     passed,
     playwrightAvailable,
     totalTests: results.length,
@@ -81,7 +83,11 @@ async function runUiSmoke() {
     JSON.stringify(smokeSummary, null, 2)
   );
 
-  console.log(`UI Smoke Summary: ${passed ? "PASS" : "FAIL"} (${smokeSummary.passedCount}/${smokeSummary.totalTests} checks passed)`);
+  if (mode !== "real_browser") {
+    console.log(`UI: NOT VERIFIED (SSR only — ${smokeSummary.passedCount}/${smokeSummary.totalTests} SSR contract checks passed)`);
+  } else {
+    console.log(`UI Smoke Summary: ${passed ? "PASS" : "FAIL"} (${smokeSummary.passedCount}/${smokeSummary.totalTests} checks passed)`);
+  }
   return passed;
 }
 
