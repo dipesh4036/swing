@@ -247,9 +247,15 @@ export default function SectorDashboard() {
         info="Trend Rank combines 1M/3M/6M trend, >50/>200 SMA breadth, and RS>=70 leader share"
         subtitle={
           data?.snapshotDate
-            ? `As of ${data.snapshotDate} · ${data.coverage.classifiedStocks.toLocaleString("en-IN")} classified, ${
+            ? `As of ${data.snapshotDate} · ${data.coverage.classifiedStocks.toLocaleString("en-IN")} classified (${
                 data.coverage.coveragePct ?? "—"
-              }% NSE-verified`
+              }%), ${data.coverage.nseVerifiedStocks.toLocaleString("en-IN")} NSE-verified (${
+                data.coverage.nseVerifiedPct ?? "—"
+              }%${
+                data.coverage.nseVerifiedMcapPct !== null
+                  ? `, ${data.coverage.nseVerifiedMcapPct}% mcap`
+                  : ""
+              })`
             : "No completed snapshot available"
         }
         action={

@@ -112,7 +112,41 @@ export async function getLatestCompletedSnapshot(q: QueryFn = queryWithRetry) {
   return res.rows[0] || null;
 }
 
-export function getCoverageFromSnapshot(snap: Record<string, unknown> | null): CoverageSummary {
+export async function getNseVerifiedCoverage(
+  snapshotId: string | null,
+  q: QueryFn = queryWithRetry
+): Promise<{ nseVerifiedStocks: number; nseVerifiedMcapPct: number | null }> {
+  if (!snapshotId) return { nseVerifiedStocks: 0, nseVerifiedMcapPct: null };
+  const res = await q(
+    `
+    SELECT
+      COUNT(*) FILTER (WHERE i.classification_source IN ('nse_quote', 'nse_quote_api'))::int AS verified_cnt,
+      COALESCE(SUM(m.mcap_cr) FILTER (WHERE i.classification_source IN ('nse_quote', 'nse_quote_api')), 0) AS verified_mcap,
+      COALESCE(SUM(m.mcap_cr), 0) AS total_mcap
+    FROM latest_industry_stock_metrics m
+    JOIN instruments i ON i.token = m.token
+    WHERE m.snapshot_id = $1 AND m.in_universe = TRUE;
+    `,
+    [snapshotId]
+  );
+  const row = res.rows[0];
+  if (!row) return { nseVerifiedStocks: 0, nseVerifiedMcapPct: null };
+  const verifiedCnt = toInt(row.verified_cnt);
+  const verMcap = toFiniteNumber(row.verified_mcap) || 0;
+  const totMcap = toFiniteNumber(row.total_mcap) || 0;
+  return {
+    nseVerifiedStocks: verifiedCnt,
+    nseVerifiedMcapPct: totMcap > 0 ? Number(((verMcap / totMcap) * 100).toFixed(1)) : null,
+  };
+}
+
+export function getCoverageFromSnapshot(
+  snap: Record<string, unknown> | null,
+  verified: { nseVerifiedStocks: number; nseVerifiedMcapPct: number | null } = {
+    nseVerifiedStocks: 0,
+    nseVerifiedMcapPct: null,
+  }
+): CoverageSummary {
   if (!snap) {
     return {
       totalStocks: 0,
@@ -120,6 +154,9 @@ export function getCoverageFromSnapshot(snap: Record<string, unknown> | null): C
       unclassifiedStocks: 0,
       eligibleStocks: 0,
       coveragePct: null,
+      nseVerifiedStocks: 0,
+      nseVerifiedPct: null,
+      nseVerifiedMcapPct: null,
     };
   }
   const total = toInt(snap.total_stocks);
@@ -131,6 +168,9 @@ export function getCoverageFromSnapshot(snap: Record<string, unknown> | null): C
     unclassifiedStocks: Math.max(0, total - classified),
     eligibleStocks: eligible,
     coveragePct: total > 0 ? Number(((classified / total) * 100).toFixed(1)) : null,
+    nseVerifiedStocks: verified.nseVerifiedStocks,
+    nseVerifiedPct: total > 0 ? Number(((verified.nseVerifiedStocks / total) * 100).toFixed(1)) : null,
+    nseVerifiedMcapPct: verified.nseVerifiedMcapPct,
   };
 }
 
@@ -189,7 +229,11 @@ export async function getRankings(
   const nullsClause = sortKey === "rank_trend_change" ? "NULLS LAST" : "";
 
   const snap = await getLatestCompletedSnapshot(q);
-  const coverage = getCoverageFromSnapshot(snap);
+  const verifiedCov = await getNseVerifiedCoverage(
+    snap ? String(snap.snapshot_id) : null,
+    q
+  );
+  const coverage = getCoverageFromSnapshot(snap, verifiedCov);
 
   if (!snap) {
     return {

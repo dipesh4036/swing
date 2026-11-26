@@ -20,6 +20,9 @@ export interface CoverageSummary {
   unclassifiedStocks: number;
   eligibleStocks: number;
   coveragePct: number | null;
+  nseVerifiedStocks: number;
+  nseVerifiedPct: number | null;
+  nseVerifiedMcapPct: number | null;
 }
 
 export interface IndustryGroupRow {
