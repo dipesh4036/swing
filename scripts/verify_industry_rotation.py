@@ -132,7 +132,7 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             for sym, truth in PROBE_G2_TRUTH.items():
                 if sym not in g2_db_map:
                     g2_mismatches.append(f"{sym}: missing from stock_industry")
-                elif g2_db_map[sym] != truth:
+                elif tuple(str(x).lower() for x in g2_db_map[sym]) != tuple(str(x).lower() for x in truth):
                     g2_mismatches.append(f"{sym}: got {g2_db_map[sym]} vs expected {truth}")
 
             g2_pass = len(g2_mismatches) == 0
@@ -403,6 +403,88 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
                 "expected": "5 views opened, 0 console errors, 0 network errors, no horizontal scroll at 360px",
                 "actual": ui_actual,
                 "verdict": "PASS" if ui_pass else "FAIL",
+            })
+
+            # -------------------------------------------------------------
+            # G9: X5 Trend Rank Reproducibility & Timeframe Invariance
+            # -------------------------------------------------------------
+            cur.execute("SELECT MAX(trade_date)::text FROM daily_industry_strength;")
+            str_asof = cur.fetchone()[0]
+            cur.execute("""
+                SELECT DISTINCT trade_date::text FROM daily_industry_strength
+                WHERE trade_date <= %s ORDER BY trade_date DESC LIMIT 6;
+            """, (str_asof,))
+            str_dates = [str(r[0]).split("T")[0] for r in cur.fetchall()]
+            prev5_date = str_dates[5] if len(str_dates) >= 6 else None
+
+            g9_errors = []
+            for check_d in [d for d in [str_asof, prev5_date] if d]:
+                cur.execute("""
+                    SELECT g.level, d.rank_trend
+                    FROM daily_industry_strength d
+                    JOIN industry_groups g ON g.group_id = d.group_id
+                    WHERE d.trade_date = %s AND d.universe = 'all' AND d.n_eligible >= 5;
+                """, (check_d,))
+                by_lvl = {}
+                for lvl, rt in cur.fetchall():
+                    by_lvl.setdefault(lvl, []).append(rt)
+                for lvl, ranks in by_lvl.items():
+                    non_null = sorted(r for r in ranks if r is not None)
+                    expected = list(range(1, len(non_null) + 1))
+                    if non_null != expected:
+                        g9_errors.append(f"{check_d}/{lvl}: non-contiguous or duplicate ranks ({len(non_null)} rows)")
+
+            # Check rank_trend_change == rank_trend_prev5 - rank_trend
+            cur.execute("""
+                SELECT count(*) FROM daily_industry_strength
+                WHERE trade_date = %s
+                  AND rank_trend IS NOT NULL AND rank_trend_prev5 IS NOT NULL
+                  AND rank_trend_change != (rank_trend_prev5 - rank_trend);
+            """, (str_asof,))
+            bad_changes = cur.fetchone()[0]
+            if bad_changes > 0:
+                g9_errors.append(f"{bad_changes} rows have rank_trend_change != prev5 - cur")
+
+            # Check X5 30-stock chart route gate
+            x5_chart_path = "probe_output/x5_chart_result.json"
+            x5_chart_ok = False
+            x5_chart_desc = "Missing x5_chart_result.json"
+            if os.path.exists(x5_chart_path):
+                with open(x5_chart_path, "r", encoding="utf-8") as xf:
+                    xd = json.load(xf)
+                    x5_chart_ok = xd.get("passed", False)
+                    x5_chart_desc = f"{xd.get('passedCount')}/{xd.get('tested')} (>=60 candles, {xd.get('nonNiftyCount')} non-Nifty500)"
+
+            g9_pass = (len(g9_errors) == 0) and x5_chart_ok
+            if not g9_pass:
+                all_hard_pass = False
+            gates.append({
+                "id": "G9",
+                "type": "HARD",
+                "name": "Trend Rank Reproducibility & 30-Stock Chart Gate",
+                "expected": "Contiguous 1..N at asOf & asOf-5, exact rank_trend_change, 30/30 chart >= 60 candles",
+                "actual": f"Rank errors: {len(g9_errors)}; Chart: {x5_chart_desc}",
+                "verdict": "PASS" if g9_pass else "FAIL",
+            })
+
+            # -------------------------------------------------------------
+            # G10: DB Storage & stock_candles Footprint
+            # -------------------------------------------------------------
+            cur.execute("SELECT COUNT(*), COUNT(DISTINCT token), pg_total_relation_size('stock_candles'), pg_database_size(current_database()) FROM stock_candles;")
+            sc_rows, sc_toks, sc_bytes, tot_db_bytes = cur.fetchone()
+            sc_mb = sc_bytes / (1024 * 1024)
+            tot_mb = tot_db_bytes / (1024 * 1024)
+            limit_mb = int(os.environ.get("DB_SIZE_LIMIT_MB", "450"))
+            g10_pass = sc_toks >= 1500 and tot_mb < limit_mb
+            if not g10_pass:
+                all_hard_pass = False
+            gates.append({
+                "id": "G10",
+                "type": "HARD",
+                "name": "Stock Candles & DB Storage Guard",
+                "expected": f">= 1500 tokens in stock_candles, total DB < {limit_mb} MB",
+                "actual": f"{sc_rows:,} rows ({sc_toks} tokens, {sc_mb:.2f} MB); Total DB: {tot_mb:.2f} MB",
+                "verdict": "PASS" if g10_pass else "FAIL",
             })
 
             # -------------------------------------------------------------

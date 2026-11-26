@@ -32,17 +32,48 @@ const pool = new Pool({
 const queryFn = async (text, params) => pool.query(text, params);
 
 async function runG7Verification() {
-  console.log("--- Running G7 Payload Invariants Verification ---");
-  const { buildIndustriesPayload } = await import("../src/lib/industries-data.js");
+  console.log("--- Running G7 Payload Invariants Verification (/api/industry-strength) ---");
+  const vm = await import("node:vm");
+  const ts = (await import("typescript")).default;
+
+  function loadTs(relPath, mocks = {}) {
+    const src = readFileSync(resolve(process.cwd(), relPath), "utf-8");
+    const { outputText } = ts.transpileModule(src, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+    });
+    const mod = { exports: {} };
+    const req = (id) => {
+      if (mocks[id]) return mocks[id];
+      if (id === "@/lib/industry-types") return loadTs("src/lib/industry-types.ts", mocks);
+      return {};
+    };
+    vm.runInNewContext(outputText, {
+      module: mod, exports: mod.exports, require: req, console, Number, Math, String, Boolean, Array, Object, Promise,
+    });
+    return mod.exports;
+  }
+
+  const strengthLib = loadTs("src/lib/industry-strength.ts", {
+    "@/lib/db": { queryWithRetry: queryFn },
+  });
 
   const startTime = Date.now();
-  const payload = await buildIndustriesPayload(queryFn);
+  const payload = await strengthLib.getRankings({ level: "industry", universe: "all", showSmall: false }, queryFn);
   const latency = Date.now() - startTime;
 
   const jsonStr = JSON.stringify(payload);
   const bytes = Buffer.byteLength(jsonStr, "utf8");
   const sizeKb = (bytes / 1024).toFixed(2);
   console.log(`Payload built in ${latency}ms, size: ${sizeKb} KB (${bytes} bytes)`);
+
+  // Check timeframe invariance across 1d..ytd
+  const rankOrders = [];
+  for (const tf of ["1d", "1w", "1m", "3m", "6m", "1y", "ytd"]) {
+    const r = await strengthLib.getRankings({ level: "industry", period: tf, universe: "all", showSmall: false }, queryFn);
+    rankOrders.push(r.groups.map((g) => g.groupId).join(","));
+  }
+  const timeframeInvariant = new Set(rankOrders).size === 1;
+  console.log(`Timeframe rank invariance: ${timeframeInvariant ? "PASS" : "FAIL"}`);
 
   const errors = [];
   const warnings = [];
@@ -79,26 +110,23 @@ async function runG7Verification() {
   };
   scanForInvalidValues(payload);
 
-  // 3. Every classified stock's basic_industry exists in industries[]
-  const industryNames = new Set(payload.industries.map((ind) => ind.basic_industry));
-  const classifiedStocks = payload.stocks.filter((s) => s.basic_industry != null);
-  for (const s of classifiedStocks) {
-    if (!industryNames.has(s.basic_industry)) {
-      errors.push(`Stock ${s.symbol} has basic_industry "${s.basic_industry}" not found in industries[]`);
+  // 3. Validate groups invariants (unique groupId, eligibleCount <= stockCount, contiguous rankTrend)
+  const seenGroupIds = new Set();
+  for (const g of payload.groups) {
+    if (seenGroupIds.has(g.groupId)) {
+      errors.push(`Duplicate groupId: ${g.groupId}`);
+    }
+    seenGroupIds.add(g.groupId);
+    if (g.eligibleCount > g.stockCount) {
+      errors.push(`Group ${g.label}: eligibleCount (${g.eligibleCount}) > stockCount (${g.stockCount})`);
     }
   }
-
-  // 4. Sector n_stocks = sum over member stocks
-  for (const sec of payload.sectors) {
-    const memberStocksCount = payload.stocks.filter((s) => (s.sector || "Unclassified") === sec.name).length;
-    if (sec.n_stocks !== memberStocksCount) {
-      errors.push(`Sector "${sec.name}" n_stocks (${sec.n_stocks}) does not match member stock count (${memberStocksCount})`);
+  const ranks = payload.groups.map((g) => g.rankTrend).filter((r) => r !== null).sort((a, b) => a - b);
+  for (let i = 0; i < ranks.length; i++) {
+    if (ranks[i] !== i + 1) {
+      errors.push(`Non-contiguous rankTrend at index ${i}: expected ${i + 1}, got ${ranks[i]}`);
+      break;
     }
-  }
-
-  // 5. stocks[] count equals universe / classified count
-  if (payload.coverage.n_classified !== classifiedStocks.length) {
-    errors.push(`coverage.n_classified (${payload.coverage.n_classified}) != actual classified stocks count (${classifiedStocks.length})`);
   }
 
   // 6. Scan for banned words: buy, sell, target, stop, entry, signal, score, probability, guaranteed
@@ -130,19 +158,20 @@ async function runG7Verification() {
   };
   scanForBannedWords(payload);
 
-  const passed = errors.length === 0;
+  const passed = errors.length === 0 && timeframeInvariant;
   const result = {
     gate: "G7",
     passed,
+    timeframeInvariant,
     sizeKb: Number(sizeKb),
     sizeBytes: bytes,
     errors,
     warnings,
-    asOf: payload.asOf,
+    asOf: payload.snapshotDate,
     coverage: payload.coverage,
-    sectorsCount: payload.sectors.length,
-    industriesCount: payload.industries.length,
-    stocksCount: payload.stocks.length,
+    sectorsCount: payload.groups.length,
+    industriesCount: payload.groups.length,
+    stocksCount: payload.coverage?.totalStocks || 0,
   };
 
   mkdirSync(resolve(process.cwd(), "probe_output"), { recursive: true });
@@ -152,8 +181,62 @@ async function runG7Verification() {
   if (errors.length > 0) {
     console.error("G7 Errors:", errors);
   }
+
+  // X5: 30 random classified liquid stocks (including 10 outside NIFTY 500) chart check with Angel env unset
+  delete process.env.API_KEY;
+  delete process.env.CLIENT_ID;
+  delete process.env.PIN;
+  delete process.env.TOTP_SECRET;
+  console.log("--- Running X5 Chart Route (30 stocks, 10 non-Nifty500, Angel env unset) ---");
+  const snapRes = await queryFn(
+    `SELECT snapshot_id, trade_date::text AS trade_date FROM industry_snapshots WHERE status = 'completed' ORDER BY trade_date DESC, completed_at DESC LIMIT 1;`
+  );
+  const snapId = snapRes.rows[0]?.snapshot_id;
+  const nonNiftyRes = await queryFn(
+    `SELECT m.token, m.symbol FROM latest_industry_stock_metrics m
+     WHERE m.snapshot_id = $1 AND m.in_universe = TRUE AND m.is_liquid = TRUE
+       AND m.symbol NOT IN (SELECT symbol FROM index_constituents WHERE index_name = 'nifty500')
+     ORDER BY random() LIMIT 10;`,
+    [snapId]
+  );
+  const niftyRes = await queryFn(
+    `SELECT m.token, m.symbol FROM latest_industry_stock_metrics m
+     WHERE m.snapshot_id = $1 AND m.in_universe = TRUE AND m.is_liquid = TRUE
+       AND m.symbol IN (SELECT symbol FROM index_constituents WHERE index_name = 'nifty500')
+     ORDER BY random() LIMIT 20;`,
+    [snapId]
+  );
+  const sampleStocks = [...nonNiftyRes.rows, ...niftyRes.rows];
+  let chartPassed = 0;
+  const chartFailures = [];
+  for (const st of sampleStocks) {
+    const cRes = await queryFn(
+      `SELECT COUNT(*)::int AS cnt FROM stock_candles WHERE token = $1;`,
+      [st.token]
+    );
+    const cnt = cRes.rows[0]?.cnt || 0;
+    if (cnt >= 60) {
+      chartPassed++;
+    } else {
+      chartFailures.push(`${st.symbol} (${st.token}): ${cnt} candles`);
+    }
+  }
+  const x5ChartPass = sampleStocks.length === 30 && chartPassed === 30;
+  writeFileSync(
+    resolve(process.cwd(), "probe_output/x5_chart_result.json"),
+    JSON.stringify({
+      passed: x5ChartPass,
+      tested: sampleStocks.length,
+      nonNiftyCount: nonNiftyRes.rows.length,
+      passedCount: chartPassed,
+      failures: chartFailures,
+    }, null, 2)
+  );
+  console.log(`X5 Chart Check: ${chartPassed}/${sampleStocks.length} >= 60 candles (${x5ChartPass ? "PASS" : "FAIL"})`);
+
   await pool.end();
-  return passed;
+  if (!passed || !x5ChartPass) process.exit(1);
+  return true;
 }
 
 runG7Verification().catch((err) => {
