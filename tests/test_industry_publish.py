@@ -39,3 +39,31 @@ def test_publish_rolls_back_atomically_on_failure():
         publish_industry_snapshot(snap, conn=mock_conn)
     mock_conn.rollback.assert_called_once()
     mock_conn.commit.assert_not_called()
+
+
+def test_sync_stock_candles_window_and_idempotency():
+    import pandas as pd
+    from pipeline.industry_publish import sync_stock_candles
+
+    dates = pd.date_range("2025-01-01", periods=280, freq="B").strftime("%Y-%m-%d").tolist()
+    df = pd.DataFrame([
+        {"token": 101, "trade_date": d, "open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0, "volume": 1000}
+        for d in dates
+    ])
+
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+    mock_cur.fetchone.return_value = (50 * 1024 * 1024,)
+
+    with MagicMock() as _:
+        from unittest.mock import patch
+        with patch("pipeline.industry_publish.execute_values") as mock_ev:
+            res = sync_stock_candles(df, [101], conn=mock_conn, window_sessions=260)
+            assert res["status"] == "completed"
+            assert res["tokens"] == 1
+            assert res["rows"] == 260  # trimmed to 260 sessions
+            mock_ev.assert_called_once()
+            # Re-running same input is idempotent
+            res2 = sync_stock_candles(df, [101], conn=mock_conn, window_sessions=260)
+            assert res2["rows"] == 260

@@ -48,9 +48,11 @@ export default function SectorDashboard() {
 
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [chartGroups, setChartGroups] = useState<{ groupId: string; label: string }[]>([]);
+  const [compareToast, setCompareToast] = useState<string | null>(null);
   const [selectedStock, setSelectedStock] = useState<ConstituentStockRow | null>(null);
 
   const detailsRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<HTMLDivElement | null>(null);
 
   const fetchRankings = useCallback(async () => {
     setLoading(true);
@@ -165,9 +167,16 @@ export default function SectorDashboard() {
   const handleToggleChartGroup = (g: IndustryGroupRow) => {
     setChartGroups((prev) => {
       if (prev.some((item) => item.groupId === g.groupId)) {
-        return prev.filter((item) => item.groupId !== g.groupId);
+        const next = prev.filter((item) => item.groupId !== g.groupId);
+        setCompareToast(`Removed ${g.label} from rotation chart · ${next.length} selected`);
+        return next;
       }
-      return [...prev.slice(-4), { groupId: g.groupId, label: g.label }];
+      const next = [...prev.slice(-4), { groupId: g.groupId, label: g.label }];
+      setCompareToast(`Added ${g.label} to rotation chart · ${next.length} selected`);
+      setTimeout(() => {
+        chartRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 60);
+      return next;
     });
   };
 
@@ -296,36 +305,59 @@ export default function SectorDashboard() {
             </div>
           )}
 
-          <RotationChart
-            selectedGroups={chartGroups}
-            universe={universe}
-            onRemoveGroup={(gid) =>
-              setChartGroups((prev) => prev.filter((item) => item.groupId !== gid))
-            }
-          />
+          <div ref={chartRef}>
+            <RotationChart
+              selectedGroups={chartGroups}
+              universe={universe}
+              onRemoveGroup={(gid) =>
+                setChartGroups((prev) => prev.filter((item) => item.groupId !== gid))
+              }
+            />
+          </div>
         </>
+      )}
+
+      {compareToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-40 px-3.5 py-2 rounded-md bg-surface border border-accent-border text-xs font-medium text-text flex items-center gap-2"
+        >
+          <span>{compareToast}</span>
+          <button
+            type="button"
+            onClick={() => setCompareToast(null)}
+            className="text-text-muted hover:text-text cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
       )}
 
       {selectedStock && (
         <StockDetailPanel
           stock={{
+            token: selectedStock.token,
             symbol: selectedStock.symbol,
             name: selectedStock.name,
             sector: selectedStock.sector,
             industry: selectedStock.industry,
             basic_industry: selectedStock.basicIndustry,
+            in_universe: true,
             close: selectedStock.close,
             ret_1d: selectedStock.ret1d,
             ret_1w: selectedStock.ret1w,
             ret_1m: selectedStock.ret1m,
             ret_3m: selectedStock.ret3m,
             ret_6m: selectedStock.ret6m,
+            pct_from_52w_high: selectedStock.pctFrom52wHigh,
             rs_rank: selectedStock.rsRating,
             above_20ema: selectedStock.above20ema,
             above_50dma: selectedStock.above50dma,
             above_200dma: selectedStock.above200dma,
             mcap_cr: selectedStock.mcapCr,
           }}
+          source="industry"
           onShowSector={(sec: string) => {
             setSelectedStock(null);
             setLevel("sector");

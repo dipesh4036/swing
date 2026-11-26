@@ -19,6 +19,7 @@ export function StockDetailPanel({
   stock,
   onClose,
   onShowSector,
+  source = "sector",
   isDark = false,
 }) {
   const chartContainerRef = useRef(null);
@@ -75,7 +76,9 @@ export function StockDetailPanel({
       setLoadingChart(true);
       setChartError(null);
       try {
-        const res = await fetch(`/api/terminal/screener/chart?token=${stock.token}&source=sector`);
+        const res = await fetch(
+          `/api/terminal/screener/chart?token=${stock.token}&source=${encodeURIComponent(source)}`
+        );
         if (!res.ok) {
           if (res.status === 404) {
             setChartError("Chart unavailable");
@@ -105,7 +108,7 @@ export function StockDetailPanel({
     return () => {
       isCancelled = true;
     };
-  }, [stock?.token]);
+  }, [stock?.token, source]);
 
   // Render lightweight-chart
   useEffect(() => {
@@ -344,9 +347,16 @@ export function StockDetailPanel({
 
       {/* Chart Section */}
       <div className="p-4 flex-1 flex flex-col gap-2">
-        <span className="text-[11px] font-semibold text-text uppercase tracking-wider block">
-          Daily Price Chart
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-text uppercase tracking-wider block">
+            Daily Price Chart
+          </span>
+          {chartCandles.length > 0 && chartCandles.length < 60 && (
+            <span className="text-[10px] text-warning font-medium">
+              Only {chartCandles.length} sessions (&lt; 60)
+            </span>
+          )}
+        </div>
 
         {/* Pattern Layers Bar */}
         <PatternLayersBar

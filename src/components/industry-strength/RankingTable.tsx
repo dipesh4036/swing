@@ -103,7 +103,7 @@ export default function RankingTable({
                 RS vs 21E
               </th>
               <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-secondary text-center whitespace-nowrap">
-                Chart
+                Compare
               </th>
             </tr>
           </thead>

@@ -7,10 +7,12 @@ storage guard (700 MB), and prunes superseded stock snapshot rows.
 """
 
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
+import pandas as pd
 from psycopg2.extras import execute_values
 
 from pipeline.db import get_connection
@@ -22,7 +24,9 @@ from pipeline.industry_strength import (
 
 logger = logging.getLogger("pipeline.industry_publish")
 
-MAX_DB_SIZE_BYTES = 700 * 1024 * 1024  # 700 MB free-tier guard
+DB_SIZE_LIMIT_MB = int(os.environ.get("DB_SIZE_LIMIT_MB", "450"))
+MAX_DB_SIZE_BYTES = DB_SIZE_LIMIT_MB * 1024 * 1024
+STOCK_CANDLE_WINDOW = 260
 
 
 def check_db_storage_guard(conn) -> int:
@@ -33,7 +37,7 @@ def check_db_storage_guard(conn) -> int:
         size_bytes = int(row[0]) if row and row[0] else 0
     if size_bytes >= MAX_DB_SIZE_BYTES:
         raise RuntimeError(
-            f"Database storage guard triggered: {size_bytes / (1024*1024):.1f} MB >= 700 MB limit"
+            f"Database storage guard triggered: {size_bytes / (1024*1024):.1f} MB >= {DB_SIZE_LIMIT_MB} MB limit"
         )
     return size_bytes
 
@@ -288,6 +292,93 @@ def publish_industry_snapshot(
             conn.close()
 
 
+def sync_stock_candles(
+    df_ohlcv: pd.DataFrame,
+    liquid_tokens: Iterable[int],
+    conn=None,
+    window_sessions: int = STOCK_CANDLE_WINDOW,
+) -> Dict[str, Any]:
+    """
+    Upsert trailing `window_sessions` (default 260) OHLCV candles into `stock_candles`
+    for every liquid classified stock, delete non-liquid tokens, and prune older rows.
+    """
+    tok_set = sorted({int(t) for t in liquid_tokens})
+    if not tok_set or df_ohlcv is None or df_ohlcv.empty:
+        return {"status": "skipped", "tokens": 0, "rows": 0}
+
+    should_close = False
+    if conn is None:
+        conn = get_connection()
+        should_close = True
+
+    try:
+        check_db_storage_guard(conn)
+
+        sub = df_ohlcv[df_ohlcv["token"].isin(tok_set)].copy()
+        if sub.empty:
+            return {"status": "skipped", "tokens": 0, "rows": 0}
+
+        sub["trade_date"] = sub["trade_date"].astype(str).str.slice(0, 10)
+        sub = sub.sort_values(["token", "trade_date"])
+        sub = sub.groupby("token", sort=False).tail(window_sessions)
+
+        records = [
+            (
+                int(r.token),
+                r.trade_date,
+                round(float(r.open), 2) if pd.notna(r.open) else None,
+                round(float(r.high), 2) if pd.notna(r.high) else None,
+                round(float(r.low), 2) if pd.notna(r.low) else None,
+                round(float(r.close), 2),
+                int(r.volume) if pd.notna(r.volume) else None,
+            )
+            for r in sub.itertuples(index=False)
+            if pd.notna(r.close) and float(r.close) > 0
+        ]
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM stock_candles WHERE NOT (token = ANY(%s));", (tok_set,))
+            if records:
+                execute_values(
+                    cur,
+                    """
+                    INSERT INTO stock_candles (token, trade_date, open, high, low, close, volume)
+                    VALUES %s
+                    ON CONFLICT (token, trade_date) DO UPDATE SET
+                        open = EXCLUDED.open,
+                        high = EXCLUDED.high,
+                        low = EXCLUDED.low,
+                        close = EXCLUDED.close,
+                        volume = EXCLUDED.volume;
+                    """,
+                    records,
+                    page_size=2000,
+                )
+            cur.execute(
+                """
+                DELETE FROM stock_candles
+                WHERE (token, trade_date) IN (
+                    SELECT token, trade_date FROM (
+                        SELECT token, trade_date,
+                               ROW_NUMBER() OVER (PARTITION BY token ORDER BY trade_date DESC) AS rn
+                        FROM stock_candles
+                    ) ranked
+                    WHERE rn > %s
+                );
+                """,
+                (window_sessions,),
+            )
+        conn.commit()
+        logger.info(f"Synced {len(records)} stock_candles rows for {len(tok_set)} liquid classified tokens.")
+        return {"status": "completed", "tokens": len(tok_set), "rows": len(records)}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if should_close and conn:
+            conn.close()
+
+
 def run_industry_strength_job(
     df_ohlcv,
     conn=None,
@@ -354,7 +445,17 @@ def run_industry_strength_job(
             mcap_by_symbol=mcap_map,
             as_of_date=as_of_date,
         )
-        return publish_industry_snapshot(snapshot, conn=conn)
+        pub_res = publish_industry_snapshot(snapshot, conn=conn)
+        try:
+            liquid_tokens = [
+                r["token"] for r in snapshot.stock_metric_rows
+                if r.get("in_universe") and r.get("is_liquid")
+            ]
+            candle_res = sync_stock_candles(df_ohlcv, liquid_tokens, conn=conn)
+            pub_res["stock_candles"] = candle_res
+        except Exception as ce:
+            logger.warning(f"Non-fatal stock_candles sync notice: {ce}")
+        return pub_res
     finally:
         if should_close and conn:
             conn.close()

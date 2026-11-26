@@ -55,6 +55,25 @@ export async function GET(request) {
       }
       stockRow = secRes.rows[0];
       asOfStr = String(stockRow.trade_date);
+    } else if (sourceParam === "industry") {
+      // X1.2: Industry strength stocks chart support (latest completed snapshot)
+      const indRes = await queryWithRetry(
+        `SELECT m.symbol, s.trade_date::text AS trade_date, m.rs_rating AS rs_rank
+         FROM latest_industry_stock_metrics m
+         JOIN industry_snapshots s ON s.snapshot_id = m.snapshot_id
+         WHERE m.token = $1 AND s.status = 'completed'
+         ORDER BY s.trade_date DESC, s.completed_at DESC
+         LIMIT 1;`,
+        [token]
+      );
+      if (indRes.rows.length === 0) {
+        return NextResponse.json(
+          { error: `Stock with token ${token} not found in industry stock metrics.` },
+          { status: 404, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      stockRow = indRes.rows[0];
+      asOfStr = String(stockRow.trade_date).split("T")[0];
     } else {
       if (!screener || !VALID_SCREENERS.includes(screener)) {
         return NextResponse.json(
@@ -85,11 +104,23 @@ export async function GET(request) {
       asOfStr = String(stockRow.trade_date);
     }
 
-    // 3. Attempt to fetch all historical candles live from Angel One SmartAPI (5 years, 3h cache)
-    let rawCandles = await fetchAllCandlesFromSmartAPI(token);
+    // 3. Fallback order: Angel live (only if env vars exist) -> screener_candles -> stock_candles
+    const hasAngelEnv = Boolean(
+      process.env.API_KEY && process.env.CLIENT_ID && process.env.PIN && process.env.TOTP_SECRET
+    );
+    let rawCandles = hasAngelEnv ? await fetchAllCandlesFromSmartAPI(token) : null;
     let source = "angel";
 
-    // Fallback: if Angel fails or env vars are missing, use screener_candles from Neon
+    const mapDbRows = (rows) =>
+      rows.map((r) => ({
+        date: typeof r.trade_date === "string" ? r.trade_date.split("T")[0] : r.trade_date.toISOString().split("T")[0],
+        open: r.open !== null ? Number(r.open) : null,
+        high: r.high !== null ? Number(r.high) : null,
+        low: r.low !== null ? Number(r.low) : null,
+        close: Number(r.close),
+        volume: r.volume !== null ? Number(r.volume) : null,
+      }));
+
     if (!rawCandles || rawCandles.length === 0) {
       source = "db";
       const candlesRes = await queryWithRetry(
@@ -99,15 +130,19 @@ export async function GET(request) {
          ORDER BY trade_date ASC;`,
         [token]
       );
+      rawCandles = mapDbRows(candlesRes.rows);
+    }
 
-      rawCandles = candlesRes.rows.map((r) => ({
-        date: typeof r.trade_date === "string" ? r.trade_date.split("T")[0] : r.trade_date.toISOString().split("T")[0],
-        open: r.open !== null ? Number(r.open) : null,
-        high: r.high !== null ? Number(r.high) : null,
-        low: r.low !== null ? Number(r.low) : null,
-        close: Number(r.close),
-        volume: r.volume !== null ? Number(r.volume) : null,
-      }));
+    if (!rawCandles || rawCandles.length === 0) {
+      source = "stock_candles";
+      const scRes = await queryWithRetry(
+        `SELECT trade_date::text as trade_date, open, high, low, close, volume
+         FROM stock_candles
+         WHERE token = $1
+         ORDER BY trade_date ASC;`,
+        [token]
+      );
+      rawCandles = mapDbRows(scRes.rows);
     }
 
     // 4. Drop any in-progress/future candles after stockRow.trade_date (R12b)
