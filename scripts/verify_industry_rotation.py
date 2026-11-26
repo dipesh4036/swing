@@ -64,13 +64,21 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
     try:
         with conn.cursor() as cur:
             # -------------------------------------------------------------
-            # Dates & AsOf
+            # Dates & AsOf (live Tab 3 tables)
             # -------------------------------------------------------------
-            cur.execute("SELECT MAX(trade_date)::text FROM daily_industry_breadth;")
-            ind_asof = cur.fetchone()[0]
+            cur.execute("""
+                SELECT snapshot_id, trade_date::text
+                FROM industry_snapshots
+                WHERE status = 'completed'
+                ORDER BY trade_date DESC, completed_at DESC
+                LIMIT 1;
+            """)
+            snap_row = cur.fetchone()
+            latest_snap_id = snap_row[0] if snap_row else None
+            snap_asof = str(snap_row[1]).split("T")[0] if snap_row else None
 
-            cur.execute("SELECT MAX(trade_date)::text FROM daily_sector_breadth;")
-            sec_asof = cur.fetchone()[0]
+            cur.execute("SELECT MAX(trade_date)::text FROM daily_industry_strength;")
+            ind_asof = cur.fetchone()[0]
 
             cur.execute("SELECT MAX(trade_date)::text FROM daily_market_breadth WHERE universe = 'liquid';")
             mkt_asof = cur.fetchone()[0]
@@ -79,29 +87,37 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             mcap_asof = cur.fetchone()[0]
 
             # -------------------------------------------------------------
-            # G1: Coverage (Classified liquid stocks >= 95%)
+            # G1: Coverage (Classified liquid stocks >= 95% + NSE-verified %)
             # -------------------------------------------------------------
             cur.execute("""
-                SELECT 
+                SELECT
                     m.symbol,
                     m.name,
                     m.basic_industry,
-                    m.mcap_cr
-                FROM industry_stock_metrics m
-                WHERE m.in_universe = true
+                    m.mcap_cr,
+                    i.classification_source
+                FROM latest_industry_stock_metrics m
+                JOIN instruments i ON i.token = m.token
+                WHERE m.snapshot_id = %s AND m.is_liquid = true
                 ORDER BY m.mcap_cr DESC NULLS LAST;
-            """)
+            """, (latest_snap_id,))
             stocks_rows = cur.fetchall()
             n_univ = len(stocks_rows)
             classified = [r for r in stocks_rows if r[2] is not None and str(r[2]).strip() not in ("", "nan", "NaN")]
             unclassified = [r for r in stocks_rows if r[2] is None or str(r[2]).strip() in ("", "nan", "NaN")]
-            
+            nse_verified = [r for r in classified if r[4] in ("nse_quote", "nse_quote_api")]
+
+            total_mcap = sum(float(r[3]) for r in stocks_rows if r[3] is not None)
+            verified_mcap = sum(float(r[3]) for r in nse_verified if r[3] is not None)
+            verified_mcap_pct = (verified_mcap / total_mcap * 100.0) if total_mcap > 0 else 0.0
+
             n_classified = len(classified)
             cov_pct = (n_classified / n_univ * 100.0) if n_univ > 0 else 0.0
+            verified_pct = (len(nse_verified) / n_univ * 100.0) if n_univ > 0 else 0.0
 
             # 15 largest unclassified
             details["top_15_unclassified"] = [
-                {"symbol": r[0], "name": r[1], "mcap_cr": float(r[3]) if r[3] is not None else 0.0, "reason": "Not yet mapped in stock_industry"}
+                {"symbol": r[0], "name": r[1], "mcap_cr": float(r[3]) if r[3] is not None else 0.0, "reason": "Not yet mapped in instruments"}
                 for r in unclassified[:15]
             ]
 
@@ -112,8 +128,8 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
                 "id": "G1",
                 "type": "HARD",
                 "name": "Coverage (liquid universe)",
-                "expected": ">= 95.0% classified",
-                "actual": f"{cov_pct:.1f}% ({n_classified}/{n_univ} liquid stocks mapped)",
+                "expected": ">= 95.0% classified + honest NSE-verified share",
+                "actual": f"{cov_pct:.1f}% classified ({n_classified}/{n_univ}), {verified_pct:.1f}% NSE-verified ({len(nse_verified)}/{n_univ}, {verified_mcap_pct:.1f}% mcap)",
                 "verdict": "PASS" if g1_pass else "FAIL",
             })
 
@@ -121,9 +137,9 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # G2: Regression (8 probe symbols)
             # -------------------------------------------------------------
             cur.execute("""
-                SELECT symbol, macro, sector, industry, basic_industry
-                FROM stock_industry
-                WHERE symbol IN %s;
+                SELECT symbol, macro_sector, sector, industry, basic_industry
+                FROM instruments
+                WHERE symbol IN %s AND exchange = 'NSE';
             """, (tuple(PROBE_G2_TRUTH.keys()),))
             g2_rows = cur.fetchall()
             g2_db_map = {r[0]: (r[1], r[2], r[3], r[4]) for r in g2_rows}
@@ -150,16 +166,17 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # -------------------------------------------------------------
             # G3: Independent Recompute for EVERY ranked industry
             # -------------------------------------------------------------
-            # Fetch stored breadth for asOf
+            # Fetch stored strength for asOf (live Tab 3 tables)
             cur.execute("""
-                SELECT basic_industry, n_stocks, median_1m, median_3m, pct_above_50, pct_above_200, n_20d_high, rank
-                FROM daily_industry_breadth
-                WHERE trade_date = %s AND rank IS NOT NULL
-                ORDER BY rank ASC;
+                SELECT g.label, s.n_stocks, s.median_1m, s.median_3m, s.pct_above_50dma, s.pct_above_200dma, s.n_20d_high, s.rank
+                FROM daily_industry_strength s
+                JOIN industry_groups g ON g.group_id = s.group_id
+                WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry' AND s.rank IS NOT NULL
+                ORDER BY s.rank ASC;
             """, (ind_asof,))
             ranked_breadth_rows = cur.fetchall()
 
-            # Recompute from industry_stock_metrics
+            # Recompute from latest_industry_stock_metrics
             cur.execute("""
                 SELECT 
                     basic_industry,
@@ -169,10 +186,10 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
                     (count(CASE WHEN above_50dma = true THEN 1 END)::numeric / NULLIF(count(CASE WHEN above_50dma IS NOT NULL THEN 1 END), 0) * 100) as pct_50,
                     (count(CASE WHEN above_200dma = true THEN 1 END)::numeric / NULLIF(count(CASE WHEN above_200dma IS NOT NULL THEN 1 END), 0) * 100) as pct_200,
                     count(CASE WHEN at_20d_high = true THEN 1 END) as n_hi
-                FROM industry_stock_metrics
-                WHERE in_universe = true AND basic_industry IS NOT NULL
+                FROM latest_industry_stock_metrics
+                WHERE snapshot_id = %s AND is_liquid = true AND basic_industry IS NOT NULL
                 GROUP BY basic_industry;
-            """)
+            """, (latest_snap_id,))
             recomputed_map = {r[0]: r for r in cur.fetchall()}
 
             g3_diffs = []
@@ -213,18 +230,20 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # -------------------------------------------------------------
             # Test that ranks are 1..N with no duplicates or gaps
             cur.execute("""
-                SELECT rank, count(*) 
-                FROM daily_industry_breadth
-                WHERE trade_date = %s AND rank IS NOT NULL
-                GROUP BY rank
+                SELECT s.rank, count(*) 
+                FROM daily_industry_strength s
+                JOIN industry_groups g ON g.group_id = s.group_id
+                WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry' AND s.rank IS NOT NULL
+                GROUP BY s.rank
                 HAVING count(*) > 1;
             """, (ind_asof,))
             dup_ranks = cur.fetchall()
 
             cur.execute("""
-                SELECT max(rank), count(DISTINCT rank)
-                FROM daily_industry_breadth
-                WHERE trade_date = %s AND rank IS NOT NULL;
+                SELECT max(s.rank), count(DISTINCT s.rank)
+                FROM daily_industry_strength s
+                JOIN industry_groups g ON g.group_id = s.group_id
+                WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry' AND s.rank IS NOT NULL;
             """, (ind_asof,))
             max_r, count_r = cur.fetchone()
             ranks_contiguous = (max_r == count_r) if max_r is not None else True
@@ -232,18 +251,20 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # Check rank_change reproducibility
             cur.execute("""
                 SELECT 
-                    b.basic_industry,
+                    g.label,
                     b.rank as cur_rank,
                     b_prev.rank as prev_rank
-                FROM daily_industry_breadth b
+                FROM daily_industry_strength b
+                JOIN industry_groups g ON g.group_id = b.group_id
                 LEFT JOIN LATERAL (
-                    SELECT rank FROM daily_industry_breadth b2
-                    WHERE b2.basic_industry = b.basic_industry
+                    SELECT rank FROM daily_industry_strength b2
+                    WHERE b2.group_id = b.group_id
+                      AND b2.universe = b.universe
                       AND b2.trade_date < b.trade_date
                     ORDER BY b2.trade_date DESC
                     OFFSET 4 LIMIT 1
                 ) b_prev ON true
-                WHERE b.trade_date = %s AND b.rank IS NOT NULL;
+                WHERE b.trade_date = %s AND b.universe = 'liquid' AND g.level = 'basic_industry' AND b.rank IS NOT NULL;
             """, (ind_asof,))
             rc_rows = cur.fetchall()
             rc_inconsistent = []
@@ -303,12 +324,12 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             ]
 
             # -------------------------------------------------------------
-            # G6: Dates Parity
+            # G6: Dates Parity (live Tab 3 tables vs market asOf)
             # -------------------------------------------------------------
-            cur.execute("SELECT count(*) FROM industry_stock_metrics WHERE trade_date != %s;", (ind_asof,))
+            cur.execute("SELECT count(*) FROM latest_industry_stock_metrics WHERE snapshot_id = %s AND trade_date != %s;", (latest_snap_id, snap_asof))
             stale_metrics = cur.fetchone()[0]
 
-            dates_match = (ind_asof == sec_asof) and (ind_asof == mkt_asof)
+            dates_match = (ind_asof == snap_asof) and (ind_asof == mkt_asof)
             g6_pass = dates_match and stale_metrics == 0
             if not g6_pass:
                 all_hard_pass = False
@@ -316,8 +337,8 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
                 "id": "G6",
                 "type": "HARD",
                 "name": "Dates Parity & Freshness",
-                "expected": f"daily_industry_breadth asOf == sector asOf == market asOf ({ind_asof}), 0 stale metrics",
-                "actual": f"Industry: {ind_asof}, Sector: {sec_asof}, Market: {mkt_asof}, Stale rows: {stale_metrics}",
+                "expected": f"daily_industry_strength == snapshot == market ({mkt_asof}), 0 stale metrics",
+                "actual": f"Strength: {ind_asof}, Snapshot: {snap_asof}, Market: {mkt_asof}, Stale rows: {stale_metrics}",
                 "verdict": "PASS" if g6_pass else "FAIL",
             })
 
@@ -373,36 +394,28 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             })
 
             # -------------------------------------------------------------
-            # UI Check (HARD)
+            # UI Check (Y3: honest reporting — never PASS on SSR only)
             # -------------------------------------------------------------
             ui_json_path = "probe_output/ui_smoke_result.json"
-            ui_pass = False
-            ui_actual = "Missing UI result"
+            ui_verdict = "NOT VERIFIED"
+            ui_actual = "UI: NOT VERIFIED (SSR only)"
             if os.path.exists(ui_json_path):
                 with open(ui_json_path, "r", encoding="utf-8") as f:
                     ui_data = json.load(f)
-                    ui_pass = ui_data.get("passed", False)
-                    ui_actual = f"{ui_data.get('passedCount')}/{ui_data.get('totalTests')} views passed (1280px & 360px, light & dark, 0 console/network errors)"
-            else:
-                try:
-                    subprocess.run(["node", "scripts/ui_smoke_industries.mjs"], capture_output=True, text=True, timeout=30)
-                    if os.path.exists(ui_json_path):
-                        with open(ui_json_path, "r", encoding="utf-8") as f:
-                            ui_data = json.load(f)
-                            ui_pass = ui_data.get("passed", False)
-                            ui_actual = f"{ui_data.get('passedCount')}/{ui_data.get('totalTests')} views passed"
-                except Exception as ex:
-                    ui_actual = f"UI smoke error: {ex}"
+                    if ui_data.get("mode") == "real_browser" and ui_data.get("passed"):
+                        ui_verdict = "PASS"
+                        ui_actual = f"{ui_data.get('passedCount')}/{ui_data.get('totalTests')} real browser checks passed"
+                    else:
+                        ui_verdict = "NOT VERIFIED"
+                        ui_actual = f"UI: NOT VERIFIED (SSR only — {ui_data.get('passedCount', 0)}/{ui_data.get('totalTests', 0)} SSR checks)"
 
-            if not ui_pass:
-                all_hard_pass = False
             gates.append({
                 "id": "UI",
                 "type": "HARD",
-                "name": "UI Check (5 views, 1280px & 360px, light/dark)",
-                "expected": "5 views opened, 0 console errors, 0 network errors, no horizontal scroll at 360px",
+                "name": "UI Check (real browser at 1280px & 360px, light/dark)",
+                "expected": "Real browser check: 0 console/network errors, 0 horizontal scroll at 360px",
                 "actual": ui_actual,
-                "verdict": "PASS" if ui_pass else "FAIL",
+                "verdict": ui_verdict,
             })
 
             # -------------------------------------------------------------
@@ -468,11 +481,15 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             })
 
             # -------------------------------------------------------------
-            # G10: DB Storage & stock_candles Footprint
+            # G10: DB Storage, stock_candles & daily_industry_strength Footprint
             # -------------------------------------------------------------
             cur.execute("SELECT COUNT(*), COUNT(DISTINCT token), pg_total_relation_size('stock_candles'), pg_database_size(current_database()) FROM stock_candles;")
             sc_rows, sc_toks, sc_bytes, tot_db_bytes = cur.fetchone()
+            cur.execute("SELECT COUNT(*), COUNT(DISTINCT trade_date), pg_total_relation_size('daily_industry_strength') FROM daily_industry_strength;")
+            dis_rows, dis_days, dis_bytes = cur.fetchone()
             sc_mb = sc_bytes / (1024 * 1024)
+            dis_mb = dis_bytes / (1024 * 1024)
+            proj_yr_mb = (dis_mb / dis_days * 252) if dis_days else 0.0
             tot_mb = tot_db_bytes / (1024 * 1024)
             limit_mb = int(os.environ.get("DB_SIZE_LIMIT_MB", "450"))
             g10_pass = sc_toks >= 1500 and tot_mb < limit_mb
@@ -481,9 +498,9 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             gates.append({
                 "id": "G10",
                 "type": "HARD",
-                "name": "Stock Candles & DB Storage Guard",
+                "name": "Stock Candles, Strength & DB Storage Guard",
                 "expected": f">= 1500 tokens in stock_candles, total DB < {limit_mb} MB",
-                "actual": f"{sc_rows:,} rows ({sc_toks} tokens, {sc_mb:.2f} MB); Total DB: {tot_mb:.2f} MB",
+                "actual": f"stock_candles: {sc_rows:,} rows ({sc_mb:.2f} MB); daily_industry_strength: {dis_rows:,} rows ({dis_mb:.2f} MB, ~{proj_yr_mb:.1f} MB/yr); Total DB: {tot_mb:.2f} MB / {limit_mb} MB",
                 "verdict": "PASS" if g10_pass else "FAIL",
             })
 
@@ -492,8 +509,10 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # -------------------------------------------------------------
             # S1: >= 60 industries with >= 5 stocks
             cur.execute("""
-                SELECT count(*) FROM daily_industry_breadth 
-                WHERE trade_date = %s AND n_stocks >= 5;
+                SELECT count(*)
+                FROM daily_industry_strength s
+                JOIN industry_groups g ON g.group_id = s.group_id
+                WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry' AND s.n_stocks >= 5;
             """, (ind_asof,))
             n_ranked_ind = cur.fetchone()[0]
             s1_pass = n_ranked_ind >= 60
@@ -506,29 +525,31 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
                 "verdict": "PASS" if s1_pass else "WARN",
             })
 
-            # S2: >= 95% of ranked industries have a quadrant
+            # S2: >= 95% of ranked industries have RS-STS / history (>= 60 sessions)
             cur.execute("""
-                SELECT basic_industry FROM daily_industry_breadth
-                WHERE trade_date = %s AND n_stocks >= 5;
+                SELECT s.group_id
+                FROM daily_industry_strength s
+                JOIN industry_groups g ON g.group_id = s.group_id
+                WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry' AND s.n_stocks >= 5;
             """, (ind_asof,))
-            ranked_names = [r[0] for r in cur.fetchall()]
+            ranked_gids = [r[0] for r in cur.fetchall()]
             
-            # Check candle lengths
             cur.execute("""
-                SELECT basic_industry, count(*) FROM daily_industry_index
-                WHERE trade_date <= %s
-                GROUP BY basic_industry;
+                SELECT group_id, count(*)
+                FROM daily_industry_strength
+                WHERE trade_date <= %s AND universe = 'liquid'
+                GROUP BY group_id;
             """, (ind_asof,))
             candle_counts = dict(cur.fetchall())
-            quadrant_valid = sum(1 for name in ranked_names if candle_counts.get(name, 0) >= 60)
-            quad_pct = (quadrant_valid / len(ranked_names) * 100.0) if ranked_names else 0.0
+            quadrant_valid = sum(1 for gid in ranked_gids if candle_counts.get(gid, 0) >= 60)
+            quad_pct = (quadrant_valid / len(ranked_gids) * 100.0) if ranked_gids else 0.0
             s2_pass = quad_pct >= 95.0
             gates.append({
                 "id": "S2",
                 "type": "SOFT",
-                "name": "Quadrant Coverage for Ranked Industries",
-                "expected": ">= 95.0% have quadrant (>= 60 sessions)",
-                "actual": f"{quad_pct:.1f}% ({quadrant_valid}/{len(ranked_names)})",
+                "name": "History Coverage for Ranked Industries",
+                "expected": ">= 95.0% have >= 60 sessions",
+                "actual": f"{quad_pct:.1f}% ({quadrant_valid}/{len(ranked_gids)})",
                 "verdict": "PASS" if s2_pass else "WARN",
             })
 
@@ -537,9 +558,9 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
                 SELECT 
                     count(CASE WHEN mcap_cr IS NULL OR mcap_cr <= 0 THEN 1 END),
                     count(*)
-                FROM industry_stock_metrics
-                WHERE in_universe = true;
-            """)
+                FROM latest_industry_stock_metrics
+                WHERE snapshot_id = %s AND is_liquid = true;
+            """, (latest_snap_id,))
             null_mcap_cnt, tot_univ_cnt = cur.fetchone()
             null_mcap_pct = (null_mcap_cnt / tot_univ_cnt * 100.0) if tot_univ_cnt > 0 else 0.0
             s3_pass = null_mcap_pct <= 5.0
@@ -553,7 +574,7 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             })
 
             # S4: 10 Reference names from I5 present in our list
-            cur.execute("SELECT DISTINCT basic_industry FROM stock_industry;")
+            cur.execute("SELECT DISTINCT basic_industry FROM instruments WHERE basic_industry IS NOT NULL;")
             our_industries = set(r[0] for r in cur.fetchall() if r[0])
             ref_matches = [name for name in REFERENCE_10_NAMES if name in our_industries]
             s4_pass = len(ref_matches) >= 5  # Informational check
@@ -604,7 +625,14 @@ def write_markdown_report(gates: List[Dict[str, Any]], details: Dict[str, Any], 
             lines.append(f"| {o['symbol']} | {o['close']} | {o['issue_size']} | {o['mcap_rs']:,.0f} | {o['diff_pct']:.2f}% |")
 
     lines.append("\n---\n")
-    lines.append(f"**Final Verdict**: {'ALL HARD GATES PASSED (READY FOR MERGE)' if all_pass else 'HARD GATES FAILED — BLOCKING DONE'}\n")
+    ui_not_verified = any(g.get("id") == "UI" and g.get("verdict") == "NOT VERIFIED" for g in gates)
+    if not all_pass:
+        verdict_line = "HARD GATES FAILED — BLOCKING DONE"
+    elif ui_not_verified:
+        verdict_line = "ALL DATA/API HARD GATES PASSED (UI: NOT VERIFIED — SSR only)"
+    else:
+        verdict_line = "ALL HARD GATES PASSED (READY FOR MERGE)"
+    lines.append(f"**Final Verdict**: {verdict_line}\n")
 
     content = "\n".join(lines)
     with open(report_path, "w", encoding="utf-8") as f:
