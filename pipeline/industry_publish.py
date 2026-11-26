@@ -378,7 +378,8 @@ def run_industry_strength_job(
                 """
                 SELECT token, symbol, name, isin, macro_sector, sector, industry, basic_industry
                 FROM instruments
-                WHERE exchange = 'NSE' AND COALESCE(is_active, TRUE) = TRUE;
+                WHERE exchange = 'NSE' AND COALESCE(is_active, TRUE) = TRUE
+                  AND COALESCE(classification_status, '') != 'delisted';
                 """
             )
             classifications = {
@@ -489,7 +490,8 @@ def backfill_industry_strength(
                 """
                 SELECT token, symbol, name, isin, macro_sector, sector, industry, basic_industry
                 FROM instruments
-                WHERE exchange = 'NSE' AND COALESCE(is_active, TRUE) = TRUE;
+                WHERE exchange = 'NSE' AND COALESCE(is_active, TRUE) = TRUE
+                  AND COALESCE(classification_status, '') != 'delisted';
                 """
             )
             classifications = {

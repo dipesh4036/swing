@@ -75,9 +75,29 @@ def main():
     backfill_ind_parser = subparsers.add_parser("backfill-industry", help="Backfill daily_industry_breadth and index for last 250 sessions")
     backfill_ind_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
 
-    # Classification bootstrap command
-    cls_boot_parser = subparsers.add_parser("classification-bootstrap", help="Bootstrap 4-level NSE classification from pinned seed CSV + overrides")
-    cls_boot_parser.add_argument("--dry-run", action="store_true", help="Preview matches without writing to DB")
+    # Classification import command (C1)
+    cls_imp_parser = subparsers.add_parser("classification-import", help="One-time idempotent import of local classification CSVs into DB")
+    cls_imp_parser.add_argument("--file", required=True, help="Path to local master CSV")
+    cls_imp_parser.add_argument("--overrides", default=None, help="Path to local overrides CSV")
+    cls_imp_parser.add_argument("--symbol-changes", default=None, help="Path to local symbol changes CSV")
+    cls_imp_parser.add_argument("--delisted", default=None, help="Path to local delisted CSV")
+    cls_imp_parser.add_argument("--dry-run", action="store_true", help="Preview import counts without writing to DB")
+
+    # Classification manual set / remove / export commands (C1)
+    cls_set_parser = subparsers.add_parser("classification-set", help="Set manual 4-level classification override for a symbol")
+    cls_set_parser.add_argument("symbol", help="NSE symbol")
+    cls_set_parser.add_argument("--macro", required=True)
+    cls_set_parser.add_argument("--sector", required=True)
+    cls_set_parser.add_argument("--industry", required=True)
+    cls_set_parser.add_argument("--basic", required=True)
+    cls_set_parser.add_argument("--note", default="manual cli")
+
+    cls_rem_parser = subparsers.add_parser("classification-remove", help="Mark a symbol as delisted in classification")
+    cls_rem_parser.add_argument("symbol", help="NSE symbol")
+    cls_rem_parser.add_argument("--reason", default="manual remove")
+
+    cls_exp_parser = subparsers.add_parser("classification-export", help="Export DB classification to local CSV backup")
+    cls_exp_parser.add_argument("--out", default="data/classification_backup.csv")
 
     # Classification incremental sync command
     cls_sync_parser = subparsers.add_parser("classification-sync", help="Incrementally sync missing/new NSE 4-level classifications")
@@ -289,15 +309,50 @@ def main():
             traceback.print_exc()
             sys.exit(1)
 
-    elif args.command == "classification-bootstrap":
-        logger.info("Executing 'classification-bootstrap' command...")
+    elif args.command == "classification-import":
+        logger.info("Executing 'classification-import' command...")
         try:
-            from pipeline.classification import bootstrap_classification
-            res = bootstrap_classification(dry_run=args.dry_run)
+            from pipeline.classification import import_classification_file
+            res = import_classification_file(
+                file_path=args.file,
+                overrides_path=args.overrides,
+                symbol_changes_path=args.symbol_changes,
+                delisted_path=args.delisted,
+                dry_run=args.dry_run,
+            )
             print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback
             traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "classification-set":
+        try:
+            from pipeline.classification import set_classification_override
+            res = set_classification_override(
+                args.symbol, args.macro, args.sector, args.industry, args.basic, note=args.note
+            )
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "classification-remove":
+        try:
+            from pipeline.classification import mark_classification_delisted
+            res = mark_classification_delisted(args.symbol, reason=args.reason)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "classification-export":
+        try:
+            from pipeline.classification import export_classification_csv
+            res = export_classification_csv(out_path=args.out)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
 
     elif args.command == "classification-sync":
