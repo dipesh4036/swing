@@ -660,33 +660,6 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
         except Exception as e:
             logger.error(f"Enriching indicators frame failed: {e}", exc_info=True)
 
-        # Compute sector breadth & equal-weight metrics (P3 - non-fatal, T13, U2)
-        sector_degraded = False
-        try:
-            from pipeline.sectors import compute_sector_metrics
-            logger.info("Computing sector breadth metrics...")
-            sec_res = compute_sector_metrics(df_ind, conn=conn, publish_floor_date=publish_floor_date)
-            rows_pub = sec_res.get('total_published', 0) if isinstance(sec_res, dict) else 0
-            if rows_pub == 0:
-                logger.warning("Sector metrics published 0 rows; marking degraded.")
-                sector_degraded = True
-            else:
-                logger.info(f"Sector breadth computation finished: {rows_pub} rows published.")
-        except Exception as sce:
-            logger.error(f"Sector breadth computation encountered an error: {sce}", exc_info=True)
-            sector_degraded = True
-
-        # Compute industry breadth & equal-weight metrics (I2 - non-fatal, degraded)
-        industry_degraded = False
-        try:
-            from pipeline.industries import compute_industry_metrics
-            logger.info("Computing industry breadth and ranking metrics (I2)...")
-            ind_res = compute_industry_metrics(df_ind, conn=conn, publish_floor_date=publish_floor_date)
-            logger.info(f"Industry computation finished: {ind_res}")
-        except Exception as ie:
-            logger.warning(f"Industry metrics computation notice (non-fatal): {ie}", exc_info=True)
-            industry_degraded = True
-
         # Compute 4-level RS_STS industry strength snapshot (non-fatal, degraded)
         try:
             from pipeline.industry_publish import run_industry_strength_job
@@ -695,7 +668,6 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             logger.info(f"Industry RS_STS snapshot published: {rs_snap_res}")
         except Exception as rse:
             logger.warning(f"Industry RS_STS computation notice (non-fatal): {rse}", exc_info=True)
-            industry_degraded = True
 
         # Trigger screener calculation for the latest trade date
         latest_date = max(all_trade_dates)
@@ -704,13 +676,6 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             logger.info(f"Triggering screeners for latest trade date: {latest_date}...")
             screener_res = run_screeners(df_ind, target_date=latest_date, conn=conn)
             logger.info(f"Screener execution finished for {latest_date}: {screener_res.get('counts')}")
-
-            # U3: Refresh sector_stock_metrics.screeners from daily_screener_results
-            try:
-                from pipeline.sectors import refresh_sector_stock_screeners
-                refresh_sector_stock_screeners(conn, latest_date)
-            except Exception as rse:
-                logger.warning(f"Could not refresh sector stock screeners: {rse}")
         except Exception as se:
             logger.error(f"Screener execution encountered an error: {se}", exc_info=True)
             try:
@@ -719,7 +684,7 @@ def compute_and_publish_all(parquet_path: str = EQUITY_PARQUET_PATH) -> bool:
             except Exception:
                 pass
 
-        return {"success": True, "sector_degraded": sector_degraded}
+        return {"success": True}
     finally:
         conn.close()
 

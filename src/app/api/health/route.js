@@ -120,12 +120,12 @@ export async function GET(request) {
     let sectorLatestDate = null;
     try {
       const sectorRes = await queryWithRetry(
-        "SELECT MAX(trade_date) as latest_date FROM daily_sector_breadth;"
+        "SELECT MAX(trade_date) as latest_date FROM daily_industry_strength;"
       );
       const rawSector = sectorRes.rows[0]?.latest_date;
       sectorLatestDate = rawSector ? new Date(rawSector).toISOString().split("T")[0] : null;
     } catch (secErr) {
-      console.warn("Could not query daily_sector_breadth latest date:", secErr.message);
+      console.warn("Could not query daily_industry_strength latest date:", secErr.message);
     }
     const sectorStaleDays = getWeekdayDifference(sectorLatestDate);
 

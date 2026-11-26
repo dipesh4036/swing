@@ -138,8 +138,8 @@ node scripts/create-user.mjs owner@example.com
 The **Industries** dashboard tracks capital flow across NSE's 4-level industry classification hierarchy (**Macro → Sector → Industry → Basic Industry**) against the **NIFTY 500** benchmark.
 
 ### 1. 4-Level Classification & Incremental Sync
-- **Bootstrap Seed**: `pipeline/data/nse_stock_master.csv` + `nse_classification_overrides.csv` (see `pipeline/data/CLASSIFICATION_SOURCE.md`), matched **ISIN-first** then uppercase symbol+exchange.
-- **Incremental Daily Sync**: `classification-sync` checks `EQUITY_L.csv`, applies local seed/overrides first, and queues only missing/incomplete symbols via rate-limited `GetQuoteApi` lookups (zero per-stock calls when all instruments are mapped).
+- **DB-Only Classification Truth**: Classifications live in Neon (`instruments`, `classification_overrides`, `symbol_changes`, `classification_audit`), seeded via `classification-import` from local files (`data/`), matched **ISIN-first** then uppercase symbol+exchange.
+- **Incremental Daily Sync**: `classification-sync` checks `EQUITY_L.csv`, applies DB overrides/renames first, and queues up to 20 missing/incomplete symbols per run via rate-limited `GetQuoteApi` lookups (zero per-stock calls when all instruments are mapped; stops on HTTP 403/429).
 
 ### 2. Equal-Weight `RS_STS` Formula & Eligibility
 - **Group Equal-Weight Index**: Full-window constituents (26 sessions, excluding new IPO listings inside the window and corporate-action jumps > 40%) are normalized to base 100 on session `d0` and averaged across constituents.

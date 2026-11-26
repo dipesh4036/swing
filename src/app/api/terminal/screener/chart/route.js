@@ -38,24 +38,7 @@ export async function GET(request) {
     let stockRow = null;
     let asOfStr = null;
 
-    if (sourceParam === "sector") {
-      // T9.3: Sector stocks chart support
-      const secRes = await queryWithRetry(
-        `SELECT symbol, trade_date::text as trade_date, rs_rank, vol_ratio
-         FROM sector_stock_metrics
-         WHERE token = $1
-         LIMIT 1;`,
-        [token]
-      );
-      if (secRes.rows.length === 0) {
-        return NextResponse.json(
-          { error: `Stock with token ${token} not found in sector stock metrics.` },
-          { status: 404, headers: { "Cache-Control": "no-store" } }
-        );
-      }
-      stockRow = secRes.rows[0];
-      asOfStr = String(stockRow.trade_date);
-    } else if (sourceParam === "industry") {
+    if (sourceParam === "industry") {
       // X1.2: Industry strength stocks chart support (latest completed snapshot)
       const indRes = await queryWithRetry(
         `SELECT m.symbol, s.trade_date::text AS trade_date, m.rs_rating AS rs_rank

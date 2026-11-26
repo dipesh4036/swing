@@ -276,7 +276,7 @@ const sectorMockRequire = (id) => {
   if (id === "@/components/sectors/StockExplorerView" || id === "@/components/sectors/IndustryStockExplorerView") {
     return ({ stocks }) => React.createElement("div", { id: "mock-explorer" }, `Explorer with ${stocks?.length || 0} stocks`);
   }
-  if (id === "@/components/sectors/StockDetailPanel") {
+  if (id === "@/components/industry-strength/StockDetailPanel") {
     return ({ stock }) => React.createElement("div", { id: "mock-detail" }, `Detail for ${stock?.symbol}`);
   }
   if (id === "@/components/sectors/IndustryDetailDrawer") {
@@ -304,40 +304,6 @@ assert.doesNotThrow(() => {
   assert.ok(html.includes("Sector Rotation") || html.includes("Industries"));
 }, "SectorRotationPage must render without throwing");
 console.log("✓ SectorRotationPage rendered successfully with 'Industries'");
-
-// Render SectorTableView smoke test
-const SectorTableView = compileAndLoadComponent(
-  "src/components/sectors/SectorTableView.jsx",
-  sectorMockRequire
-);
-assert.doesNotThrow(() => {
-  const sampleSectors = [
-    { key: "bank", label: "Bank", rs_1m: 3.5, rs_3m: 6.2, ret_1m: 4.1, pct_above_50dma: 80.0, pct_above_200dma: 70.0, quadrant: "Leading", leaders_count: 5 },
-    { key: "it", label: "IT", rs_1m: -1.2, rs_3m: 0.5, ret_1m: -0.8, pct_above_50dma: 40.0, pct_above_200dma: 50.0, quadrant: "Lagging", leaders_count: 2 },
-  ];
-  const html = renderToString(React.createElement(SectorTableView, { sectors: sampleSectors }));
-  assert.ok(html.includes("Bank"));
-  assert.ok(html.includes("IT"));
-  assert.ok(html.includes("Leading"));
-});
-console.log("✓ SectorTableView rendered successfully");
-
-// Render StockExplorerView smoke test
-const StockExplorerView = compileAndLoadComponent(
-  "src/components/sectors/StockExplorerView.jsx",
-  sectorMockRequire
-);
-assert.doesNotThrow(() => {
-  const sampleStocks = [
-    { token: 101, symbol: "TESTBANK", sector: "bank", close: 1500, ret_1d: 1.2, ret_1m: 5.4, rs_rank: 88, in_universe: true, leader: true },
-    { token: 102, symbol: "TESTIT", sector: "it", close: 3200, ret_1d: -0.5, ret_1m: -2.1, rs_rank: 45, in_universe: true, leader: false },
-  ];
-  const html = renderToString(React.createElement(StockExplorerView, { stocks: sampleStocks, sectors: [{ key: "bank", label: "Bank" }, { key: "it", label: "IT" }] }));
-  assert.ok(html.includes("TESTBANK"));
-  assert.ok(html.includes("TESTIT"));
-  assert.ok(html.includes("Leaders only"));
-});
-console.log("✓ StockExplorerView rendered successfully");
 
 // -----------------------------------------------------------------------------
 // 5. V1: Real Component Render Tests (ScreenerChart, StockDetailPanel, PatternDetailPanel, PatternLayersBar)
@@ -559,7 +525,7 @@ console.log("✓ ScreenerChart rendered successfully (260 bars, overlay, short/e
 
 // 5d. StockDetailPanel
 const RealStockDetailPanel = compileAndLoadComponent(
-  "src/components/sectors/StockDetailPanel.jsx",
+  "src/components/industry-strength/StockDetailPanel.jsx",
   chartMockRequire
 );
 

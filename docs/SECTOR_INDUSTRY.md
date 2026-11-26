@@ -12,17 +12,22 @@ Tab 3 (`/sectors`) is powered by NSE's 4-level industry taxonomy (**Macro → Se
 
 ## Operational CLI Commands
 ```sh
-# 1. Bootstrap 4-level classification from pinned MIT seed + overrides (idempotent)
-.venv/bin/python -m pipeline.cli classification-bootstrap --dry-run
-.venv/bin/python -m pipeline.cli classification-bootstrap
+# 1. One-time local import of 4-level classification CSVs into Neon DB (idempotent)
+.venv/bin/python -m pipeline.cli classification-import --file data/nse_stock_master.csv --dry-run
+.venv/bin/python -m pipeline.cli classification-import --file data/nse_stock_master.csv
 
-# 2. Incremental daily sync (queues only missing/incomplete/due symbols; 0 calls when up-to-date)
+# 2. Manual classification overrides, delisting, and local backup export
+.venv/bin/python -m pipeline.cli classification-set SYMBOL --macro ... --sector ... --industry ... --basic ...
+.venv/bin/python -m pipeline.cli classification-remove SYMBOL --reason "..."
+.venv/bin/python -m pipeline.cli classification-export --out data/classification_backup.csv
+
+# 3. Incremental daily sync (capped at 20 API calls/run, 2.5s pacing, halts on 403/429)
 .venv/bin/python -m pipeline.cli classification-sync --dry-run
 .venv/bin/python -m pipeline.cli classification-sync
 .venv/bin/python -m pipeline.cli classification-sync --retry-missing
 .venv/bin/python -m pipeline.cli classification-sync --refresh SYMBOL
 
-# 3. Recompute latest RS_STS snapshot or backfill historical strength from Parquet
+# 4. Recompute latest RS_STS snapshot or backfill historical strength from Parquet
 .venv/bin/python -m pipeline.cli industry-recompute
 .venv/bin/python -m pipeline.cli industry-backfill --sessions 65
 ```
@@ -32,6 +37,6 @@ Tab 3 (`/sectors`) is powered by NSE's 4-level industry taxonomy (**Macro → Se
 - `GET /api/industry-strength/[groupId]?page=1&limit=50&universe=all` (lazy paginated constituents)
 - `GET /api/industry-strength/[groupId]/history?period=3m&universe=all` (bounded RS series)
 
-## Rollback Instructions
-1. Old production tables (`stock_sector`, `daily_sector_breadth`, `sector_stock_metrics`, `stock_industry`) are preserved intact by migration `016`.
-2. To roll back without data loss, revert the frontend/API commits (`src/app/(terminal)/sectors/page.jsx`, `src/components/industry-strength/`, `src/app/api/industry-strength/`) and restore `probe_output/pre_rebuild_checkpoint.patch`.
+## Legacy Cleanup (`020_drop_legacy_sector_tables.sql`)
+- Legacy sector rotation components, routes, and pipeline modules have been removed.
+- Migration `pipeline/migrations/020_drop_legacy_sector_tables.sql` is staged (unapplied) to drop `sector_stock_metrics`, `daily_sector_breadth`, `daily_industry_breadth`, `daily_industry_index`, `industry_stock_metrics`, and `stock_industry` after owner sign-off.

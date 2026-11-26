@@ -216,7 +216,7 @@ assert.ok(dashSrc.includes("in_universe: true"), "SectorDashboard must pass in_u
 assert.ok(dashSrc.includes('source="industry"'), "SectorDashboard must pass source='industry' to StockDetailPanel");
 
 // Also verify StockDetailPanel SSR renders without throwing when given a ConstituentStockRow-shaped stock with token
-const panelSrc = fs.readFileSync(path.resolve("src/components/sectors/StockDetailPanel.jsx"), "utf-8");
+const panelSrc = fs.readFileSync(path.resolve("src/components/industry-strength/StockDetailPanel.jsx"), "utf-8");
 const panelTranspiled = ts.transpileModule(panelSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true },
 }).outputText;

@@ -153,7 +153,6 @@ def run_daily_workflow(
     sync_instruments_fn: Optional[Callable] = None,
     sync_constituents_fn: Optional[Callable] = None,
     sync_indices_fn: Optional[Callable] = None,
-    sync_sector_indices_fn: Optional[Callable] = None,
     sync_macro_fn: Optional[Callable] = None,
     sync_fii_dii_fn: Optional[Callable] = None,
     ingest_equities_fn: Optional[Callable] = None,
@@ -278,20 +277,6 @@ def run_daily_workflow(
             logger.error(msg)
             send_telegram_alert(msg)
             return {"status": "failed", "step": "sync_indices", "error": str(e), "trimmed": False}
-
-        # Step 3b. sync_sector_indices (non-core: degraded)
-        if sync_sector_indices_fn is not None or sync_indices_fn is None:
-            try:
-                fn3b = sync_sector_indices_fn
-                if fn3b is None:
-                    from pipeline.indices_macro import sync_sector_indices
-                    fn3b = sync_sector_indices
-                logger.info("Step 3b: sync_sector_indices")
-                res_sec = fn3b()
-                logger.info(f"Step 3b complete: sector indices synced ({res_sec}).")
-            except Exception as se:
-                logger.warning(f"Step 3b (sync_sector_indices) failed, continuing in degraded mode: {se}")
-                degraded_steps.append("sync_sector_indices")
 
         # 4. sync_macro (non-core: degraded)
         logger.info("Step 4/9: sync_macro")
@@ -572,15 +557,6 @@ def run_weekly_refetch(
 
     def weekly_macro():
         return sync_macro(years=retention_years)
-
-    # Sync stock sector mapping from Nifty indices
-    try:
-        from pipeline.sectors import sync_stock_sectors
-        logger.info("Executing weekly sector constituent sync...")
-        sync_stock_sectors()
-        logger.info("Weekly sector constituent sync complete.")
-    except Exception as se:
-        logger.warning(f"Weekly sector constituent sync encountered: {se}")
 
     res = run_daily_workflow(
         sync_indices_fn=weekly_indices,

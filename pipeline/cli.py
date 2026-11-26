@@ -63,17 +63,9 @@ def main():
     dedupe_parser = subparsers.add_parser("dedupe-store", help="Dedupe symbols across multiple tokens due to series moves (EQ<->BE)")
     dedupe_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
 
-    # Load Industry Map command (I1)
-    load_ind_parser = subparsers.add_parser("load-industry-map", help="Upsert data/industry_map.csv into stock_industry")
-    load_ind_parser.add_argument("--path", default="data/industry_map.csv", help="Path to industry_map.csv")
-
     # Sync Market Cap command (I1)
     sync_mcap_parser = subparsers.add_parser("sync-mcap", help="Sync latest market cap & issue size from PR bhavcopy zip into stock_mcap")
     sync_mcap_parser.add_argument("--date", default=None, help="Target date YYYY-MM-DD (defaults to latest)")
-
-    # Backfill Industry command (I2)
-    backfill_ind_parser = subparsers.add_parser("backfill-industry", help="Backfill daily_industry_breadth and index for last 250 sessions")
-    backfill_ind_parser.add_argument("--path", default=EQUITY_PARQUET_PATH, help="Path to parquet file")
 
     # Classification import command (C1)
     cls_imp_parser = subparsers.add_parser("classification-import", help="One-time idempotent import of local classification CSVs into DB")
@@ -271,17 +263,6 @@ def main():
             traceback.print_exc()
             sys.exit(1)
 
-    elif args.command == "load-industry-map":
-        logger.info("Executing 'load-industry-map' command...")
-        try:
-            from pipeline.industries import load_industry_map
-            res = load_industry_map(csv_path=args.path)
-            sys.exit(0 if res.get("status") == "success" else 1)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-
     elif args.command == "sync-mcap":
         logger.info("Executing 'sync-mcap' command...")
         try:
@@ -289,19 +270,6 @@ def main():
             from pipeline.industries import sync_stock_mcap
             t_date = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else None
             res = sync_stock_mcap(target_date=t_date)
-            print(json.dumps(res, indent=2))
-            sys.exit(0 if res.get("status") == "success" else 1)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-
-    elif args.command == "backfill-industry":
-        logger.info("Executing 'backfill-industry' command...")
-        try:
-            download_parquet_store(args.path)
-            from pipeline.industries import backfill_industry_metrics
-            res = backfill_industry_metrics(parquet_path=args.path)
             print(json.dumps(res, indent=2))
             sys.exit(0 if res.get("status") == "success" else 1)
         except Exception as e:

@@ -20,7 +20,7 @@ import SummaryCards from "./SummaryCards";
 import RankingTable from "./RankingTable";
 import GroupDetails from "./GroupDetails";
 import RotationChart from "./RotationChart";
-import StockDetailPanel from "@/components/sectors/StockDetailPanel";
+import StockDetailPanel from "@/components/industry-strength/StockDetailPanel";
 
 const NEXT_LEVEL: Record<ClassificationLevel, ClassificationLevel | null> = {
   macro: "sector",
