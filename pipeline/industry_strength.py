@@ -1,7 +1,7 @@
 """
 Vectorized Industry Strength (4-level NSE hierarchy) & RS_STS computation.
 
-Formulas & rules ported from dopawire/nse-relative-strength (MIT License):
+Methodology rules (`rs_sts_v1`):
 - WINDOW = 26 sessions for RS_STS% (equal-weight group index vs NIFTY 500, Excel PERCENTRANK.INC)
 - EMA 20/50/200 (SMA-seeded) and RS line vs 21-day EMA
 - Corporate-action break guard (|daily_ret| > 40%)

@@ -135,7 +135,7 @@ node scripts/create-user.mjs owner@example.com
 
 ## 🧭 Tab 3: Industries Relative Strength (`RS_STS`)
 
-The **Industries** dashboard tracks capital flow across NSE's 4-level industry classification hierarchy (**Macro → Sector → Industry → Basic Industry**) against the **NIFTY 500** benchmark, adapted from `dopawire/nse-relative-strength` (MIT).
+The **Industries** dashboard tracks capital flow across NSE's 4-level industry classification hierarchy (**Macro → Sector → Industry → Basic Industry**) against the **NIFTY 500** benchmark.
 
 ### 1. 4-Level Classification & Incremental Sync
 - **Bootstrap Seed**: `pipeline/data/nse_stock_master.csv` + `nse_classification_overrides.csv` (see `pipeline/data/CLASSIFICATION_SOURCE.md`), matched **ISIN-first** then uppercase symbol+exchange.

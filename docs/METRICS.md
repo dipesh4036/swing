@@ -151,7 +151,7 @@ Distribution sessions expire from the count after 25 trading sessions or when th
 
 ## NSE 4-Level Industry Classification & `RS_STS` (`rs_sts_v1`)
 
-Adapted from `dopawire/nse-relative-strength` (MIT License):
+Key definitions:
 - **Hierarchy**: `Macro` (12 official NSE groups) → `Sector` → `Industry` → `Basic Industry`, deterministically keyed by `(level, full_path)`.
 - **RS_STS%**: Over the trailing `WINDOW = 26` market sessions aligned to `NIFTY 500`, full-window non-break constituents are normalized to base 100 on session `d0` and averaged equally to form `ewi[t]`. `RS[t] = ewi[t] / bench_norm[t]`, and `RS_STS% = PERCENTRANK.INC(RS, RS[-1]) × 100`.
 - **Corporate Action Guard**: Any single-session return jump `|ret| > 40%` (`CORP_ACTION_JUMP = 0.40`) marks a discontinuity; period returns across that boundary return `NULL`, and the stock is excluded from the group equal-weight index for that window.

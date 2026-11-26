@@ -1,7 +1,7 @@
 # NSE 4-Level Industry Classification & Relative Strength (`RS_STS`)
 
 ## Architecture Overview
-Tab 3 (`/sectors`) is powered by NSE's 4-level industry taxonomy (**Macro → Sector → Industry → Basic Industry**) and equal-weight relative strength (`RS_STS`) against **NIFTY 500**, adapted from `dopawire/nse-relative-strength` (MIT License).
+Tab 3 (`/sectors`) is powered by NSE's 4-level industry taxonomy (**Macro → Sector → Industry → Basic Industry**) and equal-weight relative strength (`RS_STS`) against **NIFTY 500**.
 
 ## Data Contract & Database Tables (`016_nse_classification.sql`)
 - `instruments`: Stores `macro_sector`, `sector`, `industry`, `basic_industry`, `classification_source`, `classification_updated_at`, `classification_status`, `classification_retry_after`, `classification_attempts`, matched **ISIN-first** then symbol+exchange.
