@@ -5,8 +5,6 @@ import logging
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional, Set
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 from pipeline.config import RETENTION_YEARS, EQUITY_PARQUET_PATH
 from pipeline.db import get_connection
 from pipeline.smartapi_client import SmartAPIClient, SmartAPIThrottledError

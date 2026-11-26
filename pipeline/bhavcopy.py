@@ -4,7 +4,6 @@ import sys
 import time
 import zipfile
 import logging
-import random
 from datetime import datetime, date, timedelta, timezone
 from typing import Dict, List, Any, Optional, Tuple, Set
 
