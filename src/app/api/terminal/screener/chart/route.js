@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryWithRetry } from "@/lib/db";
-import { fetchAllCandlesFromSmartAPI } from "@/lib/smartapi";
+import { fetchAllCandlesFromSmartAPI, hasAngelCredentials } from "@/lib/smartapi";
 import { requireAuth } from "@/lib/auth";
 import { attachEMAs } from "@/lib/indicators";
 
@@ -105,10 +105,7 @@ export async function GET(request) {
     }
 
     // 3. Fallback order: Angel live (only if env vars exist) -> screener_candles -> stock_candles
-    const hasAngelEnv = Boolean(
-      process.env.API_KEY && process.env.CLIENT_ID && process.env.PIN && process.env.TOTP_SECRET
-    );
-    let rawCandles = hasAngelEnv ? await fetchAllCandlesFromSmartAPI(token) : null;
+    let rawCandles = hasAngelCredentials() ? await fetchAllCandlesFromSmartAPI(token) : null;
     let source = "angel";
 
     const mapDbRows = (rows) =>
