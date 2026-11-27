@@ -150,3 +150,18 @@ import { CHART_THEME } from "@/lib/chart-theme";
 - `PageContainer`: Standardized 100% full-width responsive canvas.
 - `SectionHeader`: Section title with tooltip and action controls.
 - `DashboardHeader`: Product title, active tabs, universe selector, and period switch.
+
+### Tab 3: Industries Components (`src/components/industry-strength/`)
+- `TopGroupsStrip`: Headline "Top 3 Across All Timeframes" (`1D/1W/1M/3M` minimax). Mobile (`< 1024px`) renders a horizontal scroll-snap strip (`w-[88%]` cards so the next card peeks); desktop (`>= 1024px`) renders a 3-column grid. Includes skeleton, empty ("Top 3 will appear after the next daily run"), and partial (< 3 qualifying groups) states.
+- `ControlBar`: Sticky single-row horizontally scrollable bar (`sticky top-0 z-20`) with level chips (`Macro` / `Sector` / `Industry` / `Basic industry`), timeframe chips (`1D`–`YTD`), search toggle, and filter `BottomSheet` (`All NSE` / `Liquid Only`, `Show small groups`, `More columns`).
+- `MarketSnapshot`: Compact 3-stat header row (`Strongest`, `Weakest`, `Beat NIFTY 500`) that expands on tap to show underperforming, improving, and weakening counts.
+- `GroupRowList`: Mobile (`< 1024px`) ranked list (~64 px collapsed row, 15-row paging with `Show 15 more · N left`). One row expands inline at a time (`expandedId`) with all timeframe medians, `>20E`/`>200D`, `RS-STS`, `Adv/Dec`, `Compare`, and `Open stocks`.
+- `RankingTable`: Desktop (`>= 1024px`) sticky-header table (`max-w-[1280px]`) showing `Rank (+change)`, `Group`, `Stocks`, `MED`, `20D H/L`, `>50 SMA`, `RS-STS`, and `Compare` by default.
+- `RankPrimitives` (`RankBadge`, `RankChangeChip`, `SignedReturn`, `format20dHL`): Shared tabular primitives (`tabular-nums`), enforcing colour + sign/arrow on every return and rank move, and `"—"` for null/unverified `20D H/L`.
+- `BottomSheet`: Accessible modal sheet (Esc + backdrop close, `duration-150`) used for mobile Filters and the mobile Rotation Chart.
+
+## Tab 3 Patterns & Mobile Rules
+- **Page Order**: Compact header + `MarketSnapshot` → sticky `ControlBar` → `TopGroupsStrip` → ranked list/table; Rotation Chart opens from the sticky Compare bottom bar (`BottomSheet` on phone, collapsible panel under Top 3 on desktop).
+- **Mobile Row Density**: Key metric (`MED`) first on line 1; `<= 3` visible values per row line; ~64 px collapsed height; 15-row paging; single expanded row at a time.
+- **Colour-Plus-Sign Rule**: Every return and rank move pairs colour (`text-success` / `text-danger`) with an explicit `+`/`-` sign or arrow icon.
+- **States**: Every data block implements skeleton loading, reasoned empty state, and error banner with `Retry`. No animation beyond hover, scroll-snap, and `<= 150 ms` sheet transitions.

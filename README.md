@@ -148,7 +148,7 @@ The **Industries** dashboard tracks capital flow across NSE's 4-level industry c
 
 ### 3. Screener & CLI Commands
 - Deep links from group details open `/screener?groupId=<id>` (with legacy `/screener?sector=<key>` compatibility adapter).
-- CLI commands: `classification-bootstrap`, `classification-sync`, `industry-recompute`, `industry-backfill`. See `docs/SECTOR_INDUSTRY.md` for full operational & rollback details.
+- CLI commands: `classification-import`, `classification-sync`, `industry-recompute`, `industry-backfill`, `backfill-top-groups`. See `docs/SECTOR_INDUSTRY.md` for operational details and [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) for UI tokens and Tab 3 component patterns.
 
 ---
 
