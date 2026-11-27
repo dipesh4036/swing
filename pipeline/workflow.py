@@ -449,8 +449,7 @@ def run_daily_workflow(
         res8b = build_daily_plan()
         logger.info(f"Step 8b complete: daily_plan built ({res8b}).")
     except Exception as pe:
-        logger.warning(f"Step 8b (build_daily_plan) failed, continuing in degraded mode: {pe}")
-        degraded_steps.append("build_daily_plan")
+        logger.warning(f"Step 8b (build_daily_plan) failed, continuing non-fatally: {pe}")
 
     # 9. trim (LAST step, executed only after all prior steps succeed)
     logger.info(f"Step 9/9: trim (retention={RETENTION_YEARS}y)")
