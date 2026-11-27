@@ -205,7 +205,7 @@ export function LargeMidSmall({ rebasedSeries = {}, capSeries = {} }) {
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
           <div className="text-xs font-bold text-text truncate">Large · Mid · Small</div>
-          <div className="text-[10px] text-text-secondary truncate">{referenceText}</div>
+          <div className="text-xs text-text-secondary truncate">{referenceText}</div>
         </div>
         <div className="shrink-0">
           <SegmentedControl
@@ -223,7 +223,7 @@ export function LargeMidSmall({ rebasedSeries = {}, capSeries = {} }) {
           {segmentStats.map((seg) => (
             <span
               key={seg.id}
-              className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums"
+              className="text-xs sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums"
             >
               <span
                 className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -244,7 +244,7 @@ export function LargeMidSmall({ rebasedSeries = {}, capSeries = {} }) {
             </span>
           ))}
         </div>
-        <span className="text-[10px] sm:text-[11px] font-medium text-text shrink-0 pl-1">{leaderText}</span>
+        <span className="text-xs sm:text-xs font-medium text-text shrink-0 pl-1">{leaderText}</span>
       </div>
 
       {/* Comparison Line Chart */}

@@ -41,7 +41,7 @@ export function RankBadge({
   medal?: boolean;
 }) {
   if (rank === null || rank === undefined) {
-    return <span className="font-mono text-xs text-text-muted tabular-nums">—</span>;
+    return <span className="tabular-nums text-xs text-text-muted tabular-nums">—</span>;
   }
   const medalCls =
     medal && rank === 1
@@ -54,7 +54,7 @@ export function RankBadge({
 
   return (
     <span
-      className={`inline-flex items-center justify-center min-w-[28px] h-6 px-1.5 rounded-md border font-mono text-[11px] font-semibold tabular-nums ${medalCls}`}
+      className={`inline-flex items-center justify-center min-w-[28px] h-6 px-1.5 rounded-md border tabular-nums text-xs font-semibold tabular-nums ${medalCls}`}
     >
       #{rank}
     </span>
@@ -74,7 +74,7 @@ export function RankChangeChip({
   const up = change > 0;
   return (
     <span
-      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tabular-nums ${
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs tabular-nums font-semibold tabular-nums ${
         up
           ? "bg-success-bg text-success"
           : "bg-danger-bg text-danger"
@@ -94,7 +94,7 @@ export function SignedReturn({
   size?: "xs" | "sm" | "lg";
 }) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
-    return <span className="font-mono text-text-muted tabular-nums">—</span>;
+    return <span className="tabular-nums text-text-muted tabular-nums">—</span>;
   }
   const sign = value > 0 ? "+" : value < 0 ? "" : "";
   const colorCls =
@@ -107,11 +107,11 @@ export function SignedReturn({
     size === "lg"
       ? "text-[15px] font-semibold"
       : size === "xs"
-        ? "text-[11px] font-medium"
-        : "text-[13px] font-semibold";
+        ? "text-[13px] font-semibold"
+        : "text-sm font-semibold";
 
   return (
-    <span className={`inline-flex items-center gap-0.5 font-mono tabular-nums ${colorCls} ${sizeCls}`}>
+    <span className={`inline-flex items-center gap-0.5 tabular-nums ${colorCls} ${sizeCls}`}>
       {value === 0 && <Minus className="w-2.5 h-2.5 inline" />}
       {sign}
       {value.toFixed(1)}%

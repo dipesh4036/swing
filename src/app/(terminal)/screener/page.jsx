@@ -417,7 +417,7 @@ export default function ScreenerPage() {
                 Stock Screener
               </h1>
               {screenerData?.asOf && (
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-[4px] bg-bg-secondary text-text-secondary border border-border">
+                <span className="text-xs tabular-nums px-2 py-0.5 rounded-[4px] bg-bg-secondary text-text-secondary border border-border">
                   As of {screenerData.asOf}
                 </span>
               )}
@@ -538,7 +538,7 @@ export default function ScreenerPage() {
                 <X size={12} />
               </button>
             </div>
-            <span className="text-text-muted text-[11px]">Filtering candidates to {sectorFilter}</span>
+            <span className="text-text-secondary text-xs">Filtering candidates to {sectorFilter}</span>
           </div>
         )}
 
@@ -568,7 +568,7 @@ export default function ScreenerPage() {
               >
                 <span>{info.short}</span>
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  className={`px-1.5 py-0.2 rounded-full text-xs font-bold ${
                     isActive
                       ? "bg-primary text-text-inverse"
                       : "bg-bg-secondary text-text-secondary"
@@ -597,7 +597,7 @@ export default function ScreenerPage() {
                   : " — Uptrend intact; momentum setups aligned with market direction."}
               </span>
             </div>
-            <span className="text-[10px] font-mono text-text-muted shrink-0 hidden md:inline">
+            <span className="text-xs tabular-nums text-text-secondary shrink-0 hidden md:inline">
               Nifty 500 Breadth
             </span>
           </div>
@@ -610,7 +610,7 @@ export default function ScreenerPage() {
           <button
             type="button"
             onClick={() => setShowRuleInfo(false)}
-            className="absolute top-3 right-3 text-text-muted hover:text-text p-1"
+            className="absolute top-3 right-3 text-text-secondary hover:text-text p-1"
             title="Close rules"
           >
             <X size={15} />
@@ -619,7 +619,7 @@ export default function ScreenerPage() {
             <span className="font-bold text-sm text-text mr-2">
               {currentInfo.name} Criteria
             </span>
-            <span className="text-[10px] text-text-muted font-mono">
+            <span className="text-xs text-text-secondary tabular-nums">
               Source: SCREENER_PARAMS
             </span>
           </div>
@@ -667,7 +667,7 @@ export default function ScreenerPage() {
             <div className="relative w-full">
               <Search
                 size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-secondary"
               />
               <input
                 type="text"
@@ -682,7 +682,7 @@ export default function ScreenerPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="text-[11px] font-medium text-text bg-surface border border-border rounded-md px-2 py-0.5 focus:outline-hidden focus:border-primary cursor-pointer"
+                className="text-xs font-medium text-text bg-surface border border-border rounded-md px-2 py-0.5 focus:outline-hidden focus:border-primary cursor-pointer"
               >
                 <option value="default">Sort: Default</option>
                 <option value="rs_desc">Sort: RS Rank (High)</option>
@@ -693,7 +693,7 @@ export default function ScreenerPage() {
                 <option value="pivot_dist_asc">Sort: Pivot Dist (Near)</option>
               </select>
 
-              <span className="text-[11px] font-mono text-text-muted">
+              <span className="text-xs tabular-nums text-text-secondary">
                 {displayedRows.length} stocks
               </span>
             </div>
@@ -702,7 +702,7 @@ export default function ScreenerPage() {
           {/* Scrollable Compact Stock Rows (~48px each) */}
           <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-border">
             {loadingList ? (
-              <div className="p-8 text-center text-text-muted text-xs">
+              <div className="p-8 text-center text-text-secondary text-xs">
                 <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 Scanning market candidates...
               </div>
@@ -739,7 +739,7 @@ export default function ScreenerPage() {
                         </span>
                         {row.rs_rank !== null && row.rs_rank !== undefined ? (
                           <span
-                            className={`text-[9px] font-mono px-1 py-0.2 rounded-[3px] font-semibold ${
+                            className={`text-xs tabular-nums px-1 py-0.2 rounded-[3px] font-semibold ${
                               row.rs_rank >= 80
                                 ? "bg-bullish-bg text-bullish border border-bullish-border"
                                 : row.rs_rank >= 70
@@ -750,15 +750,15 @@ export default function ScreenerPage() {
                             RS {row.rs_rank}
                           </span>
                         ) : (
-                          <span className="text-[9px] text-text-muted font-mono">—</span>
+                          <span className="text-xs text-text-muted tabular-nums">—</span>
                         )}
                         {row.sector && (
-                          <span className="text-[9px] font-mono px-1 py-0.2 rounded-[3px] bg-bg-secondary text-text-muted border border-border">
+                          <span className="text-xs tabular-nums px-1 py-0.2 rounded-[3px] bg-bg-secondary text-text-secondary border border-border">
                             {row.sector}
                           </span>
                         )}
                       </div>
-                      <span className="font-mono text-xs font-semibold text-text">
+                      <span className="tabular-nums text-xs font-semibold text-text">
                         {row.close !== null && row.close !== undefined
                           ? `₹${row.close.toLocaleString("en-IN")}`
                           : "—"}
@@ -766,14 +766,14 @@ export default function ScreenerPage() {
                     </div>
 
                     {/* Line 2: 1D % (Left), Vol Ratio (Right) */}
-                    <div className="flex items-center justify-between text-[11px] font-mono mt-0.5">
+                    <div className="flex items-center justify-between text-xs tabular-nums mt-0.5">
                       <span
                         className={`font-medium ${
                           row.ret_1d_pct !== null && row.ret_1d_pct !== undefined
                             ? row.ret_1d_pct >= 0
                               ? "text-bullish"
                               : "text-bearish"
-                            : "text-text-muted"
+                            : "text-text-secondary"
                         }`}
                       >
                         {row.ret_1d_pct !== null && row.ret_1d_pct !== undefined

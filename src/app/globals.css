@@ -34,13 +34,13 @@
 
   /* Typography — Light */
   --color-text-primary: #18181B;
-  --color-text-secondary: #71717A;
-  --color-text-muted: #A1A1AA;
+  --color-text-secondary: #52525B;
+  --color-text-muted: #71717A;
   --color-text-disabled: #D4D4D8;
   --color-text-inverse: #FFFFFF;
 
   --color-text: #18181B;
-  --color-text-faint: #A1A1AA;
+  --color-text-faint: #71717A;
 
   /* Primary Brand Accent — Electric Indigo */
   --color-primary: #4F46E5;
@@ -52,21 +52,21 @@
   --color-accent-border: #C7D2FE;
 
   /* Financial Status — Accessible, High-Contrast */
-  --color-bullish: #059669;
+  --color-bullish: #047857;
   --color-bullish-bg: #ECFDF5;
   --color-bullish-border: #A7F3D0;
-  --color-up: #059669;
+  --color-up: #047857;
   --color-up-text: #047857;
 
-  --color-bearish: #E11D48;
+  --color-bearish: #BE123C;
   --color-bearish-bg: #FFF1F2;
   --color-bearish-border: #FECDD3;
-  --color-down: #E11D48;
+  --color-down: #BE123C;
   --color-down-text: #BE123C;
 
-  --color-neutral: #71717A;
+  --color-neutral: #52525B;
   --color-neutral-bg: #F4F4F5;
-  --color-warning: #D97706;
+  --color-warning: #B45309;
   --color-warning-bg: #FFFBEB;
 
   --color-stale: #A1A1AA;

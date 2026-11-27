@@ -20,25 +20,25 @@ export const TOKENS = {
 
     // Text & Typography
     textPrimary: "#18181B",
-    textSecondary: "#71717A",
-    textMuted: "#A1A1AA",
+    textSecondary: "#52525B",
+    textMuted: "#71717A",
     textDisabled: "#D4D4D8",
     textInverse: "#FFFFFF",
 
     // Market status (Indian Equities High-Contrast Financial Conventions)
-    bullish: "#059669",
+    bullish: "#047857",
     bullishBg: "#ECFDF5",
     bullishBorder: "#A7F3D0",
 
-    bearish: "#E11D48",
+    bearish: "#BE123C",
     bearishBg: "#FFF1F2",
     bearishBorder: "#FECDD3",
 
-    neutral: "#71717A",
+    neutral: "#52525B",
     neutralBg: "#F4F4F5",
     neutralBorder: "#E4E4E7",
 
-    warning: "#D97706",
+    warning: "#B45309",
     warningBg: "#FFFBEB",
     warningBorder: "#FDE68A",
 
@@ -67,9 +67,8 @@ export const TOKENS = {
 
     // Strict typography scale with line-height & letter-spacing
     scale: {
-      "2xs": { fontSize: "10px", lineHeight: "14px", letterSpacing: "0em" },
-      xs: { fontSize: "11px", lineHeight: "16px", letterSpacing: "0.02em" },
-      sm: { fontSize: "12px", lineHeight: "16px", letterSpacing: "-0.01em" },
+      xs: { fontSize: "11px", lineHeight: "16px", letterSpacing: "0.01em" }, // Axis ticks & as-of timestamps only
+      sm: { fontSize: "12px", lineHeight: "16px", letterSpacing: "-0.01em" }, // Minimum informational text
       base: { fontSize: "13px", lineHeight: "18px", letterSpacing: "-0.01em" },
       md: { fontSize: "14px", lineHeight: "20px", letterSpacing: "-0.015em" },
       lg: { fontSize: "16px", lineHeight: "22px", letterSpacing: "-0.02em" },

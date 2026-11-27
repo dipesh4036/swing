@@ -17,7 +17,7 @@ export function IndicesSection({ indices = [] }) {
           Indices &amp; Macro
         </span>
         <span title="Benchmark indices and key macroeconomic rates">
-          <Info size={13} className="text-text-muted cursor-pointer" />
+          <Info size={13} className="text-text-secondary cursor-pointer" />
         </span>
       </div>
 

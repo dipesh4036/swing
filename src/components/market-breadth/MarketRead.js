@@ -56,7 +56,7 @@ export function MarketRead({ data }) {
                   {item.status}
                 </span>
               </div>
-              <p className="text-[11px] text-text-secondary pl-4 leading-relaxed">
+              <p className="text-xs text-text-secondary pl-4 leading-relaxed">
                 {item.description}
               </p>
             </div>
@@ -65,7 +65,7 @@ export function MarketRead({ data }) {
 
         {/* Divergence Explainer (Daily momentum vs short-term participation) */}
         {divergenceNote && (
-          <div className="mt-3.5 p-2.5 rounded-md bg-primary-subtle border border-accent-border text-[11px] leading-relaxed text-text">
+          <div className="mt-3.5 p-2.5 rounded-md bg-primary-subtle border border-accent-border text-xs leading-relaxed text-text">
             <span className="font-semibold block mb-0.5 text-primary">
               Daily Momentum vs Participation:
             </span>

@@ -55,7 +55,7 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
           <div className="text-xs font-bold text-text truncate">New highs − lows</div>
-          <div className="text-[10px] text-text-secondary truncate">
+          <div className="text-xs text-text-secondary truncate">
             {is52W
               ? "Long-term market strength (52-week new highs minus lows)"
               : "Short-term momentum (20-day new highs minus lows)"}
@@ -82,24 +82,24 @@ export function NewHighsLows({ keyMetrics, history = [] }) {
             >
               {liveNet !== null && liveNet !== undefined ? `${liveNet > 0 ? "+" : ""}${liveNet}` : "—"}
             </span>
-            <span className="text-[10px] uppercase font-semibold text-text-secondary tracking-wider">
+            <span className="text-xs uppercase font-semibold text-text-secondary tracking-wider">
               {period} Net Stocks
             </span>
           </div>
-          <span className="text-[11px] font-medium text-text-secondary">
+          <span className="text-xs font-medium text-text-secondary">
             {statusText}
           </span>
         </div>
-        <div className="text-[10px] text-text-secondary shrink-0 bg-bg-secondary border border-border rounded-md px-2 py-0.5">
+        <div className="text-xs text-text-secondary shrink-0 bg-bg-secondary border border-border rounded-md px-2 py-0.5">
           <span className="font-semibold text-bullish">{liveHighs !== null && liveHighs !== undefined ? liveHighs : "—"} highs</span>
-          <span className="text-text-muted"> / </span>
+          <span className="text-text-secondary"> / </span>
           <span className="font-semibold text-bearish">{liveLows !== null && liveLows !== undefined ? liveLows : "—"} lows</span>
         </div>
       </div>
 
       {weeklyChangeText && (
         <div
-          className={`text-[10px] font-semibold ${
+          className={`text-xs font-semibold ${
             isPositive ? "text-bullish" : "text-bearish"
           }`}
         >

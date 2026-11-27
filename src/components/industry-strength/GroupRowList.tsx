@@ -59,7 +59,7 @@ export default function GroupRowList({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-[11px] text-text-secondary px-0.5">
+      <div className="flex items-center justify-between text-xs text-text-secondary px-0.5">
         <button
           type="button"
           onClick={onCycleRankMode}
@@ -67,7 +67,7 @@ export default function GroupRowList({
         >
           {RANK_MODE_LABEL[rankMode]}
         </button>
-        <span className="font-mono tabular-nums text-text-muted">
+        <span className="tabular-nums text-text-secondary">
           Showing {visibleGroups.length} of {groups.length} · MED ({period.toUpperCase()})
         </span>
       </div>
@@ -110,7 +110,7 @@ export default function GroupRowList({
                 </div>
 
                 {/* Line 2: 20D H/L · >50 SMA · stocks */}
-                <div className="text-[11px] text-text-muted font-mono tabular-nums truncate">
+                <div className="text-xs text-text-secondary tabular-nums truncate">
                   20D {format20dHL(g.n20dHigh, g.n20dLow)} · &gt;50 SMA{" "}
                   {g.pctAbove50dma !== null ? `${g.pctAbove50dma.toFixed(0)}%` : "—"} ·{" "}
                   {g.stockCount} stocks
@@ -118,7 +118,7 @@ export default function GroupRowList({
               </button>
 
               {isExpanded && (
-                <div className="px-3 pb-3 pt-2 border-t border-border/60 bg-bg-secondary/35 space-y-2.5 text-[11px]">
+                <div className="px-3 pb-3 pt-2 border-t border-border/60 bg-bg-secondary/35 space-y-2.5 text-xs">
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
                       { label: "1D", val: g.median1d },
@@ -130,27 +130,27 @@ export default function GroupRowList({
                       { label: "YTD", val: g.medianYtd },
                     ].map((m) => (
                       <div key={m.label} className="rounded bg-surface px-2 py-1 border border-border/60">
-                        <div className="text-[10px] text-text-muted font-mono">{m.label}</div>
+                        <div className="text-xs text-text-secondary tabular-nums">{m.label}</div>
                         <SignedReturn value={m.val} size="xs" />
                       </div>
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 font-mono tabular-nums text-text-secondary">
+                  <div className="grid grid-cols-3 gap-2 tabular-nums text-text-secondary">
                     <div>
-                      <span className="text-text-muted">&gt;20E: </span>
+                      <span className="text-text-secondary">&gt;20E: </span>
                       <span>{g.pctAbove20ema !== null ? `${g.pctAbove20ema.toFixed(0)}%` : "—"}</span>
                     </div>
                     <div>
-                      <span className="text-text-muted">&gt;200D: </span>
+                      <span className="text-text-secondary">&gt;200D: </span>
                       <span>{g.pctAbove200dma !== null ? `${g.pctAbove200dma.toFixed(0)}%` : "—"}</span>
                     </div>
                     <div>
-                      <span className="text-text-muted">RS-STS: </span>
+                      <span className="text-text-secondary">RS-STS: </span>
                       <span>{g.rsSts !== null ? `${g.rsSts.toFixed(0)}%` : "—"}</span>
                     </div>
                     <div>
-                      <span className="text-text-muted">Adv/Dec: </span>
+                      <span className="text-text-secondary">Adv/Dec: </span>
                       <span>{g.adv}/{g.dec}</span>
                     </div>
                   </div>

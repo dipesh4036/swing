@@ -335,7 +335,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
           </button>
           {stock.rs_rank !== null && stock.rs_rank !== undefined && (
             <span
-              className={`text-[9px] font-mono px-1 py-0.2 rounded-[3px] font-semibold shrink-0 ${
+              className={`text-xs tabular-nums px-1 py-0.2 rounded-[3px] font-semibold shrink-0 ${
                 stock.rs_rank >= 80
                   ? "bg-bullish-bg text-bullish border border-bullish-border"
                   : stock.rs_rank >= 70
@@ -348,7 +348,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
           )}
           {topPattern && (
             <span
-              className="text-[9px] font-mono px-1 py-0.2 rounded-[3px] bg-muted text-muted-foreground border border-border shrink-0 max-w-[140px] truncate"
+              className="text-xs tabular-nums px-1 py-0.2 rounded-[3px] bg-muted text-muted-foreground border border-border shrink-0 max-w-[140px] truncate"
               title={`${topPattern.title} · ${topPattern.status === "at_line" ? "Testing" : topPattern.status.replace("_", " ")}`}
             >
               {topPattern.title} · {topPattern.status === "at_line" ? "Testing" : topPattern.status.replace("_", " ")}
@@ -357,18 +357,18 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="font-mono text-xs font-semibold text-text">
+          <span className="tabular-nums text-xs font-semibold text-text">
             {stock.close !== null && stock.close !== undefined
               ? `₹${stock.close.toLocaleString("en-IN")}`
               : "—"}
           </span>
           <span
-            className={`font-mono text-[11px] font-medium ${
+            className={`tabular-nums text-xs font-medium ${
               stock.ret_1d_pct !== null && stock.ret_1d_pct !== undefined
                 ? stock.ret_1d_pct >= 0
                   ? "text-bullish"
                   : "text-bearish"
-                : "text-text-muted"
+                : "text-text-secondary"
             }`}
           >
             {stock.ret_1d_pct !== null && stock.ret_1d_pct !== undefined
@@ -379,7 +379,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
       </div>
 
       {/* Meta Bar */}
-      <div className="px-2.5 py-1 text-[10px] font-mono text-text-muted border-b border-border/50 flex items-center justify-between bg-surface">
+      <div className="px-2.5 py-1 text-xs tabular-nums text-text-secondary border-b border-border/50 flex items-center justify-between bg-surface">
         <div className="flex items-center gap-2">
           <span title={stock.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}>
             Vol {stock.vol_ratio !== null && stock.vol_ratio !== undefined ? `${stock.vol_ratio}x` : "—"}
@@ -412,7 +412,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
         {hasCandles ? (
           <div ref={chartContainerRef} className="w-full h-full cursor-crosshair" />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-text-muted text-xs p-4 text-center">
+          <div className="w-full h-full flex flex-col items-center justify-center text-text-secondary text-xs p-4 text-center">
             <span>No candle data in database</span>
           </div>
         )}
@@ -422,7 +422,7 @@ function GridChartCard({ stock, candles = [], chartHeight = 260, isStale = false
       <button
         type="button"
         onClick={() => onSelectStock(stock)}
-        className="w-full py-1.5 px-2 bg-bg-secondary hover:bg-bg-hover text-text-secondary hover:text-primary text-[11px] font-medium border-t border-border flex items-center justify-center gap-1 transition-colors"
+        className="w-full py-1.5 px-2 bg-bg-secondary hover:bg-bg-hover text-text-secondary hover:text-primary text-xs font-medium border-t border-border flex items-center justify-center gap-1 transition-colors"
       >
         <span>Open Interactive Chart</span>
         <ExternalLink size={11} />
@@ -470,14 +470,14 @@ export function ScreenerGrid({
           <span className="font-bold text-text">
             Chart View (Fast Scan)
           </span>
-          <span className="text-text-muted text-[11px] font-mono">
+          <span className="text-text-secondary text-xs tabular-nums">
             {stocks.length} candidates · powered by database data
           </span>
         </div>
 
         <div className="flex items-center gap-4">
           {/* Layout Switcher (2x2 default) */}
-          <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-[11px] font-semibold">
+          <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-xs font-semibold">
             {["2x2", "3x3", "4x4"].map((mode) => (
               <button
                 key={mode}
@@ -495,30 +495,30 @@ export function ScreenerGrid({
           </div>
 
           {/* Indicator & Moving Average Color Legend */}
-          <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono">
+          <div className="hidden sm:flex items-center gap-3 text-xs tabular-nums">
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 border-t border-dashed border-[#10B981]" />
-              <span className="text-text-muted">30D low</span>
+              <span className="text-text-secondary">30D low</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 border-t border-dashed border-[#60A5FA]" />
-              <span className="text-text-muted">Pivot</span>
+              <span className="text-text-secondary">Pivot</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 rounded-full bg-[#06B6D4]" />
-              <span className="text-text-muted">10 EMA</span>
+              <span className="text-text-secondary">10 EMA</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 rounded-full bg-[#3B82F6]" />
-              <span className="text-text-muted">20 EMA</span>
+              <span className="text-text-secondary">20 EMA</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 rounded-full bg-[#EAB308]" />
-              <span className="text-text-muted">50 EMA</span>
+              <span className="text-text-secondary">50 EMA</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-0.5 rounded-full bg-[#9333EA]" />
-              <span className="text-text-muted">200 EMA</span>
+              <span className="text-text-secondary">200 EMA</span>
             </div>
           </div>
         </div>
@@ -555,7 +555,7 @@ export function ScreenerGrid({
             ))}
           </div>
         ) : stocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-text-muted text-sm">
+          <div className="flex flex-col items-center justify-center h-64 text-text-secondary text-sm">
             <span>No candidate stocks match the current filter.</span>
           </div>
         ) : (

@@ -28,7 +28,7 @@ export function SectionHeader({
         </h2>
         {info && (
           <span
-            className="text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
+            className="text-text-secondary hover:text-text-secondary cursor-pointer transition-colors"
             title={info}
           >
             <Info size={14} />

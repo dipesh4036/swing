@@ -64,7 +64,7 @@ export default function LoginPage() {
           <h2 className="text-sm font-semibold text-text mb-1">
             Owner Sign In
           </h2>
-          <p className="text-xs text-text-muted mb-5">
+          <p className="text-xs text-text-secondary mb-5">
             Enter your credentials to access the terminal.
           </p>
 
@@ -146,7 +146,7 @@ export default function LoginPage() {
         </div>
 
         {/* Footer info */}
-        <div className="text-center mt-6 text-[11px] text-text-muted">
+        <div className="text-center mt-6 text-xs text-text-secondary">
           Protected terminal · Authorized access only
         </div>
       </div>

@@ -32,7 +32,7 @@ export function DashboardHeader({
               <h1 className="text-[14px] sm:text-[15px] font-bold text-text tracking-tight leading-none truncate">
                 Market Breadth
               </h1>
-              <span className="text-[10px] sm:text-[11px] text-text-muted font-medium leading-none block mt-1 truncate">
+              <span className="text-xs sm:text-xs text-text-secondary font-medium leading-none block mt-1 truncate">
                 {asOfDate ? `Read as of ${formatTradeDate(asOfDate)}` : "—"}
               </span>
             </div>
@@ -45,10 +45,10 @@ export function DashboardHeader({
             </span>
             {coverage && (
               <span
-                className="hidden md:inline-flex items-center gap-1 text-[11px] text-text-secondary bg-bg-secondary border border-border rounded-md px-2 py-0.5 cursor-help"
+                className="hidden md:inline-flex items-center gap-1 text-xs text-text-secondary bg-bg-secondary border border-border rounded-md px-2 py-0.5 cursor-help"
                 title={coverage.excludedReason || (coverage.total !== null ? `${coverage.valid} of ${coverage.total} covered (${coverage.pct}%)` : `${coverage.valid ?? "—"} stocks`)}
               >
-                <span className="text-text-muted">Coverage:</span>
+                <span className="text-text-secondary">Coverage:</span>
                 <span className="font-semibold text-text">
                   {coverage.total !== null ? `${coverage.valid}/${coverage.total}` : (coverage.valid ?? "—")}
                 </span>
@@ -71,7 +71,7 @@ export function DashboardHeader({
                   onUniverseChange(e.target.value);
                 }
               }}
-              className="appearance-none bg-bg-secondary border border-border rounded-md text-[11px] sm:text-xs font-medium text-text pl-2.5 pr-7 sm:pr-8 py-1 h-7 sm:h-7.5 hover:border-border-strong focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer max-w-[150px] sm:max-w-none transition-colors"
+              className="appearance-none bg-bg-secondary border border-border rounded-md text-xs sm:text-xs font-medium text-text pl-2.5 pr-7 sm:pr-8 py-1 h-7 sm:h-7.5 hover:border-border-strong focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer max-w-[150px] sm:max-w-none transition-colors"
             >
               {STOCK_UNIVERSES.map((u) => (
                 <option key={u.id} value={u.id}>

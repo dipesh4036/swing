@@ -49,7 +49,7 @@ export function IndexCard({ item }) {
       </div>
 
       {/* Bottom Subtext */}
-      <div className="flex items-center justify-between text-[10px] text-text-secondary pt-1 border-t border-border gap-1">
+      <div className="flex items-center justify-between text-xs text-text-secondary pt-1 border-t border-border gap-1">
         {distFromHighPct !== null && distFromHighPct !== undefined ? (
           <>
             <span
@@ -65,10 +65,10 @@ export function IndexCard({ item }) {
                 ? "At 52W High"
                 : `${distFromHighPct.toFixed(1)}% from 52W high`}
             </span>
-            <span className="text-text-muted truncate text-right">{subtext}</span>
+            <span className="text-text-secondary truncate text-right">{subtext}</span>
           </>
         ) : (
-          <span className="text-text-muted truncate">{subtext}</span>
+          <span className="text-text-secondary truncate">{subtext}</span>
         )}
       </div>
     </BaseCard>

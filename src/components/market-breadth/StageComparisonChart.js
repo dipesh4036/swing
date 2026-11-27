@@ -14,7 +14,7 @@ export function StageComparisonChart({ data = [] }) {
           <div className="text-[13px] font-bold text-text tracking-tight">
             Stage 2 vs Stage 4
           </div>
-          <div className="text-[11px] text-text-secondary">Share of stocks in each stage</div>
+          <div className="text-xs text-text-secondary">Share of stocks in each stage</div>
         </div>
 
         {/* Legend with latest values */}

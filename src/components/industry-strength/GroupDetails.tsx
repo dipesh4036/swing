@@ -21,21 +21,21 @@ interface GroupDetailsProps {
 }
 
 function signedCls(val: number | null) {
-  if (val === null || val === undefined || !Number.isFinite(val)) return "text-text-muted";
+  if (val === null || val === undefined || !Number.isFinite(val)) return "text-text-secondary";
   return val > 0 ? "text-bullish font-medium" : val < 0 ? "text-bearish font-medium" : "text-text-secondary";
 }
 
 function emaPill(flag: boolean | null, label: string) {
   if (flag === null) {
     return (
-      <span className="px-1.5 py-0.5 rounded-[4px] bg-bg-secondary text-text-muted text-[10px] tabular-nums">
+      <span className="px-1.5 py-0.5 rounded-[4px] bg-bg-secondary text-text-secondary text-xs tabular-nums">
         {label}:—
       </span>
     );
   }
   return (
     <span
-      className={`px-1.5 py-0.5 rounded-[4px] text-[10px] font-semibold tabular-nums ${
+      className={`px-1.5 py-0.5 rounded-[4px] text-xs font-semibold tabular-nums ${
         flag ? "bg-bullish-bg text-bullish" : "bg-bearish-bg text-bearish"
       }`}
     >
@@ -200,7 +200,7 @@ export default function GroupDetails({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text text-[11px] font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text text-xs font-medium cursor-pointer"
                 >
                   {copied ? <Check className="w-3 h-3 text-bullish" /> : <Copy className="w-3 h-3" />}
                   <span>{copied ? "Copied" : "Copy"}</span>
@@ -208,7 +208,7 @@ export default function GroupDetails({
                 <button
                   type="button"
                   onClick={handleDownloadCsv}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text text-[11px] font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-border bg-surface text-text-secondary hover:text-text text-xs font-medium cursor-pointer"
                 >
                   <Download className="w-3 h-3" />
                   <span>CSV</span>
@@ -217,7 +217,7 @@ export default function GroupDetails({
                   href={`/screener?groupId=${encodeURIComponent(groupId)}&groupLabel=${encodeURIComponent(
                     data.group.label
                   )}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-primary-subtle border border-accent-border text-primary text-[11px] font-semibold hover:bg-bg-selected"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-primary-subtle border border-accent-border text-primary text-xs font-semibold hover:bg-bg-selected"
                 >
                   <span>Screener</span>
                   <ExternalLink className="w-3 h-3" />
@@ -228,7 +228,7 @@ export default function GroupDetails({
               type="button"
               onClick={onClose}
               aria-label="Close group details"
-              className="p-1.5 rounded-[6px] border border-border text-text-muted hover:text-text hover:bg-bg-hover cursor-pointer"
+              className="p-1.5 rounded-[6px] border border-border text-text-secondary hover:text-text hover:bg-bg-hover cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -263,13 +263,13 @@ export default function GroupDetails({
                   value={stockSearch}
                   onChange={(e) => setStockSearch(e.target.value)}
                   placeholder="Filter symbol or name..."
-                  className="w-full h-7 pl-8 pr-3 text-[11px] rounded-[6px] bg-bg-secondary border border-border text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+                  className="w-full h-7 pl-8 pr-3 text-xs rounded-[6px] bg-bg-secondary border border-border text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
                 />
               </div>
               <button
                 type="button"
                 onClick={() => setOnlyAbove50((v) => !v)}
-                className={`h-7 px-2.5 rounded-[6px] text-[11px] font-medium border cursor-pointer ${
+                className={`h-7 px-2.5 rounded-[6px] text-xs font-medium border cursor-pointer ${
                   onlyAbove50
                     ? "bg-bullish-bg border-bullish-border text-bullish"
                     : "bg-bg-secondary border-border text-text-secondary hover:text-text"
@@ -281,7 +281,7 @@ export default function GroupDetails({
 
             <div className="overflow-x-auto max-h-[420px] rounded-md border border-border">
               <table className="w-full text-[12px] border-collapse">
-                <thead className="sticky top-0 bg-bg-secondary border-b border-border text-[11px] text-text-secondary uppercase tracking-[0.04em]">
+                <thead className="sticky top-0 bg-bg-secondary border-b border-border text-xs text-text-secondary uppercase tracking-[0.04em]">
                   <tr>
                     <th onClick={() => handleSort("symbol")} className="px-3 py-2 text-left cursor-pointer hover:text-text">Symbol</th>
                     <th className="px-3 py-2 text-right">Close</th>
@@ -300,7 +300,7 @@ export default function GroupDetails({
                 <tbody className="divide-y divide-border-subtle">
                   {filteredStocks.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center text-text-muted text-xs">
+                      <td colSpan={12} className="px-4 py-8 text-center text-text-secondary text-xs">
                         {data.stocks.length === 0
                           ? "No active constituents for this universe filter."
                           : "No constituents match your search or SMA filter."}
@@ -317,17 +317,17 @@ export default function GroupDetails({
                           <div className="flex items-center gap-1.5">
                             <span className="font-semibold text-text">{st.symbol}</span>
                             {st.at20dHigh && (
-                              <span className="px-1.5 py-0.2 rounded-[4px] bg-bullish-bg text-bullish text-[10px] font-semibold">
+                              <span className="px-1.5 py-0.2 rounded-[4px] bg-bullish-bg text-bullish text-xs font-semibold">
                                 20H
                               </span>
                             )}
                             {st.isNewListing && (
-                              <span className="px-1.5 py-0.2 rounded-[4px] bg-warning-bg text-warning text-[10px] font-semibold">
+                              <span className="px-1.5 py-0.2 rounded-[4px] bg-warning-bg text-warning text-xs font-semibold">
                                 IPO ({st.listingSessions}d)
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-text-muted truncate max-w-[180px]">
+                          <div className="text-xs text-text-secondary truncate max-w-[180px]">
                             {st.name}
                           </div>
                         </td>
@@ -376,7 +376,7 @@ export default function GroupDetails({
             </div>
 
             {data.totalPages > 1 && (
-              <div className="flex items-center justify-between text-[11px] text-text-secondary pt-1">
+              <div className="flex items-center justify-between text-xs text-text-secondary pt-1">
                 <span className="tabular-nums">
                   Page {data.page} of {data.totalPages} ({data.totalCount} total)
                 </span>

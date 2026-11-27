@@ -124,7 +124,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
           {NAV_ITEMS.map((section) => (
             <div key={section.group} className="space-y-1">
               {!collapsed && (
-                <div className="px-2 text-[10px] font-bold text-text-muted tracking-wider uppercase mb-1">
+                <div className="px-2 text-xs font-bold text-text-secondary tracking-wider uppercase mb-1">
                   {section.group}
                 </div>
               )}

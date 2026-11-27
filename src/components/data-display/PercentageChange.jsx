@@ -22,7 +22,7 @@ export function PercentageChange({
     ? "text-bullish"
     : isNegative
     ? "text-bearish"
-    : "text-text-muted";
+    : "text-text-secondary";
 
   const bgStyles = showBg
     ? isPositive

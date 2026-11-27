@@ -210,7 +210,7 @@ export default function DailyPlanView() {
                   aria-label="Select plan date"
                   value={selectedDate || data.planDate || ""}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-7 px-2 rounded-md border border-border bg-surface text-xs font-mono text-text cursor-pointer"
+                  className="h-7 px-2 rounded-md border border-border bg-surface text-xs tabular-nums text-text cursor-pointer"
                 >
                   {data.availableDates.map((d) => (
                     <option key={d} value={d}>
@@ -254,7 +254,7 @@ export default function DailyPlanView() {
             <BaseCard padding="p-3.5" bg="bg-surface">
               <p className="text-xs sm:text-[13px] text-text leading-relaxed">{data.summaryText}</p>
               {data.summarySource === "gemini" && (
-                <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-text-muted">
+                <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-text-secondary">
                   <Sparkles className="w-3 h-3" />
                   <span>AI-written from the numbers</span>
                 </div>
@@ -269,13 +269,13 @@ export default function DailyPlanView() {
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     1. Market State
                   </h2>
-                  <Link href="/" className="text-[11px] font-medium text-primary hover:underline">
+                  <Link href="/" className="text-xs font-medium text-primary hover:underline">
                     Open Breadth
                   </Link>
                 </div>
 
                 {data.market.status !== "available" ? (
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-text-secondary">
                     Not available: {data.market.reason || "missing breadth data"}
                   </p>
                 ) : (
@@ -289,23 +289,23 @@ export default function DailyPlanView() {
                         {data.market.state}
                       </span>
                       {data.market.delta_50sma_5d !== null && data.market.delta_50sma_5d !== undefined && (
-                        <span className="text-[11px] font-mono text-text-secondary tabular-nums">
+                        <span className="text-xs tabular-nums text-text-secondary tabular-nums">
                           5D &Delta;50SMA: {data.market.delta_50sma_5d >= 0 ? "+" : ""}
                           {data.market.delta_50sma_5d.toFixed(1)} pp
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs font-mono tabular-nums">
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs tabular-nums">
                       <div className="rounded bg-bg-secondary p-2">
-                        <div className="text-[10px] text-text-muted">&gt;50 SMA</div>
+                        <div className="text-xs text-text-secondary">&gt;50 SMA</div>
                         <div className="font-semibold text-text">{data.market.pct_above_50sma?.toFixed(1)}%</div>
                       </div>
                       <div className="rounded bg-bg-secondary p-2">
-                        <div className="text-[10px] text-text-muted">&gt;200 SMA</div>
+                        <div className="text-xs text-text-secondary">&gt;200 SMA</div>
                         <div className="font-semibold text-text">{data.market.pct_above_200sma?.toFixed(1)}%</div>
                       </div>
                       <div className="rounded bg-bg-secondary p-2">
-                        <div className="text-[10px] text-text-muted">Net 20D H/L</div>
+                        <div className="text-xs text-text-secondary">Net 20D H/L</div>
                         <div className="font-semibold text-text">
                           {(data.market.net_highs_20d ?? 0) > 0 ? `+${data.market.net_highs_20d}` : data.market.net_highs_20d}
                         </div>
@@ -321,13 +321,13 @@ export default function DailyPlanView() {
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     2. Where Money Is Going
                   </h2>
-                  <span className="text-[11px] font-semibold text-text">
+                  <span className="text-xs font-semibold text-text">
                     {data.caps.status === "available" ? data.caps.leader : "Not available"}
                   </span>
                 </div>
 
                 {data.caps.status !== "available" || !data.caps.segments ? (
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-text-secondary">
                     Not available: {data.caps.reason || "insufficient index history"}
                   </p>
                 ) : (
@@ -338,22 +338,22 @@ export default function DailyPlanView() {
                           <div className="font-medium text-text flex items-center gap-1.5">
                             <span>{seg.label}</span>
                             {data.caps.leader === seg.label && (
-                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary text-[10px] font-semibold">
+                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary text-xs font-semibold">
                                 Leading
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-text-muted font-mono tabular-nums">
+                          <div className="text-xs text-text-secondary tabular-nums">
                             &gt;50 SMA {seg.pct_above_50sma !== null ? `${seg.pct_above_50sma.toFixed(0)}%` : "—"}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
+                        <div className="flex items-center gap-3 shrink-0 tabular-nums">
                           <div className="text-right">
-                            <div className="text-[10px] text-text-muted">5D</div>
+                            <div className="text-xs text-text-secondary">5D</div>
                             <SignedReturn value={seg.ret_5d} size="xs" />
                           </div>
                           <div className="text-right">
-                            <div className="text-[10px] text-text-muted">20D</div>
+                            <div className="text-xs text-text-secondary">20D</div>
                             <SignedReturn value={seg.ret_20d} size="xs" />
                           </div>
                         </div>
@@ -369,18 +369,18 @@ export default function DailyPlanView() {
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     3. Breakouts &amp; Stage 2
                   </h2>
-                  <Link href="/screener" className="text-[11px] font-medium text-primary hover:underline">
+                  <Link href="/screener" className="text-xs font-medium text-primary hover:underline">
                     Open Screener
                   </Link>
                 </div>
 
                 {data.breakouts.status !== "available" || !data.breakouts.counts ? (
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-text-secondary">
                     Not available: {data.breakouts.reason || "missing screener counts"}
                   </p>
                 ) : (
                   <div className="space-y-2 text-xs">
-                    <div className="divide-y divide-border font-mono tabular-nums">
+                    <div className="divide-y divide-border tabular-nums">
                       {[
                         { key: "stage2_breakout", label: "Stage 2 BO" },
                         { key: "vcp", label: "VCP" },
@@ -392,7 +392,7 @@ export default function DailyPlanView() {
                             <span className="font-sans text-text">{row.label}</span>
                             <span className="text-text-secondary">
                               <strong className="text-text">{c?.today ?? 0}</strong>{" "}
-                              <span className="text-[10px] text-text-muted">
+                              <span className="text-xs text-text-secondary">
                                 (1D: {c?.prev_1d ?? "—"}, 5D: {c?.prev_5d ?? "—"})
                               </span>
                             </span>
@@ -401,15 +401,15 @@ export default function DailyPlanView() {
                       })}
                     </div>
 
-                    <div className="pt-1 border-t border-border flex items-center justify-between text-[11px] font-mono tabular-nums">
-                      <span className="text-text-muted">
+                    <div className="pt-1 border-t border-border flex items-center justify-between text-xs tabular-nums">
+                      <span className="text-text-secondary">
                         Stage 2: N500 {data.breakouts.stage2_pct?.nifty500?.toFixed(1) ?? "—"}% · Liq{" "}
                         {data.breakouts.stage2_pct?.liquid?.toFixed(1) ?? "—"}%
                       </span>
                     </div>
-                    <div className="text-[11px] text-text-secondary">
+                    <div className="text-xs text-text-secondary">
                       5D Follow-through:{" "}
-                      <strong className="font-mono text-text">
+                      <strong className="tabular-nums text-text">
                         {data.breakouts.follow_through?.label ?? "too few to judge"}
                       </strong>
                     </div>
@@ -421,15 +421,15 @@ export default function DailyPlanView() {
             {/* 5. Top 3 Industries (reusing TopGroupsStrip from UX3) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                   4. Top 3 Industries ({data.topIndustries.level})
                 </span>
-                <Link href="/sectors" className="text-[11px] font-medium text-primary hover:underline">
+                <Link href="/sectors" className="text-xs font-medium text-primary hover:underline">
                   Open Industries
                 </Link>
               </div>
               {data.topIndustries.status !== "available" ? (
-                <BaseCard padding="p-3.5" className="text-xs text-text-muted">
+                <BaseCard padding="p-3.5" className="text-xs text-text-secondary">
                   Top 3 industries not available for {data.planDate}:{" "}
                   {data.topIndustries.reason || "no stored rows"}
                 </BaseCard>
@@ -454,19 +454,19 @@ export default function DailyPlanView() {
                       : ""}
                     )
                   </h2>
-                  <p className="text-[11px] text-text-muted">
+                  <p className="text-xs text-text-secondary">
                     Candidates = Stage 2, RS &ge; 70, inside today&apos;s top 3 industries. A filter result, not advice.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-1.5">
                   {checkingPatterns && (
-                    <span className="text-[11px] text-text-muted mr-1">checking patterns…</span>
+                    <span className="text-xs text-text-secondary mr-1">checking patterns…</span>
                   )}
                   <button
                     type="button"
                     onClick={() => setRulesOpen(true)}
-                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-[11px] font-medium text-text-secondary hover:text-text cursor-pointer"
+                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-xs font-medium text-text-secondary hover:text-text cursor-pointer"
                   >
                     <HelpCircle className="w-3.5 h-3.5" />
                     <span>How this is built</span>
@@ -475,7 +475,7 @@ export default function DailyPlanView() {
                     type="button"
                     onClick={handleCopy}
                     disabled={data.candidates.length === 0}
-                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-[11px] font-medium text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
+                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-xs font-medium text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copied ? "Copied" : "Copy"}</span>
@@ -484,7 +484,7 @@ export default function DailyPlanView() {
                     type="button"
                     onClick={handleCsv}
                     disabled={data.candidates.length === 0}
-                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-[11px] font-medium text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
+                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-xs font-medium text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>CSV</span>
@@ -493,7 +493,7 @@ export default function DailyPlanView() {
               </div>
 
               {data.candidates.length === 0 ? (
-                <BaseCard padding="p-6" className="text-center text-xs text-text-muted">
+                <BaseCard padding="p-6" className="text-center text-xs text-text-secondary">
                   No qualifying candidates for {data.planDate}.
                 </BaseCard>
               ) : (
@@ -511,15 +511,15 @@ export default function DailyPlanView() {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-mono text-xs text-text-muted tabular-nums">#{c.rank}</span>
+                              <span className="tabular-nums text-xs text-text-secondary tabular-nums">#{c.rank}</span>
                               <span className="text-[13px] font-semibold text-text truncate">{c.symbol}</span>
-                              <span className="text-[11px] text-text-muted truncate">{c.industryLabel}</span>
+                              <span className="text-xs text-text-secondary truncate">{c.industryLabel}</span>
                             </div>
-                            <span className="font-mono text-xs font-semibold text-text tabular-nums shrink-0">
+                            <span className="tabular-nums text-xs font-semibold text-text tabular-nums shrink-0">
                               RS {c.rsRank.toFixed(0)}
                             </span>
                           </div>
-                          <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                          <div className="flex flex-wrap items-center gap-1 text-xs">
                             <span className="text-text-secondary">{c.reasons.join(" · ")}</span>
                             {pat && (
                               <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary font-medium">
@@ -535,7 +535,7 @@ export default function DailyPlanView() {
                   {/* Desktop table */}
                   <div className="hidden lg:block rounded-xl border border-border bg-surface overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-bg-secondary border-b border-border text-[11px] uppercase tracking-wider text-text-secondary">
+                      <thead className="bg-bg-secondary border-b border-border text-xs uppercase tracking-wider text-text-secondary">
                         <tr>
                           <th className="px-3 py-2.5 text-left">#</th>
                           <th className="px-3 py-2.5 text-left">Symbol</th>
@@ -556,13 +556,13 @@ export default function DailyPlanView() {
                               onClick={() => setSelectedStock(c)}
                               className="hover:bg-bg-hover cursor-pointer"
                             >
-                              <td className="px-3 py-2.5 font-mono tabular-nums text-text-muted">{c.rank}</td>
+                              <td className="px-3 py-2.5 tabular-nums text-text-secondary">{c.rank}</td>
                               <td className="px-3 py-2.5 font-semibold text-text">{c.symbol}</td>
                               <td className="px-3 py-2.5 text-text-secondary">{c.industryLabel}</td>
-                              <td className="px-3 py-2.5 text-right font-mono font-semibold tabular-nums text-text">
+                              <td className="px-3 py-2.5 text-right tabular-nums font-semibold tabular-nums text-text">
                                 {c.rsRank.toFixed(0)}
                               </td>
-                              <td className="px-3 py-2.5 text-right font-mono tabular-nums text-text">
+                              <td className="px-3 py-2.5 text-right tabular-nums text-text">
                                 {c.close !== null ? `₹${c.close.toFixed(2)}` : "—"}
                               </td>
                               <td className="px-3 py-2.5 text-right">
@@ -571,12 +571,12 @@ export default function DailyPlanView() {
                               <td className="px-3 py-2.5">
                                 <div className="flex flex-wrap gap-1">
                                   {c.screenerHits.map((h) => (
-                                    <span key={h} className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-[10px] font-mono text-text">
+                                    <span key={h} className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-xs tabular-nums text-text">
                                       {h}
                                     </span>
                                   ))}
                                   {pat && (
-                                    <span className="px-1.5 py-0.5 rounded bg-primary-subtle border border-accent-border text-[10px] font-medium text-primary">
+                                    <span className="px-1.5 py-0.5 rounded bg-primary-subtle border border-accent-border text-xs font-medium text-primary">
                                       {pat}
                                     </span>
                                   )}
@@ -607,7 +607,7 @@ export default function DailyPlanView() {
           <p>
             <strong className="text-text">Candidate Filter:</strong> Liquid stocks in today&apos;s Top 3 industries (industry level, minimax across 1D/1W/1M/3M), RS &ge; 70, Weinstein Stage 2, and within 25% of 52W high. Ordered by screener hit priority, RS descending, and industry rank. Capped at 20 rows.
           </p>
-          <p className="text-text-muted">
+          <p className="text-text-secondary">
             Deterministic filter output defined in docs/PLAN_RULES.md; not advice.
           </p>
         </div>

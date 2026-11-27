@@ -87,7 +87,7 @@ export default function ControlBar({
                   role="tab"
                   aria-selected={active}
                   onClick={() => onLevelChange(item.id)}
-                  className={`h-7 px-2.5 rounded-full text-[11px] font-medium whitespace-nowrap border transition-colors duration-150 cursor-pointer ${
+                  className={`h-7 px-2.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors duration-150 cursor-pointer ${
                     active
                       ? "bg-primary text-white border-primary"
                       : "bg-surface text-text-secondary border-border hover:text-text"
@@ -111,7 +111,7 @@ export default function ControlBar({
                   type="button"
                   aria-pressed={active}
                   onClick={() => onPeriodChange(p.id)}
-                  className={`h-7 px-2 rounded-md text-[11px] font-mono font-medium whitespace-nowrap border transition-colors duration-150 cursor-pointer ${
+                  className={`h-7 px-2 rounded-md text-xs tabular-nums font-medium whitespace-nowrap border transition-colors duration-150 cursor-pointer ${
                     active
                       ? "bg-primary-subtle text-primary border-accent-border font-semibold"
                       : "bg-surface text-text-secondary border-border hover:text-text"
@@ -142,7 +142,7 @@ export default function ControlBar({
               type="button"
               onClick={() => setFilterOpen(true)}
               aria-label="Filters"
-              className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[11px] font-medium cursor-pointer ${
+              className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-xs font-medium cursor-pointer ${
                 activeFilterCount > 0
                   ? "bg-primary-subtle border-accent-border text-primary"
                   : "bg-surface border-border text-text-secondary hover:text-text"
@@ -150,7 +150,7 @@ export default function ControlBar({
             >
               <Filter className="w-3.5 h-3.5" />
               {activeFilterCount > 0 && (
-                <span className="font-mono text-[10px]">{activeFilterCount}</span>
+                <span className="tabular-nums text-xs">{activeFilterCount}</span>
               )}
             </button>
           </div>
@@ -173,7 +173,7 @@ export default function ControlBar({
                   type="button"
                   onClick={() => onSearchChange("")}
                   aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -183,7 +183,7 @@ export default function ControlBar({
         )}
 
         {breadcrumbs.length > 0 && (
-          <nav aria-label="Hierarchy breadcrumbs" className="flex items-center gap-1 text-[11px] text-text-secondary overflow-x-auto no-scrollbar">
+          <nav aria-label="Hierarchy breadcrumbs" className="flex items-center gap-1 text-xs text-text-secondary overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => onBreadcrumbSelect(null)}
@@ -237,7 +237,7 @@ export default function ControlBar({
           <label className="flex items-center justify-between py-2 border-t border-border cursor-pointer">
             <div>
               <div className="font-medium text-text">Show small groups (&lt; 5 stocks)</div>
-              <div className="text-[11px] text-text-muted">Include unranked micro-groups</div>
+              <div className="text-xs text-text-secondary">Include unranked micro-groups</div>
             </div>
             <input
               type="checkbox"
@@ -250,7 +250,7 @@ export default function ControlBar({
           <label className="hidden lg:flex items-center justify-between py-2 border-t border-border cursor-pointer">
             <div>
               <div className="font-medium text-text">More columns</div>
-              <div className="text-[11px] text-text-muted">Show &gt;20E, &gt;200D, Adv/Dec, MCap, and all medians</div>
+              <div className="text-xs text-text-secondary">Show &gt;20E, &gt;200D, Adv/Dec, MCap, and all medians</div>
             </div>
             <input
               type="checkbox"

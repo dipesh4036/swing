@@ -251,7 +251,7 @@ export default function SectorDashboard() {
                 onClick={() => setShowGuide((v) => !v)}
                 aria-label="How ranks work"
                 title="How ranks work"
-                className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[11px] font-medium cursor-pointer ${
+                className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-xs font-medium cursor-pointer ${
                   showGuide
                     ? "bg-primary-subtle border-accent-border text-primary"
                     : "border-border bg-surface text-text-secondary hover:text-text"
@@ -415,7 +415,7 @@ export default function SectorDashboard() {
       {/* Sticky Compare Bottom Bar */}
       {chartGroups.length > 0 && (
         <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] max-w-md rounded-xl border border-accent-border bg-surface shadow-lg px-3.5 py-2.5 flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-text font-mono tabular-nums">
+          <span className="text-xs font-medium text-text tabular-nums">
             {chartGroups.length} selected
           </span>
           <div className="flex items-center gap-2">
@@ -468,7 +468,7 @@ export default function SectorDashboard() {
           <button
             type="button"
             onClick={() => setCompareToast(null)}
-            className="text-text-muted hover:text-text cursor-pointer"
+            className="text-text-secondary hover:text-text cursor-pointer"
           >
             &times;
           </button>

@@ -11,10 +11,10 @@ export function SegmentedControl({
 }) {
   const sizeClasses =
     {
-      xs: "h-6 text-[10px] px-1.5 sm:px-2",
-      sm: "h-7 text-[11px] px-2 sm:px-2.5",
+      xs: "h-6 text-xs px-1.5 sm:px-2",
+      sm: "h-7 text-xs px-2 sm:px-2.5",
       md: "h-8 text-xs px-2.5 sm:px-3",
-    }[size] || "h-7 text-[11px] px-2 sm:px-2.5";
+    }[size] || "h-7 text-xs px-2 sm:px-2.5";
 
   return (
     <div

@@ -45,7 +45,7 @@ export function DivergingBarChart({
     return (
       <div
         style={{ width: "100%", height, minHeight: height }}
-        className="w-full flex items-center justify-center text-xs text-text-muted"
+        className="w-full flex items-center justify-center text-xs text-text-secondary"
       >
         No session data
       </div>

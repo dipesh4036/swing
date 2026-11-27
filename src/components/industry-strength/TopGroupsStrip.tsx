@@ -49,16 +49,16 @@ export default function TopGroupsStrip({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-            Top 3 Across All Timeframes
+            Best Across All Timeframes
           </h2>
           {topGroupsAsOf && (
-            <span className="text-[11px] font-mono text-text-muted tabular-nums">
+            <span className="text-[11px] text-text-secondary tabular-nums">
               {topGroupsAsOf}
             </span>
           )}
         </div>
         {topGroups.length < 3 && (
-          <span className="text-[11px] text-text-muted">
+          <span className="text-xs text-text-secondary">
             Only {topGroups.length} {topGroups.length === 1 ? "group qualifies" : "groups qualify"} across all four timeframes.
           </span>
         )}
@@ -79,11 +79,11 @@ export default function TopGroupsStrip({
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-text truncate">{g.label}</div>
                     {g.sectorLabel && g.sectorLabel !== g.label && (
-                      <div className="text-[11px] text-text-muted truncate">{g.sectorLabel}</div>
+                      <div className="text-xs text-text-secondary truncate">{g.sectorLabel}</div>
                     )}
                   </div>
                 </div>
-                <span className="shrink-0 px-1.5 py-0.5 rounded bg-bg-secondary border border-border font-mono text-[10px] font-semibold text-text-secondary tabular-nums">
+                <span className="shrink-0 px-1.5 py-0.5 rounded bg-bg-secondary border border-border tabular-nums text-xs font-semibold text-text-secondary tabular-nums">
                   Worst #{g.worstRank}
                 </span>
               </div>
@@ -99,9 +99,9 @@ export default function TopGroupsStrip({
                     key={item.tf}
                     className="rounded-md bg-bg-secondary/70 px-1.5 py-1 border border-border/60"
                   >
-                    <div className="flex items-center justify-between text-[10px] text-text-muted font-mono">
+                    <div className="flex items-center justify-between text-xs text-text-secondary tabular-nums">
                       <span>{item.tf}</span>
-                      <span className="font-semibold text-text">#{item.r}</span>
+                      <span className="text-[13px] font-semibold text-text">#{item.r}</span>
                     </div>
                     <div className="mt-0.5">
                       <SignedReturn value={item.med} size="xs" />
@@ -112,19 +112,19 @@ export default function TopGroupsStrip({
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] text-text-secondary font-mono tabular-nums">
+              <div className="flex items-center justify-between text-xs text-text-secondary tabular-nums">
                 <span>20D {format20dHL(g.n20dHigh, g.n20dLow)}</span>
                 <span>
                   &gt;50 SMA {g.pctAbove50dma !== null ? `${g.pctAbove50dma.toFixed(0)}%` : "—"}
                 </span>
               </div>
 
-              <p className="text-[11px] leading-snug text-text-secondary line-clamp-2">
+              <p className="text-[13px] leading-snug text-text-secondary line-clamp-2">
                 {g.noteText}
               </p>
 
               {g.noteSource === "gemini" && (
-                <div className="inline-flex items-center gap-1 text-[10px] text-text-muted">
+                <div className="inline-flex items-center gap-1 text-xs text-text-secondary">
                   <Sparkles className="w-3 h-3" />
                   <span>AI-written from the numbers</span>
                 </div>

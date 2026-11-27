@@ -76,7 +76,7 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
           <div className="text-xs font-bold text-text truncate">Advance / Decline</div>
-          <div className="text-[10px] text-text-secondary truncate">
+          <div className="text-xs text-text-secondary truncate">
             {period === "AD" ? "Cumulative Advance minus Decline line" : `Stocks that rose vs fell, ${period} rolling ratio`}
           </div>
         </div>
@@ -101,21 +101,21 @@ export function AdvanceDecline({ keyMetrics, history = [] }) {
             >
               {displayVal}
             </span>
-            <span className="text-[10px] uppercase font-semibold text-text-secondary tracking-wider">
+            <span className="text-xs uppercase font-semibold text-text-secondary tracking-wider">
               {period === "AD" ? "Cumulative Net" : `${period} Ratio`}
             </span>
           </div>
-          <span className="text-[11px] font-medium text-text-secondary">{statusText}</span>
+          <span className="text-xs font-medium text-text-secondary">{statusText}</span>
           {weeklyChangeText && (
-            <span className={`text-[10px] font-semibold ${isPositive ? "text-bullish" : "text-bearish"}`}>
+            <span className={`text-xs font-semibold ${isPositive ? "text-bullish" : "text-bearish"}`}>
               {weeklyChangeText}
             </span>
           )}
         </div>
-        <div className="text-[10px] text-text-secondary shrink-0 bg-bg-secondary border border-border rounded-md px-2 py-0.5">
-          <span className="text-text-muted">Today: </span>
+        <div className="text-xs text-text-secondary shrink-0 bg-bg-secondary border border-border rounded-md px-2 py-0.5">
+          <span className="text-text-secondary">Today: </span>
           <span className="font-semibold text-bullish">{advances !== null && advances !== undefined ? `${advances.toLocaleString("en-IN")} up` : "—"}</span>
-          <span className="text-text-muted"> / </span>
+          <span className="text-text-secondary"> / </span>
           <span className="font-semibold text-bearish">{declines !== null && declines !== undefined ? `${declines.toLocaleString("en-IN")} down` : "—"}</span>
         </div>
       </div>

@@ -578,7 +578,7 @@ export default function ScreenerChart({
         <div className="text-sm font-semibold text-text mb-1">
           {error || "Select a stock from the candidate list"}
         </div>
-        <div className="text-xs text-text-muted">
+        <div className="text-xs text-text-secondary">
           Candles, moving averages, and pattern overlays will display here.
         </div>
       </div>
@@ -602,7 +602,7 @@ export default function ScreenerChart({
               href={`https://www.tradingview.com/chart/?symbol=NSE:${stockData.symbol}`}
               target="_blank"
               rel="noreferrer"
-              className="text-text-muted hover:text-primary transition-colors p-0.5 rounded-md"
+              className="text-text-secondary hover:text-primary transition-colors p-0.5 rounded-md"
               title="Open stock on TradingView"
             >
               <ExternalLink size={13} />
@@ -625,7 +625,7 @@ export default function ScreenerChart({
                 href={`https://tapetide.com/stocks/${encodeURIComponent(stockData.symbol)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-medium text-text-muted hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-bg-hover flex items-center gap-0.5"
+                className="text-xs font-medium text-text-secondary hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-bg-hover flex items-center gap-0.5"
                 title="Open fundamentals on Tapetide (external)"
               >
                 <span>Fundamentals ↗</span>
@@ -634,7 +634,7 @@ export default function ScreenerChart({
           </div>
 
           {/* D / W Timeframe Toggle */}
-          <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-[11px] font-semibold">
+          <div className="flex items-center rounded-md border border-border p-0.5 bg-bg-secondary text-xs font-semibold">
             <button
               type="button"
               onClick={() => setTimeframe("D")}
@@ -661,7 +661,7 @@ export default function ScreenerChart({
 
           {/* OHLC and Day Change */}
           {activeCandle && (
-            <div className="flex items-center gap-2 text-[11px] text-text-secondary font-mono">
+            <div className="flex items-center gap-2 text-xs text-text-secondary tabular-nums">
               <span>O: <strong className="text-text">{activeCandle.open !== null && activeCandle.open !== undefined ? activeCandle.open.toFixed(2) : "—"}</strong></span>
               <span>H: <strong className="text-text">{activeCandle.high !== null && activeCandle.high !== undefined ? activeCandle.high.toFixed(2) : "—"}</strong></span>
               <span>L: <strong className="text-text">{activeCandle.low !== null && activeCandle.low !== undefined ? activeCandle.low.toFixed(2) : "—"}</strong></span>
@@ -677,22 +677,22 @@ export default function ScreenerChart({
 
         {/* Right Side: Stat Chips & Rules Overlay Switch */}
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
-            <span className="text-text-muted">1M</span>
-            <span className={`font-semibold ${stockData.ret_1m_pct !== null && stockData.ret_1m_pct !== undefined ? (stockData.ret_1m_pct >= 0 ? "text-bullish" : "text-bearish") : "text-text-muted"}`}>
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border tabular-nums text-xs flex items-center gap-1">
+            <span className="text-text-secondary">1M</span>
+            <span className={`font-semibold ${stockData.ret_1m_pct !== null && stockData.ret_1m_pct !== undefined ? (stockData.ret_1m_pct >= 0 ? "text-bullish" : "text-bearish") : "text-text-secondary"}`}>
               {stockData.ret_1m_pct !== null && stockData.ret_1m_pct !== undefined ? `${stockData.ret_1m_pct > 0 ? "+" : ""}${stockData.ret_1m_pct}%` : "—"}
             </span>
           </div>
 
-          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
-            <span className="text-text-muted">3M</span>
-            <span className={`font-semibold ${stockData.ret_3m_pct !== null && stockData.ret_3m_pct !== undefined ? (stockData.ret_3m_pct >= 0 ? "text-bullish" : "text-bearish") : "text-text-muted"}`}>
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border tabular-nums text-xs flex items-center gap-1">
+            <span className="text-text-secondary">3M</span>
+            <span className={`font-semibold ${stockData.ret_3m_pct !== null && stockData.ret_3m_pct !== undefined ? (stockData.ret_3m_pct >= 0 ? "text-bullish" : "text-bearish") : "text-text-secondary"}`}>
               {stockData.ret_3m_pct !== null && stockData.ret_3m_pct !== undefined ? `${stockData.ret_3m_pct > 0 ? "+" : ""}${stockData.ret_3m_pct}%` : "—"}
             </span>
           </div>
 
-          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1">
-            <span className="text-text-muted">RS</span>
+          <div className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border tabular-nums text-xs flex items-center gap-1">
+            <span className="text-text-secondary">RS</span>
             <span className="font-semibold text-text">
               {stockData.rs_rank !== null && stockData.rs_rank !== undefined ? stockData.rs_rank : "—"}
             </span>
@@ -700,16 +700,16 @@ export default function ScreenerChart({
 
           <div
             title={stockData.extra?.vol_ratio_basis === "listing_avg" ? "vs average since listing" : "vs 50-day average"}
-            className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border font-mono text-[11px] flex items-center gap-1 cursor-help"
+            className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border tabular-nums text-xs flex items-center gap-1 cursor-help"
           >
-            <span className="text-text-muted">Vol</span>
+            <span className="text-text-secondary">Vol</span>
             <span className="font-semibold text-text">
               {stockData.vol_ratio !== null && stockData.vol_ratio !== undefined ? `${stockData.vol_ratio}x` : "—"}
             </span>
           </div>
 
           {/* Rules Overlay Toggle */}
-          <label className="flex items-center gap-1.5 text-[11px] font-medium text-text-secondary cursor-pointer ml-1 select-none">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-text-secondary cursor-pointer ml-1 select-none">
             <input
               type="checkbox"
               checked={showRulesOverlay}
@@ -733,7 +733,7 @@ export default function ScreenerChart({
       {/* ── Chart Container with Absolute Overlays ────────────────── */}
       <div className="flex-1 w-full min-h-0 relative overflow-hidden bg-surface">
         {/* Top-Left MA Legend Inside the Chart Canvas (EMAs only) */}
-        <div className="absolute top-2 left-3 z-10 flex items-center gap-2 text-[11px] font-mono select-none bg-surface/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-border flex-wrap text-text">
+        <div className="absolute top-2 left-3 z-10 flex items-center gap-2 text-xs tabular-nums select-none bg-surface/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-border flex-wrap text-text">
           {maConfigs.map((ma) => {
             const val = activeCandle?.[ma.key];
             const isVisible = visibleMAs[ma.key];
@@ -760,11 +760,11 @@ export default function ScreenerChart({
         </div>
 
         {/* Volume Pane Info Header (Positioned at 75% height) */}
-        <div className="absolute top-[75%] left-3 pt-1 z-10 pointer-events-none text-[11px] font-mono text-text-secondary flex items-center gap-2.5 bg-surface/80 backdrop-blur-2xs px-1.5 rounded-sm">
+        <div className="absolute top-[75%] left-3 pt-1 z-10 pointer-events-none text-xs tabular-nums text-text-secondary flex items-center gap-2.5 bg-surface/80 backdrop-blur-2xs px-1.5 rounded-sm">
           <span>Vol <strong className="text-text">{formatVolume(activeCandle?.volume)}</strong></span>
           <span>Avg 20D <strong className="text-text">{formatVolume(activeCandle?.vol_sma_20)}</strong></span>
           <span>
-            RVol <strong className={rVolPct !== null ? (rVolPct >= 150 ? "text-bullish" : rVolPct <= 70 ? "text-text-secondary" : "text-text") : "text-text-muted"}>
+            RVol <strong className={rVolPct !== null ? (rVolPct >= 150 ? "text-bullish" : rVolPct <= 70 ? "text-text-secondary" : "text-text") : "text-text-secondary"}>
               {rVolPct !== null ? `${rVolPct}%` : "—"}
             </strong>
           </span>
@@ -785,7 +785,7 @@ export default function ScreenerChart({
       )}
 
       {/* ── Legend Footer ─────────────────────────────────────────── */}
-      <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-text-muted bg-bg-secondary shrink-0">
+      <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-xs text-text-secondary bg-bg-secondary shrink-0">
         <div className="flex items-center gap-3">
           <span>{candles.length} bars</span>
           <span className="flex items-center gap-1">

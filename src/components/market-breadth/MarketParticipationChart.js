@@ -37,7 +37,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
           <div className="text-[13px] font-bold text-text tracking-tight">
             Market participation
           </div>
-          <div className="text-[11px] text-text-secondary">{dateSubtext}</div>
+          <div className="text-xs text-text-secondary">{dateSubtext}</div>
         </div>
 
         <SegmentedControl
@@ -56,7 +56,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
         {status !== "—" && <StatusBadge status="info">{status}</StatusBadge>}
         {weeklyChangePts !== null && weeklyChangePts !== undefined && (
           <span
-            className={`text-[11px] font-semibold tabular-nums ${
+            className={`text-xs font-semibold tabular-nums ${
               weeklyChangePts >= 0 ? "text-bullish" : "text-bearish"
             }`}
           >
@@ -65,7 +65,7 @@ export function MarketParticipationChart({ data = [], stats = {}, asOfDate = nul
         )}
 
         {/* Legend */}
-        <div className="ml-auto hidden sm:flex items-center gap-3 text-[10px] text-text-secondary">
+        <div className="ml-auto hidden sm:flex items-center gap-3 text-xs text-text-secondary">
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-0.5 bg-primary inline-block rounded" />
             Participation

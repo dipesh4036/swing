@@ -19,7 +19,7 @@ export function MarketInternals({ keyMetrics, history = [], performance = {}, re
             Market internals
           </span>
           <span title="Granular underlying market health indicators">
-            <Info size={13} className="text-text-muted cursor-pointer" />
+            <Info size={13} className="text-text-secondary cursor-pointer" />
           </span>
         </div>
       </div>

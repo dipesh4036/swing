@@ -30,7 +30,7 @@ export function StatusBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] border text-[11px] font-medium leading-tight tabular-nums transition-colors ${styles} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] border text-xs font-medium leading-tight tabular-nums transition-colors ${styles} ${className}`}
     >
       {showDot && <span className={`w-1.5 h-1.5 rounded-full ${dotColors}`} />}
       {children}
@@ -42,7 +42,7 @@ export function PillBadge({ children, active = false, onClick, className = "" })
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer ${
+      className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
         active
           ? "bg-primary text-text-inverse font-semibold"
           : "bg-neutral-bg text-text-secondary hover:text-text hover:bg-bg-hover"

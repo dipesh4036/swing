@@ -97,7 +97,7 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
           <div className="text-xs font-bold text-text truncate">Breakouts − breakdowns</div>
-          <div className="text-[10px] text-text-secondary truncate">
+          <div className="text-xs text-text-secondary truncate">
             {period === "Daily"
               ? "20D channel breakouts vs breakdowns on volume"
               : `${period} trend of breakouts vs breakdowns`}
@@ -123,11 +123,11 @@ export function BreakoutsBreakdowns({ keyMetrics, history = [] }) {
           >
             {displayValue}
           </span>
-          <span className="text-[11px] font-medium text-text-secondary">
+          <span className="text-xs font-medium text-text-secondary">
             {displayStatus}
           </span>
         </div>
-        <div className="text-[10px] text-text-secondary shrink-0">{displaySubtext}</div>
+        <div className="text-xs text-text-secondary shrink-0">{displaySubtext}</div>
       </div>
 
       {/* Chart */}

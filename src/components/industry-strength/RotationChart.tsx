@@ -137,7 +137,7 @@ export default function RotationChart({
             {selectedGroups.map((g, idx) => (
               <span
                 key={g.groupId}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium border border-border bg-bg-secondary text-text"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-xs font-medium border border-border bg-bg-secondary text-text"
               >
                 <span
                   className="w-2 h-2 rounded-full"
@@ -148,7 +148,7 @@ export default function RotationChart({
                   type="button"
                   onClick={() => onRemoveGroup(g.groupId)}
                   aria-label={`Remove ${g.label} from chart`}
-                  className="text-text-muted hover:text-bearish cursor-pointer"
+                  className="text-text-secondary hover:text-bearish cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -159,11 +159,11 @@ export default function RotationChart({
       }
     >
       {selectedGroups.length === 0 ? (
-        <div className="h-44 flex items-center justify-center text-xs text-text-muted border border-dashed border-border rounded-md">
+        <div className="h-44 flex items-center justify-center text-xs text-text-secondary border border-dashed border-border rounded-md">
           Click the chart icon on any group row to plot its historical relative strength vs NIFTY 500.
         </div>
       ) : loading && chartData.length === 0 ? (
-        <div className="h-60 flex items-center justify-center gap-2 text-xs text-text-muted">
+        <div className="h-60 flex items-center justify-center gap-2 text-xs text-text-secondary">
           <RefreshCw className="w-4 h-4 animate-spin text-primary" />
           <span>Loading historical RS series...</span>
         </div>

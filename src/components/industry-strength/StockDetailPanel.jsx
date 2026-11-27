@@ -212,24 +212,24 @@ export function StockDetailPanel({
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-text">{stock.symbol}</h2>
             {stock.leader && (
-              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300">
+              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded text-xs bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300">
                 <Star size={10} className="fill-amber-400" />
                 <span>Sector Leader</span>
               </span>
             )}
             {!stock.in_universe && (
-              <span className="text-[10px] text-text-muted italic">(illiquid)</span>
+              <span className="text-xs text-text-secondary italic">(illiquid)</span>
             )}
           </div>
           <p className="text-xs text-text-secondary mt-0.5">{stock.name}</p>
-          <div className="text-[11px] font-mono text-text-muted mt-1">
+          <div className="text-xs tabular-nums text-text-secondary mt-1">
             Sector: <strong className="text-text">{stock.sector}</strong>
           </div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="p-1.5 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
+          className="p-1.5 rounded text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
           title="Close panel (Esc)"
         >
           <X size={16} />
@@ -239,55 +239,55 @@ export function StockDetailPanel({
       {/* Metrics Grid */}
       <div className="p-4 border-b border-border grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <div className="p-2 rounded bg-bg-secondary border border-border flex flex-col">
-          <span className="text-text-muted text-[10px]">Close</span>
-          <span className="font-bold font-mono text-sm">₹{stock.close ?? "—"}</span>
+          <span className="text-text-secondary text-xs">Close</span>
+          <span className="font-bold tabular-nums text-sm">₹{stock.close ?? "—"}</span>
         </div>
         <div className="p-2 rounded bg-bg-secondary border border-border flex flex-col">
-          <span className="text-text-muted text-[10px]">RS Rank</span>
-          <span className="font-bold font-mono text-sm text-primary">{stock.rs_rank ?? "—"}</span>
+          <span className="text-text-secondary text-xs">RS Rank</span>
+          <span className="font-bold tabular-nums text-sm text-primary">{stock.rs_rank ?? "—"}</span>
         </div>
         <div className="p-2 rounded bg-bg-secondary border border-border flex flex-col">
-          <span className="text-text-muted text-[10px]">Stage</span>
-          <span className="font-bold font-mono text-sm">{stock.stage ? `S${stock.stage}` : "—"}</span>
+          <span className="text-text-secondary text-xs">Stage</span>
+          <span className="font-bold tabular-nums text-sm">{stock.stage ? `S${stock.stage}` : "—"}</span>
         </div>
         <div className="p-2 rounded bg-bg-secondary border border-border flex flex-col">
-          <span className="text-text-muted text-[10px]">Vol Ratio</span>
-          <span className="font-bold font-mono text-sm">{stock.vol_ratio != null ? `${stock.vol_ratio}x` : "—"}</span>
+          <span className="text-text-secondary text-xs">Vol Ratio</span>
+          <span className="font-bold tabular-nums text-sm">{stock.vol_ratio != null ? `${stock.vol_ratio}x` : "—"}</span>
         </div>
       </div>
 
       {/* Multi-Window Returns */}
       <div className="p-4 border-b border-border">
-        <span className="text-[11px] font-semibold text-text uppercase tracking-wider block mb-2">
+        <span className="text-xs font-semibold text-text uppercase tracking-wider block mb-2">
           Returns
         </span>
-        <div className="grid grid-cols-5 gap-1.5 text-center font-mono text-xs">
+        <div className="grid grid-cols-5 gap-1.5 text-center tabular-nums text-xs">
           <div className="p-1.5 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted text-[10px] block">1D</span>
+            <span className="text-text-secondary text-xs block">1D</span>
             <span className={stock.ret_1d >= 0 ? "text-bullish font-medium" : "text-bearish font-medium"}>
               {stock.ret_1d != null ? `${stock.ret_1d >= 0 ? "+" : ""}${stock.ret_1d}%` : "—"}
             </span>
           </div>
           <div className="p-1.5 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted text-[10px] block">1W</span>
+            <span className="text-text-secondary text-xs block">1W</span>
             <span className={stock.ret_1w >= 0 ? "text-bullish font-medium" : "text-bearish font-medium"}>
               {stock.ret_1w != null ? `${stock.ret_1w >= 0 ? "+" : ""}${stock.ret_1w}%` : "—"}
             </span>
           </div>
           <div className="p-1.5 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted text-[10px] block">1M</span>
+            <span className="text-text-secondary text-xs block">1M</span>
             <span className={stock.ret_1m >= 0 ? "text-bullish font-medium" : "text-bearish font-medium"}>
               {stock.ret_1m != null ? `${stock.ret_1m >= 0 ? "+" : ""}${stock.ret_1m}%` : "—"}
             </span>
           </div>
           <div className="p-1.5 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted text-[10px] block">3M</span>
+            <span className="text-text-secondary text-xs block">3M</span>
             <span className={stock.ret_3m >= 0 ? "text-bullish font-medium" : "text-bearish font-medium"}>
               {stock.ret_3m != null ? `${stock.ret_3m >= 0 ? "+" : ""}${stock.ret_3m}%` : "—"}
             </span>
           </div>
           <div className="p-1.5 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted text-[10px] block">6M</span>
+            <span className="text-text-secondary text-xs block">6M</span>
             <span className={stock.ret_6m >= 0 ? "text-bullish font-medium" : "text-bearish font-medium"}>
               {stock.ret_6m != null ? `${stock.ret_6m >= 0 ? "+" : ""}${stock.ret_6m}%` : "—"}
             </span>
@@ -297,29 +297,29 @@ export function StockDetailPanel({
 
       {/* Moving Averages & 52w High */}
       <div className="p-4 border-b border-border">
-        <span className="text-[11px] font-semibold text-text uppercase tracking-wider block mb-2">
+        <span className="text-xs font-semibold text-text uppercase tracking-wider block mb-2">
           Trend Indicators
         </span>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="flex items-center justify-between p-2 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted">From 52W High:</span>
-            <span className="font-mono font-medium">{stock.pct_from_52w_high != null ? `${stock.pct_from_52w_high}%` : "—"}</span>
+            <span className="text-text-secondary">From 52W High:</span>
+            <span className="tabular-nums font-medium">{stock.pct_from_52w_high != null ? `${stock.pct_from_52w_high}%` : "—"}</span>
           </div>
           <div className="flex items-center justify-between p-2 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted">vs 20 EMA:</span>
-            <span className={`font-mono font-medium ${stock.above_20ema ? "text-bullish" : "text-bearish"}`}>
+            <span className="text-text-secondary">vs 20 EMA:</span>
+            <span className={`tabular-nums font-medium ${stock.above_20ema ? "text-bullish" : "text-bearish"}`}>
               {stock.above_20ema === true ? "▲ Above" : stock.above_20ema === false ? "▼ Below" : "—"}
             </span>
           </div>
           <div className="flex items-center justify-between p-2 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted">vs 50 DMA:</span>
-            <span className={`font-mono font-medium ${stock.above_50dma ? "text-bullish" : "text-bearish"}`}>
+            <span className="text-text-secondary">vs 50 DMA:</span>
+            <span className={`tabular-nums font-medium ${stock.above_50dma ? "text-bullish" : "text-bearish"}`}>
               {stock.above_50dma === true ? "▲ Above" : stock.above_50dma === false ? "▼ Below" : "—"}
             </span>
           </div>
           <div className="flex items-center justify-between p-2 rounded bg-bg-secondary border border-border">
-            <span className="text-text-muted">vs 200 DMA:</span>
-            <span className={`font-mono font-medium ${stock.above_200dma ? "text-bullish" : "text-bearish"}`}>
+            <span className="text-text-secondary">vs 200 DMA:</span>
+            <span className={`tabular-nums font-medium ${stock.above_200dma ? "text-bullish" : "text-bearish"}`}>
               {stock.above_200dma === true ? "▲ Above" : stock.above_200dma === false ? "▼ Below" : "—"}
             </span>
           </div>
@@ -329,14 +329,14 @@ export function StockDetailPanel({
       {/* Screener Tags */}
       {hasScreenerHits && (
         <div className="p-4 border-b border-border">
-          <span className="text-[11px] font-semibold text-text uppercase tracking-wider block mb-2">
+          <span className="text-xs font-semibold text-text uppercase tracking-wider block mb-2">
             Active Screener Setups
           </span>
           <div className="flex flex-wrap gap-1.5">
             {stock.screeners.map((scr) => (
               <span
                 key={scr}
-                className="px-2 py-0.5 rounded text-xs bg-primary/10 text-primary font-mono border border-primary/20"
+                className="px-2 py-0.5 rounded text-xs bg-primary/10 text-primary tabular-nums border border-primary/20"
               >
                 {scr.replace("_", " ")}
               </span>
@@ -348,11 +348,11 @@ export function StockDetailPanel({
       {/* Chart Section */}
       <div className="p-4 flex-1 flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-text uppercase tracking-wider block">
+          <span className="text-xs font-semibold text-text uppercase tracking-wider block">
             Daily Price Chart
           </span>
           {chartCandles.length > 0 && chartCandles.length < 60 && (
-            <span className="text-[10px] text-warning font-medium">
+            <span className="text-xs text-warning font-medium">
               Only {chartCandles.length} sessions (&lt; 60)
             </span>
           )}
@@ -368,12 +368,12 @@ export function StockDetailPanel({
 
         <div className="relative w-full h-[220px] bg-bg-secondary/40 rounded border border-border flex items-center justify-center overflow-hidden">
           {loadingChart ? (
-            <div className="flex items-center gap-2 text-xs text-text-muted">
+            <div className="flex items-center gap-2 text-xs text-text-secondary">
               <RefreshCw size={14} className="animate-spin" />
               <span>Loading chart...</span>
             </div>
           ) : chartError ? (
-            <div className="text-xs text-text-muted italic">
+            <div className="text-xs text-text-secondary italic">
               {chartError}
             </div>
           ) : (

@@ -66,7 +66,7 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
       <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
         <div className="min-w-0">
           <div className="text-xs font-bold text-text truncate">Participation history</div>
-          <div className="text-[10px] text-text-secondary truncate">
+          <div className="text-xs text-text-secondary truncate">
             {period === "All"
               ? "% stocks above 20 EMA, 50 SMA, 200 SMA"
               : `Focus on % stocks above ${period === "20D" ? "20 EMA" : period === "50D" ? "50 SMA" : "200 SMA"}`}
@@ -84,17 +84,17 @@ export function ParticipationHistory({ keyMetrics, history = [] }) {
 
       {/* Pill Row showing current stats */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap min-w-0">
-        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
+        <span className="text-xs sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
           <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
           <span className="text-text-secondary">&gt;20 EMA:</span>
           <span className="text-text">{pct20 !== null && pct20 !== undefined ? `${pct20.toFixed(1)}%` : "—"}</span>
         </span>
-        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
+        <span className="text-xs sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
           <span className="w-1.5 h-1.5 rounded-full bg-[#F97316] shrink-0" />
           <span className="text-text-secondary">&gt;50 SMA:</span>
           <span className="text-text">{pct50 !== null && pct50 !== undefined ? `${pct50.toFixed(1)}%` : "—"}</span>
         </span>
-        <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
+        <span className="text-xs sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 rounded-[4px] border border-border bg-bg-secondary flex items-center gap-1 tabular-nums">
           <span className="w-1.5 h-1.5 rounded-full bg-bullish shrink-0" />
           <span className="text-text-secondary">&gt;200 SMA:</span>
           <span className="text-text">{pct200 !== null && pct200 !== undefined ? `${pct200.toFixed(1)}%` : "—"}</span>

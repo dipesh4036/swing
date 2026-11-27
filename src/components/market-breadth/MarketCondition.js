@@ -21,7 +21,7 @@ export function MarketCondition({
             Market condition
           </span>
           <span title="Comprehensive gauge of overall stock market breadth and participation">
-            <Info size={13} className="text-text-muted cursor-pointer" />
+            <Info size={13} className="text-text-secondary cursor-pointer" />
           </span>
         </div>
       </div>

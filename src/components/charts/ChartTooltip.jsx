@@ -16,7 +16,7 @@ export function ChartTooltip({
   return (
     <div className="bg-surface border border-border rounded-md px-3 py-2 text-xs text-text min-w-[130px]">
       {label && (
-        <div className="font-semibold text-text text-[11px] mb-1.5 pb-1 border-b border-border">
+        <div className="font-semibold text-text text-xs mb-1.5 pb-1 border-b border-border">
           {label}
         </div>
       )}
@@ -39,9 +39,9 @@ export function ChartTooltip({
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: entry.color || entry.stroke }}
                 />
-                <span className="text-text-secondary text-[11px]">{entry.name}:</span>
+                <span className="text-text-secondary text-xs">{entry.name}:</span>
               </div>
-              <span className="font-semibold text-text tabular-nums text-[11px]">
+              <span className="font-semibold text-text tabular-nums text-xs">
                 {displayVal}
               </span>
             </div>

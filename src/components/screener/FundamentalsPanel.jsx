@@ -128,12 +128,12 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                 {symbol}
               </span>
               {stockInfo?.rs_rank !== null && stockInfo?.rs_rank !== undefined && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold bg-primary-subtle text-primary border border-primary/20">
+                <span className="text-xs tabular-nums px-1.5 py-0.2 rounded font-semibold bg-primary-subtle text-primary border border-primary/20">
                   RS {stockInfo.rs_rank}
                 </span>
               )}
             </div>
-            <div className="text-[11px] text-text-secondary truncate mt-0.5 font-medium">
+            <div className="text-xs text-text-secondary truncate mt-0.5 font-medium">
               {data?.company || stockInfo?.company || symbol}
             </div>
           </div>
@@ -144,7 +144,7 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
               target="_blank"
               rel="noopener noreferrer"
               title="Open full fundamentals on Tapetide"
-              className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors flex items-center gap-1 text-[11px]"
+              className="p-1.5 rounded-md text-text-secondary hover:text-text hover:bg-bg-hover transition-colors flex items-center gap-1 text-xs"
             >
               <span>Tapetide</span>
               <ExternalLink size={12} />
@@ -153,7 +153,7 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
               type="button"
               onClick={onClose}
               title="Close fundamentals panel"
-              className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-text-secondary hover:text-text hover:bg-bg-hover transition-colors cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -164,12 +164,12 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
         {(data?.sector || data?.industry) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             {data.sector && (
-              <span className="px-2 py-0.5 rounded text-[10px] bg-bg-secondary text-text-muted font-medium border border-border/60 truncate max-w-[180px]">
+              <span className="px-2 py-0.5 rounded text-xs bg-bg-secondary text-text-secondary font-medium border border-border/60 truncate max-w-[180px]">
                 {data.sector}
               </span>
             )}
             {data.industry && (
-              <span className="px-2 py-0.5 rounded text-[10px] bg-bg-secondary text-text-muted font-medium border border-border/60 truncate max-w-[220px]">
+              <span className="px-2 py-0.5 rounded text-xs bg-bg-secondary text-text-secondary font-medium border border-border/60 truncate max-w-[220px]">
                 {data.industry}
               </span>
             )}
@@ -179,38 +179,38 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
         {/* Core KPI Strip (Always visible) */}
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-1">
           <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
-            <span className="text-[9px] text-text-muted uppercase tracking-wider">MCap</span>
-            <span className="font-mono text-[11px] font-bold text-text truncate">
+            <span className="text-xs text-text-secondary uppercase tracking-wider">MCap</span>
+            <span className="tabular-nums text-xs font-bold text-text truncate">
               {mcap?.value_text || "—"}
             </span>
           </div>
           <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
-            <span className="text-[9px] text-text-muted uppercase tracking-wider">P/E</span>
-            <span className="font-mono text-[11px] font-bold text-text truncate">
+            <span className="text-xs text-text-secondary uppercase tracking-wider">P/E</span>
+            <span className="tabular-nums text-xs font-bold text-text truncate">
               {pe?.value_text || "—"}
             </span>
           </div>
           <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
-            <span className="text-[9px] text-text-muted uppercase tracking-wider">ROCE</span>
-            <span className="font-mono text-[11px] font-bold text-bullish truncate">
+            <span className="text-xs text-text-secondary uppercase tracking-wider">ROCE</span>
+            <span className="tabular-nums text-xs font-bold text-bullish truncate">
               {roce?.value_text || "—"}
             </span>
           </div>
           <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
-            <span className="text-[9px] text-text-muted uppercase tracking-wider">ROE</span>
-            <span className="font-mono text-[11px] font-bold text-text truncate">
+            <span className="text-xs text-text-secondary uppercase tracking-wider">ROE</span>
+            <span className="tabular-nums text-xs font-bold text-text truncate">
               {roe?.value_text || "—"}
             </span>
           </div>
           <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
-            <span className="text-[9px] text-text-muted uppercase tracking-wider">D/E</span>
-            <span className="font-mono text-[11px] font-bold text-text truncate">
+            <span className="text-xs text-text-secondary uppercase tracking-wider">D/E</span>
+            <span className="tabular-nums text-xs font-bold text-text truncate">
               {debtToEq?.value_text || "—"}
             </span>
           </div>
           <div className="bg-surface border border-border/80 rounded p-1.5 flex flex-col">
-            <span className="text-[9px] text-text-muted uppercase tracking-wider">Promoter</span>
-            <span className="font-mono text-[11px] font-bold text-text truncate">
+            <span className="text-xs text-text-secondary uppercase tracking-wider">Promoter</span>
+            <span className="tabular-nums text-xs font-bold text-text truncate">
               {promoter?.value_text || "—"}
             </span>
           </div>
@@ -221,10 +221,10 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
           <button
             type="button"
             onClick={() => setActiveTab("summary")}
-            className={`flex-1 py-1 px-2 rounded text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1 px-2 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === "summary"
                 ? "bg-surface text-primary shadow-xs"
-                : "text-text-muted hover:text-text"
+                : "text-text-secondary hover:text-text"
             }`}
           >
             <Activity size={12} />
@@ -233,10 +233,10 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
           <button
             type="button"
             onClick={() => setActiveTab("financials")}
-            className={`flex-1 py-1 px-2 rounded text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1 px-2 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === "financials"
                 ? "bg-surface text-primary shadow-xs"
-                : "text-text-muted hover:text-text"
+                : "text-text-secondary hover:text-text"
             }`}
           >
             <BarChart3 size={12} />
@@ -245,10 +245,10 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
           <button
             type="button"
             onClick={() => setActiveTab("shareholding")}
-            className={`flex-1 py-1 px-2 rounded text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1 px-2 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === "shareholding"
                 ? "bg-surface text-primary shadow-xs"
-                : "text-text-muted hover:text-text"
+                : "text-text-secondary hover:text-text"
             }`}
           >
             <PieChart size={12} />
@@ -296,18 +296,18 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                 {((data.strengths && data.strengths.length > 0) ||
                   (data.weaknesses && data.weaknesses.length > 0)) && (
                   <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                    <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
                       <Layers size={12} />
                       <span>Key Insights & Fundamentals</span>
                     </div>
 
                     {data.strengths && data.strengths.length > 0 && (
                       <div className="border border-border/80 rounded-md p-2.5 bg-bullish-bg/20">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-bullish mb-1">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-bullish mb-1">
                           <ShieldCheck size={14} className="shrink-0" />
                           <span>Strengths</span>
                         </div>
-                        <ul className="space-y-1 text-[11px] text-text-secondary list-disc pl-4">
+                        <ul className="space-y-1 text-xs text-text-secondary list-disc pl-4">
                           {data.strengths.map((str, idx) => (
                             <li key={idx} className="leading-snug">
                               {str}
@@ -319,11 +319,11 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
 
                     {data.weaknesses && data.weaknesses.length > 0 && (
                       <div className="border border-border/80 rounded-md p-2.5 bg-bearish-bg/20">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-bearish mb-1">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-bearish mb-1">
                           <ShieldAlert size={14} className="shrink-0" />
                           <span>Weaknesses / Risks</span>
                         </div>
-                        <ul className="space-y-1 text-[11px] text-text-secondary list-disc pl-4">
+                        <ul className="space-y-1 text-xs text-text-secondary list-disc pl-4">
                           {data.weaknesses.map((wk, idx) => (
                             <li key={idx} className="leading-snug">
                               {wk}
@@ -338,32 +338,32 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                 {/* Technical Consensus / Bias */}
                 {data.signals && (
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                    <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                       Technical Indicator Consensus
                     </div>
                     <div className="p-2.5 rounded-md border border-border/80 bg-bg-secondary/30 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-text-muted font-medium">Overall Bias</span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-primary-subtle text-primary border border-primary/30">
+                        <span className="text-xs text-text-secondary font-medium">Overall Bias</span>
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-primary-subtle text-primary border border-primary/30">
                           {data.signals.overall || "—"}
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[11px]">
+                      <div className="grid grid-cols-3 gap-1.5 text-center tabular-nums text-xs">
                         <div className="bg-bullish-bg/50 border border-bullish-border/60 rounded py-1 px-1.5">
-                          <span className="block text-[9px] text-bullish uppercase font-sans">Bullish</span>
+                          <span className="block text-xs text-bullish uppercase font-sans">Bullish</span>
                           <span className="font-bold text-bullish">{data.signals.bullish !== null && data.signals.bullish !== undefined ? data.signals.bullish : "—"}</span>
                         </div>
                         <div className="bg-neutral-bg border border-border rounded py-1 px-1.5">
-                          <span className="block text-[9px] text-text-muted uppercase font-sans">Neutral</span>
+                          <span className="block text-xs text-text-secondary uppercase font-sans">Neutral</span>
                           <span className="font-bold text-text-secondary">{data.signals.neutral !== null && data.signals.neutral !== undefined ? data.signals.neutral : "—"}</span>
                         </div>
                         <div className="bg-bearish-bg/50 border border-bearish-border/60 rounded py-1 px-1.5">
-                          <span className="block text-[9px] text-bearish uppercase font-sans">Bearish</span>
+                          <span className="block text-xs text-bearish uppercase font-sans">Bearish</span>
                           <span className="font-bold text-bearish">{data.signals.bearish !== null && data.signals.bearish !== undefined ? data.signals.bearish : "—"}</span>
                         </div>
                       </div>
                       {(data.signals.oscillators || data.signals.moving_averages) && (
-                        <div className="flex items-center justify-between text-[10px] text-text-muted pt-1 border-t border-border/60">
+                        <div className="flex items-center justify-between text-xs text-text-secondary pt-1 border-t border-border/60">
                           <span>Oscillators: <strong className="text-text">{data.signals.oscillators || "—"}</strong></span>
                           <span>Moving Averages: <strong className="text-text">{data.signals.moving_averages || "—"}</strong></span>
                         </div>
@@ -375,7 +375,7 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                 {/* Detailed Ratios Grid */}
                 {data.snapshot && data.snapshot.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                    <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                       Key Ratios & Valuation
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -384,10 +384,10 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                           key={idx}
                           className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex items-center justify-between"
                         >
-                          <span className="text-[11px] text-text-muted truncate pr-1">
+                          <span className="text-xs text-text-secondary truncate pr-1">
                             {item.label}
                           </span>
-                          <span className="font-mono text-xs font-semibold text-text truncate">
+                          <span className="tabular-nums text-xs font-semibold text-text truncate">
                             {item.value_text || "—"}
                           </span>
                         </div>
@@ -404,7 +404,7 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                 {/* Growth Rates CAGR Cards */}
                 {data.growth && data.growth.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                    <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                       Compounded Growth Rates
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -416,11 +416,11 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                             key={idx}
                             className="bg-bg-secondary/40 border border-border/80 rounded px-2.5 py-1.5 flex flex-col justify-center"
                           >
-                            <span className="text-[10px] text-text-muted truncate">
+                            <span className="text-xs text-text-secondary truncate">
                               {g.label} ({g.period})
                             </span>
                             <span
-                              className={`font-mono text-xs font-semibold mt-0.5 truncate ${
+                              className={`tabular-nums text-xs font-semibold mt-0.5 truncate ${
                                 isPos
                                   ? "text-bullish"
                                   : isNeg
@@ -440,13 +440,13 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                 {/* Quarterly Results Table */}
                 {data.quarters && data.quarters.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                    <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                       Quarterly Statements (₹ Cr)
                     </div>
                     <div className="overflow-x-auto border border-border/80 rounded-md bg-bg-secondary/20">
-                      <table className="w-full text-left font-mono text-[11px]">
+                      <table className="w-full text-left tabular-nums text-xs">
                         <thead>
-                          <tr className="border-b border-border bg-bg-secondary/60 text-text-muted text-[10px]">
+                          <tr className="border-b border-border bg-bg-secondary/60 text-text-secondary text-xs">
                             <th className="py-1 px-2 font-medium">Period</th>
                             <th className="py-1 px-2 font-medium text-right">Sales</th>
                             <th className="py-1 px-2 font-medium text-right">Net Profit</th>
@@ -489,9 +489,9 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
               <div className="space-y-3.5">
                 {data.shareholding?.latest ? (
                   <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider flex items-center justify-between">
+                    <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center justify-between">
                       <span>Ownership Pattern</span>
-                      <span className="font-mono text-[10px] text-text-muted">
+                      <span className="tabular-nums text-xs text-text-secondary">
                         {data.shareholding.latest.period || "Latest"}
                         {data.shareholding.previous?.period
                           ? ` vs ${data.shareholding.previous.period}`
@@ -535,10 +535,10 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                             className="bg-bg-secondary/40 border border-border/80 rounded-md p-2.5 flex items-center justify-between"
                           >
                             <div>
-                              <span className="text-[11px] font-medium text-text block">
+                              <span className="text-xs font-medium text-text block">
                                 {item.label}
                               </span>
-                              <span className="font-mono text-sm font-bold text-text mt-0.5 block">
+                              <span className="tabular-nums text-sm font-bold text-text mt-0.5 block">
                                 {item.cur !== null && item.cur !== undefined
                                   ? `${item.cur}%`
                                   : "—"}
@@ -548,12 +548,12 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                             <div className="text-right">
                               {delta !== null ? (
                                 <span
-                                  className={`font-mono text-xs font-semibold inline-flex items-center ${
+                                  className={`tabular-nums text-xs font-semibold inline-flex items-center ${
                                     delta > 0
                                       ? "text-bullish"
                                       : delta < 0
                                       ? "text-bearish"
-                                      : "text-text-muted"
+                                      : "text-text-secondary"
                                   }`}
                                 >
                                   {delta > 0 ? (
@@ -564,9 +564,9 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                                   {delta > 0 ? `+${delta}%` : `${delta}%`}
                                 </span>
                               ) : (
-                                <span className="text-text-muted text-[11px]">—</span>
+                                <span className="text-text-muted text-xs">—</span>
                               )}
-                              <span className="block text-[9px] text-text-muted">
+                              <span className="block text-xs text-text-secondary">
                                 vs prior quarter
                               </span>
                             </div>
@@ -576,7 +576,7 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 text-center text-text-muted text-xs">
+                  <div className="p-4 text-center text-text-secondary text-xs">
                     Shareholding pattern not reported for this symbol.
                   </div>
                 )}
@@ -584,7 +584,7 @@ export default function FundamentalsPanel({ symbol, isOpen, onClose, stockInfo }
             )}
 
             {/* ── Footer ──────────────────────────────────────── */}
-            <div className="pt-2 border-t border-border/60 text-[10px] text-text-muted flex items-center justify-between">
+            <div className="pt-2 border-t border-border/60 text-xs text-text-secondary flex items-center justify-between">
               <span>
                 As of {data.generated_at || "latest"}. Source:{" "}
                 <a

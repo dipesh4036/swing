@@ -23,7 +23,7 @@ export function InstitutionalActivity({
           <span className="text-xs font-bold text-text uppercase tracking-wider">
             FII / DII CASH · {flows?.sessionsAvailable ? `${flows.sessionsAvailable} of 22 sessions` : "LAST 22 SESSIONS"}
           </span>
-          <span className="text-[10px] text-text-muted font-mono">₹ crore</span>
+          <span className="text-xs text-text-secondary tabular-nums">₹ crore</span>
         </div>
 
         {/* FII Section */}
@@ -31,7 +31,7 @@ export function InstitutionalActivity({
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-text">FII</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-text-secondary font-normal">{dateLabel}</span>
+              <span className="text-xs text-text-secondary font-normal">{dateLabel}</span>
               <span
                 className={`tabular-nums font-bold ${
                   fii?.dailyNetCr !== null && fii?.dailyNetCr !== undefined
@@ -59,7 +59,7 @@ export function InstitutionalActivity({
             />
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-text-secondary">
+          <div className="flex items-center justify-between text-xs text-text-secondary">
             <span>1-month net</span>
             <span
               className={`font-semibold tabular-nums ${
@@ -80,7 +80,7 @@ export function InstitutionalActivity({
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-text">DII</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-text-secondary font-normal">{dateLabel}</span>
+              <span className="text-xs text-text-secondary font-normal">{dateLabel}</span>
               <span
                 className={`tabular-nums font-bold ${
                   dii?.dailyNetCr !== null && dii?.dailyNetCr !== undefined
@@ -108,7 +108,7 @@ export function InstitutionalActivity({
             />
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-text-secondary">
+          <div className="flex items-center justify-between text-xs text-text-secondary">
             <span>1-month net</span>
             <span
               className={`font-semibold tabular-nums ${
@@ -128,10 +128,10 @@ export function InstitutionalActivity({
       {/* ── 20-DAY HIGHS & LOWS SECTION ────────────────────────────── */}
       <div className="space-y-2 pt-3 border-t border-border w-full min-w-0">
         <div className="flex items-center justify-between pb-1">
-          <span className="text-[11px] font-bold text-text uppercase tracking-wider">
+          <span className="text-xs font-bold text-text uppercase tracking-wider">
             20-DAY HIGHS · LOWS · LAST 22 SESSIONS
           </span>
-          <span className="text-[10px] text-text-muted">Stocks</span>
+          <span className="text-xs text-text-secondary">Stocks</span>
         </div>
 
         <div className="flex items-center justify-between text-xs">
@@ -149,7 +149,7 @@ export function InstitutionalActivity({
                 ? `${highsLows.latestNet > 0 ? "+" : ""}${highsLows.latestNet}`
                 : "—"}
             </span>
-            <span className="text-[11px] text-text-secondary">
+            <span className="text-xs text-text-secondary">
               {highsLows?.latestNet !== null && highsLows?.latestNet !== undefined
                 ? highsLows.latestNet >= 0
                   ? "Net positive"
@@ -157,7 +157,7 @@ export function InstitutionalActivity({
                 : "—"}
             </span>
           </div>
-          <span className="text-[11px] text-text-secondary">
+          <span className="text-xs text-text-secondary">
             {highsLows?.highsCount ?? "—"} highs / {highsLows?.lowsCount ?? "—"} lows
           </span>
         </div>

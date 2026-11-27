@@ -10,7 +10,7 @@ export default function SectorsPage() {
       fallback={
         <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
           <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-          <span className="text-sm text-text-muted">Loading Industries...</span>
+          <span className="text-sm text-text-secondary">Loading Industries...</span>
         </div>
       }
     >

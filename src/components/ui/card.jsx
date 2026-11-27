@@ -46,14 +46,14 @@ export function SectionCard({
             </h3>
             {info && (
               <span
-                className="text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
+                className="text-text-secondary hover:text-text-secondary cursor-pointer transition-colors"
                 title={info}
               >
                 <Info size={13} />
               </span>
             )}
             {subtitle && (
-              <span className="text-[11px] text-text-secondary ml-1.5 hidden sm:inline truncate">
+              <span className="text-xs text-text-secondary ml-1.5 hidden sm:inline truncate">
                 {subtitle}
               </span>
             )}
@@ -99,7 +99,7 @@ export function MetricCard({
 }) {
   return (
     <BaseCard className={`flex flex-col justify-between ${className}`} padding="p-3.5">
-      <div className="flex items-center justify-between text-[11px] text-text-secondary font-medium uppercase tracking-wider mb-1.5">
+      <div className="flex items-center justify-between text-xs text-text-secondary font-medium uppercase tracking-wider mb-1.5">
         <span>{label}</span>
         {action}
       </div>
@@ -109,7 +109,7 @@ export function MetricCard({
         </span>
         {trend && (
           <span
-            className={`text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-[4px] border ${
+            className={`text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-[4px] border ${
               trend.isPositive
                 ? "bg-bullish-bg text-bullish border-bullish-border"
                 : "bg-bearish-bg text-bearish border-bearish-border"
@@ -120,7 +120,7 @@ export function MetricCard({
         )}
       </div>
       {subvalue && (
-        <div className="text-[11px] text-text-muted mt-1 tabular-nums truncate">
+        <div className="text-xs text-text-secondary mt-1 tabular-nums truncate">
           {subvalue}
         </div>
       )}
@@ -131,11 +131,11 @@ export function MetricCard({
 export function StatCard({ label, value, note, children, className = "" }) {
   return (
     <BaseCard className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">
+      <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">
         {label}
       </span>
       <div className="text-[20px] font-bold text-text tabular-nums">{value}</div>
-      {note && <div className="text-[11px] text-text-muted">{note}</div>}
+      {note && <div className="text-xs text-text-secondary">{note}</div>}
       {children}
     </BaseCard>
   );
