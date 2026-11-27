@@ -48,6 +48,13 @@ const NAV_ITEMS = [
         icon: Layers,
         active: true,
       },
+      {
+        id: "plan",
+        name: "Daily Plan",
+        href: "/plan",
+        icon: BarChart3,
+        active: true,
+      },
     ],
   },
 ];

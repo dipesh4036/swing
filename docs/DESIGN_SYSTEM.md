@@ -160,6 +160,9 @@ import { CHART_THEME } from "@/lib/chart-theme";
 - `RankPrimitives` (`RankBadge`, `RankChangeChip`, `SignedReturn`, `format20dHL`): Shared tabular primitives (`tabular-nums`), enforcing colour + sign/arrow on every return and rank move, and `"—"` for null/unverified `20D H/L`.
 - `BottomSheet`: Accessible modal sheet (Esc + backdrop close, `duration-150`) used for mobile Filters and the mobile Rotation Chart.
 
+### Tab 4: Daily Plan (`src/components/plan/`)
+- `DailyPlanView`: Top-down 6-block routine (`/plan`): header with stored-date picker + P3 summary, `Market State` card, `Where Money Is Going` cap-leadership card, `Breakouts & Stage 2` card, `TopGroupsStrip` reuse, and `Final Candidates` list (64 px mobile rows / desktop table, Copy/CSV, lazy client-side pattern tags with concurrency 4, and `StockDetailPanel` drill-in). Reuses `BaseCard`, `TopGroupsStrip`, `BottomSheet`, `SignedReturn`, and `StockDetailPanel`.
+
 ## Tab 3 Patterns & Mobile Rules
 - **Page Order**: Compact header + `MarketSnapshot` → sticky `ControlBar` → `TopGroupsStrip` → ranked list/table; Rotation Chart opens from the sticky Compare bottom bar (`BottomSheet` on phone, collapsible panel under Top 3 on desktop).
 - **Mobile Row Density**: Key metric (`MED`) first on line 1; `<= 3` visible values per row line; ~64 px collapsed height; 15-row paging; single expanded row at a time.

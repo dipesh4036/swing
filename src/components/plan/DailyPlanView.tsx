@@ -1,0 +1,639 @@
+"use client";
+
+import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Download,
+  HelpCircle,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+import { DailyPlanResponse, PlanCandidateRow } from "@/lib/daily-plan";
+import { detectPatterns } from "@/lib/patterns";
+import PageContainer, { SectionHeader } from "@/components/shared/PageContainer";
+import { BaseCard } from "@/components/ui/card";
+import TopGroupsStrip from "@/components/industry-strength/TopGroupsStrip";
+import BottomSheet from "@/components/industry-strength/BottomSheet";
+import { SignedReturn } from "@/components/industry-strength/RankPrimitives";
+import StockDetailPanel from "@/components/industry-strength/StockDetailPanel";
+
+const PATTERN_CONCURRENCY = 4;
+
+function stateBadgeCls(state?: string) {
+  if (state === "Strong") return "bg-success-bg text-success border-success/30";
+  if (state === "Weak") return "bg-danger-bg text-danger border-danger/30";
+  return "bg-warning-bg text-warning border-warning/30";
+}
+
+function csvEscape(v: unknown): string {
+  const s = String(v ?? "");
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+export default function DailyPlanView() {
+  const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [data, setData] = useState<DailyPlanResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [selectedStock, setSelectedStock] = useState<PlanCandidateRow | null>(null);
+
+  const [patternsByToken, setPatternsByToken] = useState<Record<number, string>>({});
+  const [checkingPatterns, setCheckingPatterns] = useState(false);
+
+  const fetchPlan = useCallback(async (dateStr: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const qs = dateStr ? `?date=${encodeURIComponent(dateStr)}` : "";
+      const res = await fetch(`/api/plan${qs}`);
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as DailyPlanResponse;
+      setData(json);
+      if (!dateStr && json.planDate) {
+        setSelectedDate(json.planDate);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load Daily Plan");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPlan(selectedDate);
+  }, [fetchPlan, selectedDate]);
+
+  // P4: Lazy client-side chart pattern detection (max 20 candidates, concurrency 4)
+  useEffect(() => {
+    const cands = data?.candidates || [];
+    if (cands.length === 0) {
+      setPatternsByToken({});
+      setCheckingPatterns(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPatternsByToken({});
+    setCheckingPatterns(true);
+
+    const queue = cands.slice(0, 20);
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < queue.length && !cancelled) {
+        const idx = cursor++;
+        const cand = queue[idx];
+        try {
+          const res = await fetch(
+            `/api/terminal/screener/chart?token=${encodeURIComponent(String(cand.token))}&source=industry`
+          );
+          if (!res.ok) continue;
+          const json = await res.json();
+          const candles = Array.isArray(json?.candles) ? json.candles : [];
+          if (candles.length < 30 || cancelled) continue;
+          const det = detectPatterns(candles);
+          const active = ((det?.patterns || []) as { status?: string; label?: string; type?: string }[]).find(
+            (p) => p.status !== "historical"
+          );
+          if (active && !cancelled) {
+            const label = String(active.label || active.type || "").trim();
+            if (label) {
+              setPatternsByToken((prev) => ({ ...prev, [cand.token]: label }));
+            }
+          }
+        } catch {
+          // non-fatal per candidate
+        }
+      }
+    };
+
+    const workers = Array.from(
+      { length: Math.min(PATTERN_CONCURRENCY, queue.length) },
+      () => worker()
+    );
+    Promise.all(workers).finally(() => {
+      if (!cancelled) setCheckingPatterns(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.planDate, data?.candidates]);
+
+  const handleCopy = async () => {
+    if (!data?.candidates?.length) return;
+    const text = data.candidates
+      .map((c) => `${c.rank}. ${c.symbol} (${c.industryLabel}) · RS ${c.rsRank.toFixed(0)} · ${c.reasons.join(" · ")}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore clipboard error */
+    }
+  };
+
+  const handleCsv = () => {
+    if (!data?.candidates?.length) return;
+    const header = ["Rank", "Symbol", "Industry", "RS", "Stage", "Hits", "Pattern", "Reasons", "Close", "1D %", "Off 52W High %"];
+    const rows = data.candidates.map((c) => [
+      c.rank,
+      c.symbol,
+      c.industryLabel,
+      c.rsRank,
+      c.stage,
+      c.screenerHits.join("; "),
+      patternsByToken[c.token] || "",
+      c.reasons.join("; "),
+      c.close ?? "",
+      c.ret1dPct ?? "",
+      c.pctFrom52wHigh ?? "",
+    ]);
+    const csv = [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `daily-plan-${data.planDate || "latest"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (loading && !data) {
+    return (
+      <PageContainer>
+        <div className="max-w-[1280px] mx-auto space-y-3">
+          <div className="h-14 rounded-lg bg-bg-secondary border border-border" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-36 rounded-xl bg-bg-secondary border border-border" />
+            ))}
+          </div>
+          <div className="h-44 rounded-xl bg-bg-secondary border border-border" />
+          <div className="h-72 rounded-xl bg-bg-secondary border border-border" />
+        </div>
+      </PageContainer>
+    );
+  }
+
+  return (
+    <PageContainer>
+      <div className="max-w-[1280px] mx-auto space-y-4 pb-10">
+        {/* 1. Header + Date Picker + P3 Summary */}
+        <SectionHeader
+          title="Daily Plan"
+          info="Automated top-down market, cap, breakout, industry, and candidate filter"
+          subtitle={
+            data?.planDate
+              ? `Plan ${data.planDate} · Market ${data.market.as_of ?? "—"} · Caps ${data.caps.as_of ?? "—"} · Breakouts ${data.breakouts.as_of ?? "—"} · Top 3 ${data.topIndustries.as_of ?? "—"}`
+              : "No stored plan available"
+          }
+          action={
+            <div className="flex items-center gap-2">
+              {data && data.availableDates.length > 0 && (
+                <select
+                  aria-label="Select plan date"
+                  value={selectedDate || data.planDate || ""}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="h-7 px-2 rounded-md border border-border bg-surface text-xs font-mono text-text cursor-pointer"
+                >
+                  {data.availableDates.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={() => fetchPlan(selectedDate)}
+                disabled={loading}
+                aria-label="Refresh Daily Plan"
+                className="p-1.5 rounded-md border border-border bg-surface text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+          }
+        />
+
+        {error && (
+          <BaseCard padding="p-3" bg="bg-warning-bg" className="text-warning text-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => fetchPlan(selectedDate)}
+              className="px-2.5 py-1 rounded bg-surface border border-border text-text font-medium cursor-pointer"
+            >
+              Retry
+            </button>
+          </BaseCard>
+        )}
+
+        {data && (
+          <>
+            {/* Summary banner */}
+            <BaseCard padding="p-3.5" bg="bg-surface">
+              <p className="text-xs sm:text-[13px] text-text leading-relaxed">{data.summaryText}</p>
+              {data.summarySource === "gemini" && (
+                <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-text-muted">
+                  <Sparkles className="w-3 h-3" />
+                  <span>AI-written from the numbers</span>
+                </div>
+              )}
+            </BaseCard>
+
+            {/* 2. Market, 3. Caps, 4. Breakouts */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {/* Block 1: Market */}
+              <BaseCard padding="p-3.5" className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                    1. Market State
+                  </h2>
+                  <Link href="/" className="text-[11px] font-medium text-primary hover:underline">
+                    Open Breadth
+                  </Link>
+                </div>
+
+                {data.market.status !== "available" ? (
+                  <p className="text-xs text-text-muted">
+                    Not available: {data.market.reason || "missing breadth data"}
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold ${stateBadgeCls(
+                          data.market.state
+                        )}`}
+                      >
+                        {data.market.state}
+                      </span>
+                      {data.market.delta_50sma_5d !== null && data.market.delta_50sma_5d !== undefined && (
+                        <span className="text-[11px] font-mono text-text-secondary tabular-nums">
+                          5D &Delta;50SMA: {data.market.delta_50sma_5d >= 0 ? "+" : ""}
+                          {data.market.delta_50sma_5d.toFixed(1)} pp
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs font-mono tabular-nums">
+                      <div className="rounded bg-bg-secondary p-2">
+                        <div className="text-[10px] text-text-muted">&gt;50 SMA</div>
+                        <div className="font-semibold text-text">{data.market.pct_above_50sma?.toFixed(1)}%</div>
+                      </div>
+                      <div className="rounded bg-bg-secondary p-2">
+                        <div className="text-[10px] text-text-muted">&gt;200 SMA</div>
+                        <div className="font-semibold text-text">{data.market.pct_above_200sma?.toFixed(1)}%</div>
+                      </div>
+                      <div className="rounded bg-bg-secondary p-2">
+                        <div className="text-[10px] text-text-muted">Net 20D H/L</div>
+                        <div className="font-semibold text-text">
+                          {(data.market.net_highs_20d ?? 0) > 0 ? `+${data.market.net_highs_20d}` : data.market.net_highs_20d}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </BaseCard>
+
+              {/* Block 2: Where money is going */}
+              <BaseCard padding="p-3.5" className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                    2. Where Money Is Going
+                  </h2>
+                  <span className="text-[11px] font-semibold text-text">
+                    {data.caps.status === "available" ? data.caps.leader : "Not available"}
+                  </span>
+                </div>
+
+                {data.caps.status !== "available" || !data.caps.segments ? (
+                  <p className="text-xs text-text-muted">
+                    Not available: {data.caps.reason || "insufficient index history"}
+                  </p>
+                ) : (
+                  <div className="divide-y divide-border text-xs">
+                    {data.caps.segments.map((seg) => (
+                      <div key={seg.key} className="py-1.5 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium text-text flex items-center gap-1.5">
+                            <span>{seg.label}</span>
+                            {data.caps.leader === seg.label && (
+                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary text-[10px] font-semibold">
+                                Leading
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-text-muted font-mono tabular-nums">
+                            &gt;50 SMA {seg.pct_above_50sma !== null ? `${seg.pct_above_50sma.toFixed(0)}%` : "—"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
+                          <div className="text-right">
+                            <div className="text-[10px] text-text-muted">5D</div>
+                            <SignedReturn value={seg.ret_5d} size="xs" />
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-text-muted">20D</div>
+                            <SignedReturn value={seg.ret_20d} size="xs" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </BaseCard>
+
+              {/* Block 3: Breakouts & Stage 2 */}
+              <BaseCard padding="p-3.5" className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                    3. Breakouts &amp; Stage 2
+                  </h2>
+                  <Link href="/screener" className="text-[11px] font-medium text-primary hover:underline">
+                    Open Screener
+                  </Link>
+                </div>
+
+                {data.breakouts.status !== "available" || !data.breakouts.counts ? (
+                  <p className="text-xs text-text-muted">
+                    Not available: {data.breakouts.reason || "missing screener counts"}
+                  </p>
+                ) : (
+                  <div className="space-y-2 text-xs">
+                    <div className="divide-y divide-border font-mono tabular-nums">
+                      {[
+                        { key: "stage2_breakout", label: "Stage 2 BO" },
+                        { key: "vcp", label: "VCP" },
+                        { key: "near_pivot", label: "Near Pivot" },
+                      ].map((row) => {
+                        const c = data.breakouts.counts?.[row.key];
+                        return (
+                          <div key={row.key} className="py-1 flex items-center justify-between">
+                            <span className="font-sans text-text">{row.label}</span>
+                            <span className="text-text-secondary">
+                              <strong className="text-text">{c?.today ?? 0}</strong>{" "}
+                              <span className="text-[10px] text-text-muted">
+                                (1D: {c?.prev_1d ?? "—"}, 5D: {c?.prev_5d ?? "—"})
+                              </span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-1 border-t border-border flex items-center justify-between text-[11px] font-mono tabular-nums">
+                      <span className="text-text-muted">
+                        Stage 2: N500 {data.breakouts.stage2_pct?.nifty500?.toFixed(1) ?? "—"}% · Liq{" "}
+                        {data.breakouts.stage2_pct?.liquid?.toFixed(1) ?? "—"}%
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-text-secondary">
+                      5D Follow-through:{" "}
+                      <strong className="font-mono text-text">
+                        {data.breakouts.follow_through?.label ?? "too few to judge"}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+              </BaseCard>
+            </div>
+
+            {/* 5. Top 3 Industries (reusing TopGroupsStrip from UX3) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                  4. Top 3 Industries ({data.topIndustries.level})
+                </span>
+                <Link href="/sectors" className="text-[11px] font-medium text-primary hover:underline">
+                  Open Industries
+                </Link>
+              </div>
+              {data.topIndustries.status !== "available" ? (
+                <BaseCard padding="p-3.5" className="text-xs text-text-muted">
+                  Top 3 industries not available for {data.planDate}:{" "}
+                  {data.topIndustries.reason || "no stored rows"}
+                </BaseCard>
+              ) : (
+                <TopGroupsStrip
+                  topGroups={data.topIndustries.groups}
+                  topGroupsAsOf={data.topIndustries.as_of}
+                  loading={false}
+                  onSelectGroup={() => router.push("/sectors")}
+                />
+              )}
+            </div>
+
+            {/* 6. Final Candidates */}
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                    5. Final Candidates ({data.candidates.length}
+                    {data.totalCandidates > data.candidates.length
+                      ? ` · ${data.totalCandidates - data.candidates.length} more`
+                      : ""}
+                    )
+                  </h2>
+                  <p className="text-[11px] text-text-muted">
+                    Candidates = Stage 2, RS &ge; 70, inside today&apos;s top 3 industries. A filter result, not advice.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {checkingPatterns && (
+                    <span className="text-[11px] text-text-muted mr-1">checking patterns…</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setRulesOpen(true)}
+                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-[11px] font-medium text-text-secondary hover:text-text cursor-pointer"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>How this is built</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    disabled={data.candidates.length === 0}
+                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-[11px] font-medium text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copied ? "Copied" : "Copy"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCsv}
+                    disabled={data.candidates.length === 0}
+                    className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border bg-surface text-[11px] font-medium text-text-secondary hover:text-text disabled:opacity-50 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              {data.candidates.length === 0 ? (
+                <BaseCard padding="p-6" className="text-center text-xs text-text-muted">
+                  No qualifying candidates for {data.planDate}.
+                </BaseCard>
+              ) : (
+                <>
+                  {/* Mobile ~64px rows */}
+                  <div className="lg:hidden divide-y divide-border rounded-xl border border-border bg-surface overflow-hidden">
+                    {data.candidates.map((c) => {
+                      const pat = patternsByToken[c.token];
+                      return (
+                        <button
+                          key={c.token}
+                          type="button"
+                          onClick={() => setSelectedStock(c)}
+                          className="w-full text-left px-3 py-2.5 min-h-[64px] hover:bg-bg-secondary/40 cursor-pointer space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-mono text-xs text-text-muted tabular-nums">#{c.rank}</span>
+                              <span className="text-[13px] font-semibold text-text truncate">{c.symbol}</span>
+                              <span className="text-[11px] text-text-muted truncate">{c.industryLabel}</span>
+                            </div>
+                            <span className="font-mono text-xs font-semibold text-text tabular-nums shrink-0">
+                              RS {c.rsRank.toFixed(0)}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                            <span className="text-text-secondary">{c.reasons.join(" · ")}</span>
+                            {pat && (
+                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary font-medium">
+                                {pat}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden lg:block rounded-xl border border-border bg-surface overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-bg-secondary border-b border-border text-[11px] uppercase tracking-wider text-text-secondary">
+                        <tr>
+                          <th className="px-3 py-2.5 text-left">#</th>
+                          <th className="px-3 py-2.5 text-left">Symbol</th>
+                          <th className="px-3 py-2.5 text-left">Industry</th>
+                          <th className="px-3 py-2.5 text-right">RS</th>
+                          <th className="px-3 py-2.5 text-right">Close</th>
+                          <th className="px-3 py-2.5 text-right">1D %</th>
+                          <th className="px-3 py-2.5 text-left">Hits &amp; Pattern</th>
+                          <th className="px-3 py-2.5 text-left">Reasons</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-subtle">
+                        {data.candidates.map((c) => {
+                          const pat = patternsByToken[c.token];
+                          return (
+                            <tr
+                              key={c.token}
+                              onClick={() => setSelectedStock(c)}
+                              className="hover:bg-bg-hover cursor-pointer"
+                            >
+                              <td className="px-3 py-2.5 font-mono tabular-nums text-text-muted">{c.rank}</td>
+                              <td className="px-3 py-2.5 font-semibold text-text">{c.symbol}</td>
+                              <td className="px-3 py-2.5 text-text-secondary">{c.industryLabel}</td>
+                              <td className="px-3 py-2.5 text-right font-mono font-semibold tabular-nums text-text">
+                                {c.rsRank.toFixed(0)}
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-mono tabular-nums text-text">
+                                {c.close !== null ? `₹${c.close.toFixed(2)}` : "—"}
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <SignedReturn value={c.ret1dPct} size="xs" />
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex flex-wrap gap-1">
+                                  {c.screenerHits.map((h) => (
+                                    <span key={h} className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-[10px] font-mono text-text">
+                                      {h}
+                                    </span>
+                                  ))}
+                                  {pat && (
+                                    <span className="px-1.5 py-0.5 rounded bg-primary-subtle border border-accent-border text-[10px] font-medium text-primary">
+                                      {pat}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-text-secondary">{c.reasons.join(" · ")}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      <BottomSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={`How this is built (${data?.rulesVersion || "plan_v1"})`}>
+        <div className="space-y-2.5 text-xs text-text-secondary">
+          <p>
+            <strong className="text-text">Market State (Nifty 500):</strong> Strong if &gt;50 SMA &ge; 60%, &gt;200 SMA &ge; 50%, and net 20D highs &gt; 0; Weak if &gt;50 SMA &lt; 40% or &gt;200 SMA &lt; 35%; else Mixed.
+          </p>
+          <p>
+            <strong className="text-text">Cap Leadership:</strong> Highest 20-session index return across Large (Nifty 50 / Nifty 100 breadth), Mid (Nifty Midcap 150), and Small (Nifty Smallcap 250) when leading by &ge; 1.0 percentage point; else &ldquo;no clear leader&rdquo;.
+          </p>
+          <p>
+            <strong className="text-text">Candidate Filter:</strong> Liquid stocks in today&apos;s Top 3 industries (industry level, minimax across 1D/1W/1M/3M), RS &ge; 70, Weinstein Stage 2, and within 25% of 52W high. Ordered by screener hit priority, RS descending, and industry rank. Capped at 20 rows.
+          </p>
+          <p className="text-text-muted">
+            Deterministic filter output defined in docs/PLAN_RULES.md; not advice.
+          </p>
+        </div>
+      </BottomSheet>
+
+      {selectedStock && (
+        <StockDetailPanel
+          stock={{
+            token: selectedStock.token,
+            symbol: selectedStock.symbol,
+            name: selectedStock.symbol,
+            industry: selectedStock.industryLabel,
+            in_universe: true,
+            close: selectedStock.close,
+            ret_1d: selectedStock.ret1dPct,
+            pct_from_52w_high: selectedStock.pctFrom52wHigh,
+            rs_rank: selectedStock.rsRank,
+          }}
+          source="industry"
+          onShowSector={() => {
+            setSelectedStock(null);
+            router.push("/sectors");
+          }}
+          onClose={() => setSelectedStock(null)}
+        />
+      )}
+    </PageContainer>
+  );
+}
