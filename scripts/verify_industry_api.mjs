@@ -129,6 +129,24 @@ async function runG7Verification() {
     }
   }
 
+  // 4. G14: Check topGroups present for all 4 levels x 2 universes and payload < 600 KB
+  let topGroupsPairsOk = 0;
+  for (const lvl of ["macro", "sector", "industry", "basic_industry"]) {
+    for (const univ of ["all", "liquid"]) {
+      const r = await strengthLib.getRankings({ level: lvl, universe: univ, showSmall: false }, queryFn);
+      const sz = Buffer.byteLength(JSON.stringify(r), "utf8");
+      if (sz >= 600 * 1024) {
+        errors.push(`G14: payload ${lvl}/${univ} size ${(sz / 1024).toFixed(2)} KB >= 600 KB`);
+      }
+      if (Array.isArray(r.topGroups) && r.topGroups.length > 0 && r.topGroupsAsOf) {
+        topGroupsPairsOk++;
+      } else {
+        errors.push(`G14: missing topGroups for ${lvl}/${univ}`);
+      }
+    }
+  }
+  console.log(`G14 topGroups 4x2 check: ${topGroupsPairsOk}/8 pairs populated`);
+
   // 6. Scan for banned words: buy, sell, target, stop, entry, signal, score, probability, guaranteed
   const bannedWords = ["buy", "sell", "target", "stop", "entry", "signal", "score", "probability", "guaranteed"];
   const bannedRegex = new RegExp(`\\b(${bannedWords.join("|")})\\b`, "i");
@@ -189,7 +207,11 @@ async function runG7Verification() {
   delete process.env.TOTP_SECRET;
   console.log("--- Running X5 Chart Route (30 stocks, 10 non-Nifty500, Angel env unset) ---");
   const snapRes = await queryFn(
-    `SELECT snapshot_id, trade_date::text AS trade_date FROM industry_snapshots WHERE status = 'completed' ORDER BY trade_date DESC, completed_at DESC LIMIT 1;`
+    `SELECT s.snapshot_id, s.trade_date::text AS trade_date
+     FROM industry_snapshots s
+     WHERE s.status = 'completed'
+       AND EXISTS (SELECT 1 FROM latest_industry_stock_metrics m WHERE m.snapshot_id = s.snapshot_id)
+     ORDER BY s.trade_date DESC, s.completed_at DESC LIMIT 1;`
   );
   const snapId = snapRes.rows[0]?.snapshot_id;
   const nonNiftyRes = await queryFn(

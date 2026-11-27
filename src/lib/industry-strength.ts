@@ -106,6 +106,10 @@ export async function getLatestCompletedSnapshot(q: QueryFn = queryWithRetry) {
            group_count
     FROM industry_snapshots
     WHERE status = 'completed'
+      AND EXISTS (
+        SELECT 1 FROM latest_industry_stock_metrics m
+        WHERE m.snapshot_id = industry_snapshots.snapshot_id
+      )
     ORDER BY trade_date DESC, completed_at DESC
     LIMIT 1;
     `

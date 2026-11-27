@@ -14,6 +14,8 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple
 import psycopg2
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 import numpy as np
 
@@ -67,10 +69,11 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # Dates & AsOf (live Tab 3 tables)
             # -------------------------------------------------------------
             cur.execute("""
-                SELECT snapshot_id, trade_date::text
-                FROM industry_snapshots
-                WHERE status = 'completed'
-                ORDER BY trade_date DESC, completed_at DESC
+                SELECT s.snapshot_id, s.trade_date::text
+                FROM industry_snapshots s
+                WHERE s.status = 'completed'
+                  AND EXISTS (SELECT 1 FROM latest_industry_stock_metrics m WHERE m.snapshot_id = s.snapshot_id)
+                ORDER BY s.trade_date DESC, s.completed_at DESC
                 LIMIT 1;
             """)
             snap_row = cur.fetchone()
@@ -166,14 +169,14 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             # -------------------------------------------------------------
             # G3: Independent Recompute for EVERY ranked industry
             # -------------------------------------------------------------
-            # Fetch stored strength for asOf (live Tab 3 tables)
+            # Fetch stored strength for snap_asof (live Tab 3 tables)
             cur.execute("""
                 SELECT g.label, s.n_stocks, s.median_1m, s.median_3m, s.pct_above_50dma, s.pct_above_200dma, s.n_20d_high, s.rank
                 FROM daily_industry_strength s
                 JOIN industry_groups g ON g.group_id = s.group_id
                 WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry' AND s.rank IS NOT NULL
                 ORDER BY s.rank ASC;
-            """, (ind_asof,))
+            """, (snap_asof,))
             ranked_breadth_rows = cur.fetchall()
 
             # Recompute from latest_industry_stock_metrics
@@ -505,6 +508,194 @@ def run_gate_checks() -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
             })
 
             # -------------------------------------------------------------
+            # G11: Top 3 Minimax Reproducibility (4 levels x 2 universes)
+            # -------------------------------------------------------------
+            cur.execute("SELECT MAX(snapshot_date)::text FROM industry_top_groups;")
+            top_asof = cur.fetchone()[0]
+            g11_mismatches = []
+            top_tables = []
+            if not top_asof:
+                g11_mismatches.append("industry_top_groups is empty")
+            else:
+                cur.execute("""
+                    SELECT t.level, t.universe, t.pos, t.group_id, g.label,
+                           t.r_1d, t.r_1w, t.r_1m, t.r_3m, t.worst_rank,
+                           t.note_text, t.note_source,
+                           t.med_1d, t.med_1w, t.med_1m, t.med_3m,
+                           t.n_20d_high, t.n_20d_low, t.pct_above_50dma, t.n_eligible
+                    FROM industry_top_groups t
+                    JOIN industry_groups g ON g.group_id = t.group_id
+                    WHERE t.snapshot_date = %s
+                    ORDER BY t.level, t.universe, t.pos;
+                """, (top_asof,))
+                stored_top_rows = cur.fetchall()
+
+                # Separate independent SQL/Python recompute from daily_industry_strength
+                cur.execute("""
+                    SELECT g.level, s.universe, g.group_id, g.label, s.n_eligible,
+                           s.median_1d, s.median_1w, s.median_1m, s.median_3m, s.rank_trend
+                    FROM daily_industry_strength s
+                    JOIN industry_groups g ON g.group_id = s.group_id
+                    WHERE s.trade_date = %s
+                      AND s.n_eligible >= 5
+                      AND s.median_1d IS NOT NULL AND s.median_1w IS NOT NULL
+                      AND s.median_1m IS NOT NULL AND s.median_3m IS NOT NULL;
+                """, (top_asof,))
+                raw_slice_rows = cur.fetchall()
+
+                by_lu = {}
+                for r in raw_slice_rows:
+                    by_lu.setdefault((r[0], r[1]), []).append(r)
+
+                def _indep_dense_rank(items, col_idx):
+                    ordered = sorted(items, key=lambda x: (-float(x[col_idx]), str(x[3])))
+                    res = {}
+                    prev_v, rk = None, 0
+                    for x in ordered:
+                        v = float(x[col_idx])
+                        if prev_v is None or v != prev_v:
+                            rk += 1
+                            prev_v = v
+                        res[x[2]] = rk
+                    return res
+
+                stored_by_lu = {}
+                for r in stored_top_rows:
+                    stored_by_lu.setdefault((r[0], r[1]), []).append(r)
+
+                for lvl in ("macro", "sector", "industry", "basic_industry"):
+                    for univ in ("all", "liquid"):
+                        items = by_lu.get((lvl, univ), [])
+                        d_r = _indep_dense_rank(items, 5)
+                        w_r = _indep_dense_rank(items, 6)
+                        m_r = _indep_dense_rank(items, 7)
+                        q_r = _indep_dense_rank(items, 8)
+                        cand = []
+                        for x in items:
+                            gid = x[2]
+                            wr = max(d_r[gid], w_r[gid], m_r[gid], q_r[gid])
+                            mr = round((d_r[gid] + w_r[gid] + m_r[gid] + q_r[gid]) / 4.0, 2)
+                            cand.append((wr, mr, x[9] if x[9] is not None else 999999, str(x[3]), gid, d_r[gid], w_r[gid], m_r[gid], q_r[gid]))
+                        cand.sort()
+                        exp_top = cand[:3]
+                        got_top = stored_by_lu.get((lvl, univ), [])
+                        if [c[4] for c in exp_top] != [g[3] for g in got_top]:
+                            g11_mismatches.append(f"{lvl}/{univ}: expected {[c[4] for c in exp_top]} vs got {[g[3] for g in got_top]}")
+                        else:
+                            for idx_c, (c, g) in enumerate(zip(exp_top, got_top), start=1):
+                                if (c[5], c[6], c[7], c[8]) != (g[5], g[6], g[7], g[8]):
+                                    g11_mismatches.append(f"{lvl}/{univ} pos {idx_c} rank mismatch")
+                        top_tables.append({
+                            "level": lvl,
+                            "universe": univ,
+                            "rows": [
+                                {"pos": g[2], "label": g[4], "r_1d": g[5], "r_1w": g[6], "r_1m": g[7], "r_3m": g[8], "worst": g[9], "source": g[11]}
+                                for g in got_top
+                            ],
+                        })
+
+            g11_pass = (len(g11_mismatches) == 0) and bool(top_asof)
+            if not g11_pass:
+                all_hard_pass = False
+            gates.append({
+                "id": "G11",
+                "type": "HARD",
+                "name": "Top 3 Minimax Reproducibility (4x2)",
+                "expected": "Exact match across all 4 levels x 2 universes",
+                "actual": f"asOf={top_asof}, mismatches={len(g11_mismatches)}" + (f" ({g11_mismatches[0]})" if g11_mismatches else ""),
+                "verdict": "PASS" if g11_pass else "FAIL",
+            })
+            details["top_tables"] = top_tables
+            details["top_asof"] = top_asof
+
+            # -------------------------------------------------------------
+            # G12: Top 3 Notes Validation (0 banned words, traceable numbers, <= 180 chars)
+            # -------------------------------------------------------------
+            from pipeline.industry_top_groups import BANNED_NOTE_WORDS_RE, validate_gemini_note
+            g12_errors = []
+            gemini_cnt = 0
+            template_cnt = 0
+            if top_asof:
+                for r in stored_top_rows:
+                    note_txt, note_src = r[10], r[11]
+                    if note_src == "gemini":
+                        gemini_cnt += 1
+                        entry = {
+                            "label": r[4], "r_1d": r[5], "r_1w": r[6], "r_1m": r[7], "r_3m": r[8],
+                            "worst_rank": r[9], "med_1d": r[12], "med_1w": r[13], "med_1m": r[14], "med_3m": r[15],
+                            "n_20d_high": r[16], "n_20d_low": r[17], "pct_above_50dma": r[18], "n_eligible": r[19],
+                        }
+                        if not validate_gemini_note(note_txt, entry):
+                            g12_errors.append(f"{r[0]}/{r[1]}#{r[2]} failed gemini validation")
+                    else:
+                        template_cnt += 1
+                        if len(note_txt) > 180 or BANNED_NOTE_WORDS_RE.search(note_txt):
+                            g12_errors.append(f"{r[0]}/{r[1]}#{r[2]} failed template check")
+            g12_pass = (len(g12_errors) == 0) and (gemini_cnt + template_cnt > 0)
+            if not g12_pass:
+                all_hard_pass = False
+            gates.append({
+                "id": "G12",
+                "type": "HARD",
+                "name": "Top 3 Note Validation & Source Share",
+                "expected": "0 banned words, traceable numbers, <= 180 chars",
+                "actual": f"errors={len(g12_errors)}, gemini={gemini_cnt}, template={template_cnt}",
+                "verdict": "PASS" if g12_pass else "FAIL",
+            })
+
+            # -------------------------------------------------------------
+            # G13: 20D Closing H/L Evidence (UX5)
+            # -------------------------------------------------------------
+            cur.execute("SELECT MAX(trade_date)::text FROM latest_industry_stock_metrics WHERE at_20d_high IS NOT NULL;")
+            hl_date = cur.fetchone()[0]
+            g13_hi_groups, g13_lo_groups = 0, 0
+            g13_diffs = 0
+            if hl_date:
+                cur.execute("""
+                    SELECT count(*) FILTER (WHERE n_20d_high >= 1), count(*) FILTER (WHERE n_20d_low >= 1)
+                    FROM daily_industry_strength s
+                    JOIN industry_groups g ON g.group_id = s.group_id
+                    WHERE s.trade_date = %s AND s.universe = 'liquid' AND g.level = 'basic_industry';
+                """, (hl_date,))
+                g13_hi_groups, g13_lo_groups = cur.fetchone()
+                # Recompute 3 groups from stock_candles closes
+                cur.execute("""
+                    WITH w AS (
+                      SELECT m.token, m.basic_industry, c.trade_date, c.close,
+                             MAX(c.close) OVER (PARTITION BY c.token ORDER BY c.trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS max_c20,
+                             MIN(c.close) OVER (PARTITION BY c.token ORDER BY c.trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS min_c20,
+                             COUNT(*) OVER (PARTITION BY c.token ORDER BY c.trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS cnt
+                      FROM stock_candles c
+                      JOIN latest_industry_stock_metrics m ON m.token = c.token AND m.snapshot_id = %s
+                      WHERE c.trade_date <= %s AND m.in_universe = true AND m.is_liquid = true
+                        AND m.basic_industry IN ('Pharmaceuticals', 'Specialty Chemicals', 'Iron & Steel Products')
+                    )
+                    SELECT w.basic_industry,
+                           count(*) FILTER (WHERE cnt >= 20 AND close >= max_c20) AS hi,
+                           count(*) FILTER (WHERE cnt >= 20 AND close <= min_c20) AS lo,
+                           s.n_20d_high, s.n_20d_low
+                    FROM w
+                    JOIN industry_groups g ON g.level = 'basic_industry' AND g.label = w.basic_industry
+                    JOIN daily_industry_strength s ON s.group_id = g.group_id AND s.trade_date = %s AND s.universe = 'liquid'
+                    WHERE w.trade_date = %s
+                    GROUP BY w.basic_industry, s.n_20d_high, s.n_20d_low;
+                """, (latest_snap_id, hl_date, hl_date, hl_date))
+                for _, hi, lo, s_hi, s_lo in cur.fetchall():
+                    if int(hi) != int(s_hi) or int(lo) != int(s_lo):
+                        g13_diffs += 1
+            g13_pass = bool(hl_date) and (g13_hi_groups > 0 or g13_lo_groups > 0) and g13_diffs == 0
+            if not g13_pass:
+                all_hard_pass = False
+            gates.append({
+                "id": "G13",
+                "type": "HARD",
+                "name": "20D Closing H/L Evidence (UX5)",
+                "expected": "Groups with >=1 H/L > 0 and 3-group raw close recompute exact match",
+                "actual": f"asOf={hl_date}, >=1H groups={g13_hi_groups}, >=1L groups={g13_lo_groups}, recompute_diffs={g13_diffs}",
+                "verdict": "PASS" if g13_pass else "FAIL",
+            })
+
+            # -------------------------------------------------------------
             # SOFT GATES
             # -------------------------------------------------------------
             # S1: >= 60 industries with >= 5 stocks
@@ -623,6 +814,16 @@ def write_markdown_report(gates: List[Dict[str, Any]], details: Dict[str, Any], 
         lines.append("|---|---|---|---|---|")
         for o in details.get("g5_outliers", []):
             lines.append(f"| {o['symbol']} | {o['close']} | {o['issue_size']} | {o['mcap_rs']:,.0f} | {o['diff_pct']:.2f}% |")
+
+    # G11 Top 3 4x2 tables
+    if details.get("top_tables"):
+        lines.append(f"\n### G11: Top 3 Across All Timeframes ({details.get('top_asof')})")
+        for tbl in details["top_tables"]:
+            lines.append(f"\n**{tbl['level']} / {tbl['universe']}**")
+            lines.append("| Pos | Group | 1D | 1W | 1M | 3M | Worst | Source |")
+            lines.append("|---:|---|---:|---:|---:|---:|---:|---|")
+            for r in tbl["rows"]:
+                lines.append(f"| {r['pos']} | {r['label']} | #{r['r_1d']} | #{r['r_1w']} | #{r['r_1m']} | #{r['r_3m']} | #{r['worst']} | {r['source']} |")
 
     lines.append("\n---\n")
     ui_not_verified = any(g.get("id") == "UI" and g.get("verdict") == "NOT VERIFIED" for g in gates)
