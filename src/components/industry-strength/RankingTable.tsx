@@ -240,9 +240,15 @@ export default function RankingTable({
                         {formatSignedPct(medVal, 2)}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                        <span className="text-bullish font-medium">{g.n20dHigh}H</span>
-                        <span className="text-text-muted mx-1">/</span>
-                        <span className="text-bearish font-medium">{g.n20dLow}L</span>
+                        {g.n20dHigh === null || g.n20dLow === null ? (
+                          <span className="text-text-muted">—</span>
+                        ) : (
+                          <>
+                            <span className="text-bullish font-medium">{g.n20dHigh}H</span>
+                            <span className="text-text-muted mx-1">/</span>
+                            <span className="text-bearish font-medium">{g.n20dLow}L</span>
+                          </>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-text whitespace-nowrap">
                         {formatUnsignedPct(g.pctAbove50dma, 0)}
