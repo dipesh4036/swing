@@ -242,7 +242,7 @@ def publish_industry_snapshot(
                 WHERE snapshot_id NOT IN (
                     SELECT snapshot_id FROM industry_snapshots
                     WHERE status = 'completed'
-                    ORDER BY completed_at DESC
+                    ORDER BY trade_date DESC, completed_at DESC
                     LIMIT %s
                 );
                 """,

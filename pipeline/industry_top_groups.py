@@ -120,7 +120,7 @@ def compute_top_groups_for_slice(
 def build_template_note(entry: Dict[str, Any]) -> str:
     """Deterministic fallback summary sentence."""
     return (
-        f"Top 3 on all four timeframes: "
+        f"Best combined ranks: "
         f"#{entry['r_1d']} on 1D, #{entry['r_1w']} on 1W, "
         f"#{entry['r_1m']} on 1M, #{entry['r_3m']} on 3M."
     )
