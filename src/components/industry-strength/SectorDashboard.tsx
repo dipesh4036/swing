@@ -199,6 +199,7 @@ export default function SectorDashboard() {
         setCompareToast("Max 6 groups can be compared on the chart.");
         return prev;
       }
+      if (prev.length === 0) setChartOpen(true);
       return [...prev, { groupId: group.groupId, label: group.label }];
     });
   };

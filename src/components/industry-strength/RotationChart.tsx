@@ -154,6 +154,11 @@ export default function RotationChart({
                 </button>
               </span>
             ))}
+            {selectedGroups.length === 1 && (
+              <span className="text-xs text-text-secondary">
+                Add more groups to compare
+              </span>
+            )}
           </div>
         ) : undefined
       }

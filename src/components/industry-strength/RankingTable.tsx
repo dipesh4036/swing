@@ -305,7 +305,9 @@ export default function RankingTable({
                       <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         <button
                           type="button"
-                          aria-label={`Compare ${g.label} in Rotation Chart`}
+                          title="Compare on rotation chart"
+                          aria-pressed={inChart}
+                          aria-label={`Compare ${g.label} on rotation chart`}
                           onClick={(e) => {
                             e.stopPropagation();
                             onToggleChartGroup(g);

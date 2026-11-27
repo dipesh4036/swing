@@ -188,8 +188,17 @@ export default function GroupDetails({
       : "";
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg-page sm:static sm:inset-auto sm:z-auto sm:bg-transparent overflow-y-auto p-3 sm:p-0">
-      <SectionCard
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-black/45"
+      role="dialog"
+      aria-modal="true"
+      aria-label={data ? `${data.group.label} details` : "Group details"}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full h-full lg:w-[580px] bg-bg-page overflow-y-auto p-3 sm:p-4 border-l border-border shadow-2xl">
+        <SectionCard
         title={data ? `${data.group.label} (${data.totalCount} stocks)${rankTag}` : "Loading group..."}
         subtitle={data?.group.fullPath}
         info="Sorted by RS strongest first. Click any stock row for price chart & technicals."
@@ -403,6 +412,7 @@ export default function GroupDetails({
           </div>
         ) : null}
       </SectionCard>
+      </div>
     </div>
   );
 }
