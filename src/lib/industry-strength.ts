@@ -13,6 +13,7 @@ import {
   RankingsSummary,
   StrengthPeriod,
   StrengthUniverse,
+  TopGroupRow,
   VALID_EXTENDED_PERIODS,
   VALID_LEVELS,
   VALID_UNIVERSES,
@@ -256,6 +257,8 @@ export async function getRankings(
       },
       breadcrumbs: [],
       groups: [],
+      topGroups: [],
+      topGroupsAsOf: null,
     };
   }
 
@@ -333,8 +336,8 @@ export async function getRankings(
       adv: toInt(r.adv),
       dec: toInt(r.dec),
       unch: toInt(r.unch),
-      n20dHigh: toInt(r.n_20d_high),
-      n20dLow: toInt(r.n_20d_low),
+      n20dHigh: r.n_20d_high !== null && r.n_20d_high !== undefined ? toInt(r.n_20d_high) : null,
+      n20dLow: r.n_20d_low !== null && r.n_20d_low !== undefined ? toInt(r.n_20d_low) : null,
       rsSts,
       rsStsPrev: rsPrev,
       rsDelta,
@@ -383,6 +386,61 @@ export async function getRankings(
       : null,
   };
 
+  // Fetch Top 3 across timeframes (UX1) for latest stored date on this (level, universe)
+  let topGroupsAsOf: string | null = null;
+  let topGroups: TopGroupRow[] = [];
+  try {
+    const topRes = await q(
+      `
+      SELECT t.snapshot_date::text AS snapshot_date,
+             t.pos, t.group_id, g.label, g.sector_label, g.parent_id, g.full_path,
+             t.r_1d, t.r_1w, t.r_1m, t.r_3m, t.worst_rank, t.mean_rank,
+             t.med_1d, t.med_1w, t.med_1m, t.med_3m,
+             t.n_20d_high, t.n_20d_low, t.pct_above_50dma, t.n_eligible,
+             t.note_text, t.note_source
+      FROM industry_top_groups t
+      JOIN industry_groups g ON g.group_id = t.group_id
+      WHERE t.level = $1 AND t.universe = $2
+        AND t.snapshot_date = (
+          SELECT MAX(snapshot_date) FROM industry_top_groups
+          WHERE level = $1 AND universe = $2
+        )
+      ORDER BY t.pos ASC;
+      `,
+      [level, universe]
+    );
+    if (topRes.rows.length > 0) {
+      topGroupsAsOf = String(topRes.rows[0].snapshot_date).split("T")[0];
+      topGroups = topRes.rows.map((r) => ({
+        pos: toInt(r.pos, 1),
+        groupId: String(r.group_id),
+        label: String(r.label),
+        sectorLabel: r.sector_label ? String(r.sector_label) : null,
+        parentId: r.parent_id ? String(r.parent_id) : null,
+        fullPath: String(r.full_path),
+        r1d: toInt(r.r_1d),
+        r1w: toInt(r.r_1w),
+        r1m: toInt(r.r_1m),
+        r3m: toInt(r.r_3m),
+        worstRank: toInt(r.worst_rank),
+        meanRank: Number(r.mean_rank),
+        med1d: Number(r.med_1d),
+        med1w: Number(r.med_1w),
+        med1m: Number(r.med_1m),
+        med3m: Number(r.med_3m),
+        n20dHigh: r.n_20d_high !== null && r.n_20d_high !== undefined ? toInt(r.n_20d_high) : null,
+        n20dLow: r.n_20d_low !== null && r.n_20d_low !== undefined ? toInt(r.n_20d_low) : null,
+        pctAbove50dma: toFiniteNumber(r.pct_above_50dma),
+        nEligible: toInt(r.n_eligible),
+        noteText: String(r.note_text),
+        noteSource: r.note_source === "gemini" ? "gemini" : "template",
+      }));
+    }
+  } catch {
+    topGroups = [];
+    topGroupsAsOf = null;
+  }
+
   return {
     snapshotId: String(snap.snapshot_id),
     snapshotDate: tradeDate,
@@ -397,6 +455,8 @@ export async function getRankings(
     summary,
     breadcrumbs,
     groups,
+    topGroups,
+    topGroupsAsOf,
   };
 }
 

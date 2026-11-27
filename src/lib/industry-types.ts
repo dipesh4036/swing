@@ -44,8 +44,8 @@ export interface IndustryGroupRow {
   adv: number;
   dec: number;
   unch: number;
-  n20dHigh: number;
-  n20dLow: number;
+  n20dHigh: number | null;
+  n20dLow: number | null;
   rsSts: number | null;
   rsStsPrev: number | null;
   rsDelta: number | null;
@@ -89,6 +89,31 @@ export interface BreadcrumbItem {
   label: string;
 }
 
+export interface TopGroupRow {
+  pos: number;
+  groupId: string;
+  label: string;
+  sectorLabel: string | null;
+  parentId: string | null;
+  fullPath: string;
+  r1d: number;
+  r1w: number;
+  r1m: number;
+  r3m: number;
+  worstRank: number;
+  meanRank: number;
+  med1d: number;
+  med1w: number;
+  med1m: number;
+  med3m: number;
+  n20dHigh: number | null;
+  n20dLow: number | null;
+  pctAbove50dma: number | null;
+  nEligible: number;
+  noteText: string;
+  noteSource: "gemini" | "template";
+}
+
 export interface RankingsResponse {
   snapshotId: string | null;
   snapshotDate: string | null;
@@ -101,6 +126,8 @@ export interface RankingsResponse {
   summary: RankingsSummary;
   breadcrumbs: BreadcrumbItem[];
   groups: IndustryGroupRow[];
+  topGroups: TopGroupRow[];
+  topGroupsAsOf: string | null;
 }
 
 export interface ConstituentStockRow {

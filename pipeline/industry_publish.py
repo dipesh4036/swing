@@ -453,6 +453,11 @@ def run_industry_strength_job(
 
         pub_res = publish_industry_snapshot(snapshot, conn=conn)
         try:
+            from pipeline.industry_top_groups import publish_top_groups
+            pub_res["top_groups"] = publish_top_groups(snapshot.trade_date, conn=conn, generate_notes=True)
+        except Exception as tge:
+            logger.warning(f"Non-fatal top_groups publish notice: {tge}")
+        try:
             liquid_tokens = [
                 r["token"] for r in snapshot.stock_metric_rows
                 if r.get("in_universe") and r.get("is_liquid")
@@ -649,6 +654,12 @@ def backfill_industry_strength(
         conn.commit()
 
         pub_res = publish_industry_snapshot(latest_snap, conn=conn) if latest_snap else {}
+        if latest_snap:
+            try:
+                from pipeline.industry_top_groups import backfill_top_groups
+                pub_res["top_groups"] = backfill_top_groups(days=30, conn=conn, generate_notes_latest=False)
+            except Exception as tge:
+                logger.warning(f"Non-fatal top_groups backfill notice: {tge}")
         return {
             "status": "completed",
             "sessions": len(target_dates),

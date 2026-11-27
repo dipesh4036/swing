@@ -107,6 +107,9 @@ def main():
     ind_backfill_parser.add_argument("--from", dest="from_date", default=None, help="Start date YYYY-MM-DD")
     ind_backfill_parser.add_argument("--sessions", type=int, default=125, help="Trailing sessions to backfill if --from omitted")
 
+    top_grp_parser = subparsers.add_parser("backfill-top-groups", help="Backfill industry_top_groups from daily_industry_strength")
+    top_grp_parser.add_argument("--days", type=int, default=30, help="Number of trailing trading dates to backfill")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -365,6 +368,17 @@ def main():
                 from_date=args.from_date,
                 sessions=args.sessions,
             )
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "backfill-top-groups":
+        logger.info("Executing 'backfill-top-groups' command...")
+        try:
+            from pipeline.industry_top_groups import backfill_top_groups
+            res = backfill_top_groups(days=args.days, generate_notes_latest=True)
             print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback
