@@ -378,7 +378,7 @@ export default function StockChartModal({
                 type="button"
                 onClick={() => handleRangeChange(r)}
                 className={`px-2.5 py-1 font-medium cursor-pointer ${
-                  range === r ? "bg-primary text-white" : "bg-surface text-text-secondary hover:text-text"
+                  range === r ? "bg-primary dark:bg-indigo-600 text-white" : "bg-surface text-text-secondary hover:text-text"
                 }`}
               >
                 {r}

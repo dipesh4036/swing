@@ -226,7 +226,7 @@ export default function GroupDetails({
                   href={`/screener?groupId=${encodeURIComponent(groupId)}&groupLabel=${encodeURIComponent(
                     data.group.label
                   )}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-primary-subtle border border-accent-border text-primary text-xs font-semibold hover:bg-bg-selected"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-primary-subtle border border-accent-border text-primary dark:text-indigo-300 text-xs font-semibold hover:bg-bg-selected"
                 >
                   <span>Screener</span>
                   <ExternalLink className="w-3 h-3" />

@@ -33,7 +33,7 @@ export function AppShell({ children }) {
               <Menu size={20} />
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-bold text-xs tracking-wider">
+              <div className="w-6 h-6 rounded-md bg-primary dark:bg-indigo-600 text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 SW
               </div>
               <span className="text-xs font-bold text-text tracking-tight uppercase">

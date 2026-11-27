@@ -273,12 +273,15 @@ async function fetchCandleChunk(tokenStr, fromDateStr, toDateStr, allowReauth = 
       if (json && json.status && Array.isArray(json.data)) {
         return json.data;
       }
+      if (json && json.status && json.data === null) {
+        return [];
+      }
 
       const errCode = String(json?.errorcode || "");
       const msg = String(json?.message || "").toLowerCase();
 
       // Rate limit backoff
-      if (msg.includes("exceeding access rate") || msg.includes("too many requests") || res.status === 429) {
+      if (res.status === 429 || res.status === 403 || msg.includes("exceeding access rate") || msg.includes("too many requests")) {
         await sleep(backoffMs);
         backoffMs = Math.min(backoffMs * 2, 8000);
         continue;
@@ -296,6 +299,7 @@ async function fetchCandleChunk(tokenStr, fromDateStr, toDateStr, allowReauth = 
         return fetchCandleChunk(tokenStr, fromDateStr, toDateStr, false);
       }
 
+      console.warn(`SmartAPI getCandleData returned status=${res.status} code=${errCode} for token=${tokenStr}`);
       return null;
     } catch {
       if (attempt === maxRetries - 1) return null;
@@ -359,10 +363,6 @@ export async function fetchAllCandlesFromSmartAPI(token) {
 
   for (const range of chunkRanges) {
     const rows = await fetchCandleChunk(tokenStr, range.fromStr, range.toStr);
-    // If ANY history chunk fails, return null so the route falls back to the DB
-    if (rows === null) {
-      return null;
-    }
     if (Array.isArray(rows) && rows.length > 0) {
       rawCandleRows.push(...rows);
     }

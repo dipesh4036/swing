@@ -122,7 +122,7 @@ export function StockDetailPanel({
     const container = chartContainerRef.current;
     const chart = createChart(container, {
       width: container.clientWidth || 360,
-      height: 220,
+      height: container.clientHeight || 220,
       layout: {
         background: { color: isDark ? "#18181B" : "#FFFFFF" },
         textColor: isDark ? "#A1A1AA" : "#71717A",
@@ -185,7 +185,11 @@ export function StockDetailPanel({
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.width > 0 && chartInstanceRef.current) {
-          chartInstanceRef.current.applyOptions({ width: entry.contentRect.width });
+          chartInstanceRef.current.applyOptions({
+            width: entry.contentRect.width,
+            height: entry.contentRect.height || 220,
+          });
+          chartInstanceRef.current.timeScale().fitContent();
         }
       }
     });
@@ -399,7 +403,11 @@ export function StockDetailPanel({
           timeframe="D"
         />
 
-        <div className="relative w-full h-[220px] bg-bg-secondary/40 rounded border border-border flex items-center justify-center overflow-hidden">
+        <div
+          className={`relative w-full ${
+            isExpandedFull ? "h-[460px] sm:h-[520px]" : "h-[220px]"
+          } bg-bg-secondary/40 rounded border border-border flex items-center justify-center overflow-hidden`}
+        >
           {loadingChart ? (
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <RefreshCw size={14} className="animate-spin" />

@@ -314,7 +314,7 @@ export default function RankingTable({
                           }}
                           className={`p-1 rounded-[4px] border cursor-pointer ${
                             inChart
-                              ? "bg-primary-subtle border-accent-border text-primary"
+                              ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300"
                               : "border-border text-text-secondary hover:text-text hover:bg-bg-hover"
                           }`}
                         >

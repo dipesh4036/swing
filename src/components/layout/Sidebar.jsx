@@ -96,7 +96,7 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
         {/* Brand / Logo Top Bar */}
         <div className="h-14 border-b border-border flex items-center justify-between px-3.5 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-sm tracking-wider shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-primary dark:bg-indigo-600 text-white flex items-center justify-center font-bold text-sm tracking-wider shrink-0">
               SW
             </div>
             {!collapsed && (
@@ -140,21 +140,21 @@ export function Sidebar({ isMobileOpen, onMobileClose, onToggleMobile }) {
                       if (onMobileClose) onMobileClose();
                     }}
                     title={collapsed ? item.name : undefined}
-                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-colors duration-150 group relative ${
-                      isCurrent
-                        ? "bg-primary-subtle text-primary font-semibold"
-                        : "text-text-secondary hover:text-text hover:bg-hover"
-                    }`}
-                  >
-                    <Icon
-                      size={17}
-                      strokeWidth={isCurrent ? 2.25 : 1.75}
-                      className={`shrink-0 ${
+                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-colors duration-150 group relative ${
                         isCurrent
-                          ? "text-primary"
-                          : "text-text-secondary group-hover:text-text"
+                          ? "bg-primary-subtle text-primary dark:text-indigo-300 font-semibold"
+                          : "text-text-secondary hover:text-text hover:bg-hover"
                       }`}
-                    />
+                    >
+                      <Icon
+                        size={17}
+                        strokeWidth={isCurrent ? 2.25 : 1.75}
+                        className={`shrink-0 ${
+                          isCurrent
+                            ? "text-primary dark:text-indigo-300"
+                            : "text-text-secondary group-hover:text-text"
+                        }`}
+                      />
                     {!collapsed && (
                       <div className="flex items-center justify-between flex-1 min-w-0">
                         <span className="truncate">{item.name}</span>

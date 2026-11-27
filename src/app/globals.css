@@ -130,7 +130,7 @@
   --color-up: #10B981;
   --color-up-text: #34D399;
 
-  --color-bearish: #F43F5E;
+  --color-bearish: #FB7185;
   --color-bearish-bg: rgba(244, 63, 94, 0.12);
   --color-bearish-border: rgba(244, 63, 94, 0.28);
   --color-down: #F43F5E;
@@ -153,6 +153,10 @@
   --color-border-strong: #3F3F46;
 }
 
+html {
+  font-size: 16px;
+}
+
 html,
 body {
   margin: 0;
@@ -160,7 +164,6 @@ body {
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
   font-weight: 400;
   line-height: 1.5;
   letter-spacing: -0.01em;
@@ -202,7 +205,7 @@ body {
 
 /* Uppercase card labels tracking */
 .label-caps {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;

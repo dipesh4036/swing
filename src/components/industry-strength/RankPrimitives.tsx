@@ -45,11 +45,11 @@ export function RankBadge({
   }
   const medalCls =
     medal && rank === 1
-      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+      ? "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30"
       : medal && rank === 2
-        ? "bg-slate-400/15 text-slate-600 dark:text-slate-300 border-slate-400/30"
+        ? "bg-slate-400/15 text-slate-700 dark:text-slate-200 border-slate-400/30"
         : medal && rank === 3
-          ? "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30"
+          ? "bg-orange-500/15 text-orange-800 dark:text-orange-300 border-orange-500/30"
           : "bg-bg-secondary text-text border-border";
 
   return (

@@ -254,7 +254,7 @@ export default function SectorDashboard() {
                 title="How ranks work"
                 className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-xs font-medium cursor-pointer ${
                   showGuide
-                    ? "bg-primary-subtle border-accent-border text-primary"
+                    ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300"
                     : "border-border bg-surface text-text-secondary hover:text-text"
                 }`}
               >

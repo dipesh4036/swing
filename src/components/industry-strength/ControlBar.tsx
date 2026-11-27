@@ -89,7 +89,7 @@ export default function ControlBar({
                   onClick={() => onLevelChange(item.id)}
                   className={`h-7 px-2.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors duration-150 cursor-pointer ${
                     active
-                      ? "bg-primary text-white border-primary"
+                      ? "bg-primary dark:bg-indigo-600 text-white border-primary dark:border-indigo-500"
                       : "bg-surface text-text-secondary border-border hover:text-text"
                   }`}
                 >
@@ -113,7 +113,7 @@ export default function ControlBar({
                   onClick={() => onPeriodChange(p.id)}
                   className={`h-7 px-2 rounded-md text-xs tabular-nums font-medium whitespace-nowrap border transition-colors duration-150 cursor-pointer ${
                     active
-                      ? "bg-primary-subtle text-primary border-accent-border font-semibold"
+                      ? "bg-primary-subtle text-primary dark:text-indigo-300 border-accent-border font-semibold"
                       : "bg-surface text-text-secondary border-border hover:text-text"
                   }`}
                 >
@@ -131,7 +131,7 @@ export default function ControlBar({
               aria-expanded={searchOpen}
               className={`inline-flex items-center justify-center w-7 h-7 rounded-md border cursor-pointer ${
                 searchOpen || search
-                  ? "bg-primary-subtle border-accent-border text-primary"
+                  ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300"
                   : "bg-surface border-border text-text-secondary hover:text-text"
               }`}
             >
@@ -144,7 +144,7 @@ export default function ControlBar({
               aria-label="Filters"
               className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-xs font-medium cursor-pointer ${
                 activeFilterCount > 0
-                  ? "bg-primary-subtle border-accent-border text-primary"
+                  ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300"
                   : "bg-surface border-border text-text-secondary hover:text-text"
               }`}
             >
@@ -224,7 +224,7 @@ export default function ControlBar({
                   onClick={() => onUniverseChange(opt.id)}
                   className={`h-9 rounded-md border font-medium cursor-pointer ${
                     universe === opt.id
-                      ? "bg-primary text-white border-primary"
+                      ? "bg-primary dark:bg-indigo-600 text-white border-primary dark:border-indigo-500"
                       : "bg-bg-secondary text-text border-border"
                   }`}
                 >

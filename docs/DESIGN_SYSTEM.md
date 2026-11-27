@@ -7,61 +7,52 @@ A centralized, production-grade design system for the Indian Equities Momentum &
 ## 1. Design Philosophy
 
 - **Institutional Clarity:** Clean, information-dense, high-precision financial analytics.
-- **Single Source of Truth:** Centralized design tokens governing all colors, typography, spacing, radius, and chart themes.
-- **Light Theme Only:** Pure white card surfaces (`#FFFFFF`), subtle canvas (`#F8FAFC`), and dark navy text (`#17233B`).
-- **Standardized Financial Conventions:** Unambiguous color and symbol conventions for Indian market data.
+- **Single Source of Truth:** Centralized design tokens in `src/lib/design-tokens.js` and CSS variables in `src/app/globals.css`.
+- **Dual Theme (Light & Dark):** Cool Zinc & Electric Indigo across both Light (`#FAFAFA` / `#FFFFFF`) and Dark (`#09090B` / `#18181B`) canvases, toggled via `ThemeToggle`.
+- **WCAG 2.1 AA Contrast & Minimum Type:** Enforced automatically by `tests/test_tokens_contrast.mjs` (`>= 4.5:1`) and `tests/test_design_rules.mjs` (`>= 12px` informational text, Inter + `tabular-nums`).
 
 ---
 
-## 2. Centralized Color Palette
+## 2. Centralized Color Palette & Verified Contrast
 
-| Token | Hex Value | Semantic Usage |
-|-------|-----------|----------------|
-| `primary` | `#3478F6` | Primary brand accent, active tabs, action buttons |
-| `primaryHover` | `#2563EB` | Button hover state |
-| `primarySubtle` | `#EFF6FF` | Selected background, subtle badges |
-| `bgMain` | `#FFFFFF` | Card surfaces, modals, popovers |
-| `bgSecondary` | `#F8FAFC` | Page background, alternating rows |
-| `textPrimary` | `#17233B` | Main headings, financial metrics, labels |
-| `textSecondary` | `#64748B` | Explanatory text, subtitle, table column headers |
-| `textMuted` | `#94A3B8` | Footnotes, timestamps, inactive icons |
-| `border` | `#E5EAF2` | Standard card and table borders |
-| `borderSubtle` | `#F1F5F9` | Inner dividers and secondary separators |
-| `bullish` | `#16A878` | Advancing stocks, positive returns, uptrend stages |
-| `bullishBg` | `#E8F8F3` | Positive return badges, bullish sentiment pills |
-| `bearish` | `#F05283` | Declining stocks, negative returns, downtrend stages |
-| `bearishBg` | `#FEF0F4` | Negative return badges, bearish sentiment pills |
-| `warning` | `#E9A23B` | Stage 3 Top, choppy market warnings |
-| `benchmark` | `#94A3B8` | Nifty 500 benchmark line |
+| Token | Light | Dark | Light Contrast (vs Card) | Dark Contrast (vs Card) | Semantic Usage |
+|-------|-------|------|--------------------------|-------------------------|----------------|
+| `textPrimary` | `#18181B` | `#FAFAFA` | `17.72:1` | `16.97:1` | Headings, metrics, group/stock names |
+| `textSecondary` | `#52525B` | `#A1A1AA` | `7.73:1` | `6.91:1` | Subtitles, labels, breadcrumbs, notes |
+| `textMuted` | `#71717A` | `#71717A` | Decorative/disabled only | Decorative/disabled only | Placeholders, disabled controls, decorative icons |
+| `primary` | `#4F46E5` | `#6366F1` | `6.29:1` | — | Active tabs, primary buttons, links |
+| `bgPage` / `bgCard` | `#FAFAFA` / `#FFFFFF` | `#09090B` / `#18181B` | — | — | Page canvas / card surface |
+| `bgSecondary` | `#F4F4F5` | `#121215` | `7.03:1` (`textSecondary`) | `7.30:1` (`textSecondary`) | Table headers, chips, subtle panels |
+| `bullish` / `bullishBg` | `#047857` / `#ECFDF5` | `#34D399` / `#064E3B` | `5.48:1` (`5.21:1` on bg) | `9.22:1` | Positive returns, advancing breadth |
+| `bearish` / `bearishBg` | `#BE123C` / `#FFF1F2` | `#FB7185` / `#4C0519` | `6.29:1` (`5.72:1` on bg) | `6.58:1` | Negative returns, declining breadth |
+| `warning` / `warningBg` | `#B45309` / `#FFFBEB` | `#FBBF24` / `#451A03` | `5.02:1` (`4.84:1` on bg) | — | Warnings, degraded notices |
+| `border` | `#E4E4E7` | `#27272A` | — | — | 1px flat card & table borders |
 
 ---
 
 ## 3. Typography & Font System
 
 ### Font Families
-- **Primary Interface Font:** `Inter` (`--font-sans`)
-  - Used for all interface chrome, headings, badges, controls, tooltips, and body text.
-- **Monospace / Code Font:** `JetBrains Mono` (`--font-mono`)
-  - Used for code snippets, raw data inspect, and terminal badges.
+- **Primary Interface Font:** `Inter` (`--font-sans`) with `tabular-nums` for all numbers, ranks, and percentages.
+- **Monospace / Code Font:** `JetBrains Mono` (`--font-mono`) — restricted by `tests/test_design_rules.mjs` to raw coordinate readouts and ticker badges only.
 
 ### Font Weights
 | Weight Name | Value | Usage |
 |-------------|-------|-------|
-| Regular | `400` | Explanatory paragraphs, subtitles, footnotes |
+| Regular | `400` | Explanatory paragraphs, subtitles, notes |
 | Medium | `500` | Secondary labels, table text, inactive controls |
-| Semibold | `600` | Status badges, indicator labels, active control states |
-| Bold | `700` | Page title, card headers, big financial numbers |
+| Semibold | `600` | Status badges, group names, active control states |
+| Bold | `700` | Page title, card headers, major financial numbers |
 
 ### Typography Scale & Semantic Roles
 | Role | Font Family | Size | Weight | Tracking | Line Height | Usage |
 |------|-------------|------|--------|----------|-------------|-------|
 | **Page Title** | Inter | `15px` | `700` (Bold) | `-0.02em` | `18px` | Top dashboard header brand |
 | **Section Title** | Inter | `12px` | `700` (Bold) | `+0.04em` | `16px` | Uppercase section titles |
-| **Card Header** | Inter | `13px` | `700` (Bold) | `-0.01em` | `18px` | Metric & chart card titles |
-| **Metric Value** | Inter | `18px`–`24px` | `700` (Bold) | `-0.025em` | `24px` | Major numbers (`tabular-nums`) |
-| **Label Caps** | Inter | `11px` | `600` (Semibold) | `+0.05em` | `14px` | Uppercase category pills |
-| **Body / Note** | Inter | `11px`–`12px` | `400` (Regular) | `-0.01em` | `16px` | Indicator descriptions |
-| **Footnote** | Inter | `10px` | `500` (Medium) | `0em` | `14px` | Timestamps, axis ticks, benchmarks |
+| **Card Header** | Inter | `14px` | `600` (Semibold) | `-0.01em` | `20px` | Group & card headings |
+| **Metric Value** | Inter (`tabular-nums`) | `13px`–`24px` | `600`–`700` | `-0.02em` | `20px`–`28px` | MED returns, ranks, counts (min `13px`) |
+| **Body / Note** | Inter | `12px`–`13px` | `400` (Regular) | `-0.01em` | `18px` | Minimum informational text (`>= 12px`) |
+| **Footnote** | Inter | `11px` | `500` (Medium) | `0em` | `16px` | Chart axis ticks & "as of" timestamps only |
 
 ### Tabular Figures Rule
 All financial figures, prices, percentages, points, and counts **must** use `tabular-nums` (`.tnum`):
@@ -161,7 +152,13 @@ import { CHART_THEME } from "@/lib/chart-theme";
 - `BottomSheet`: Accessible modal sheet (Esc + backdrop close, `duration-150`) used for mobile Filters and the mobile Rotation Chart.
 
 ### Tab 4: Daily Plan (`src/components/plan/`)
-- `DailyPlanView`: Top-down 6-block routine (`/plan`): header with stored-date picker + P3 summary, `Market State` card, `Where Money Is Going` cap-leadership card, `Breakouts & Stage 2` card, `TopGroupsStrip` reuse, and `Final Candidates` list (64 px mobile rows / desktop table, Copy/CSV, lazy client-side pattern tags with concurrency 4, and `StockDetailPanel` drill-in). Reuses `BaseCard`, `TopGroupsStrip`, `BottomSheet`, `SignedReturn`, and `StockDetailPanel`.
+- `DailyPlanView`: Top-down 6-block routine (`/plan`): header with stored-date picker + P3 summary, `Market State` card, `Where Money Is Going` cap-leadership card, `Breakouts & Stage 2` card, `TopGroupsStrip` reuse, and `Final Candidates` list (64 px mobile rows / desktop table, Copy/CSV, lazy client-side pattern tags with concurrency 4, and `StockChartModal` drill-in). Reuses `BaseCard`, `TopGroupsStrip`, `BottomSheet`, `SignedReturn`, and `StockChartModal`.
+
+### Global Search & Chart Overlay (`src/components/shared/`)
+- `GlobalSearchPalette`: Mounted in `AppShell`, opens on `Cmd/Ctrl+K` or header button, debounced 150 ms search via `/api/stock-search?q=`, keyboard navigation (`↑`/`↓`/`Enter`/`Esc`), opens `StockChartModal` (`source=search`). Never overrides `Cmd+C`.
+- `StockChartModal`: Full-viewport candlestick + volume + 50/200 SMA + auto-pattern overlay (`source=industry` or `source=search`), `6M`/`1Y` range persisted in `localStorage`, `F` full-screen toggle (Fullscreen API + CSS fallback), `←`/`→` prev/next stock navigation, `Esc` close.
+- `GroupDetails`: Right-hand 580 px overlay drawer on desktop (`>= 1024px`) with scrim, full-height sheet on phone, `Esc` closes and restores row focus.
+- `RotationChart`: Collapsible compare panel directly under `TopGroupsStrip` on desktop (and `BottomSheet` on phone), opens automatically on first Compare click, supports 1+ groups ("Add more groups to compare" hint).
 
 ## Tab 3 Patterns & Mobile Rules
 - **Page Order**: Compact header + `MarketSnapshot` → sticky `ControlBar` → `TopGroupsStrip` → ranked list/table; Rotation Chart opens from the sticky Compare bottom bar (`BottomSheet` on phone, collapsible panel under Top 3 on desktop).

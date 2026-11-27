@@ -161,7 +161,7 @@ export default function GroupRowList({
                       onClick={() => onToggleCompare(g)}
                       className={`h-8 px-3 rounded-md border text-xs font-medium cursor-pointer ${
                         isCompared
-                          ? "bg-primary-subtle border-accent-border text-primary"
+                          ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300"
                           : "bg-surface border-border text-text"
                       }`}
                     >
