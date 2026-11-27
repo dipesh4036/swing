@@ -483,9 +483,9 @@ def compute_industry_strength_snapshot(
         above_50dma = sma_seeded_ema_flag(post_closes, 50)
         above_200dma = sma_seeded_ema_flag(post_closes, 200)
 
-        # 20D High / Low on full per-token sequence
-        at_20d_high = bool(len(highs) >= 20 and last_close >= float(np.max(highs[-20:])))
-        at_20d_low = bool(len(lows) >= 20 and last_close <= float(np.min(lows[-20:])))
+        # 20D Closing High / Low on full per-token sequence
+        at_20d_high = bool(len(closes) >= 20 and last_close >= float(np.max(closes[-20:])))
+        at_20d_low = bool(len(closes) >= 20 and last_close <= float(np.min(closes[-20:])))
 
         # 52W off-high from trailing 252 intraday highs (post corporate break)
         hi_window = post_highs[-252:]

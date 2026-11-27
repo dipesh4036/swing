@@ -129,3 +129,31 @@ def test_trend_rank_math_fixture():
     assert by_id["g2"]["rank_trend"] == 3
     # < 5 eligible rule: small group gets None even with highest returns
     assert by_id["g4_small"]["rank_trend"] is None
+
+
+def test_20d_closing_high_low_ignores_intraday_wick():
+    dates = pd.date_range("2026-10-01", periods=26, freq="B").strftime("%Y-%m-%d").tolist()
+    bench = {d: 20000.0 for d in dates}
+    rows = []
+    # STKA: closes at its highest close of the 20D window even though an earlier day had a higher intraday wick
+    for i, d in enumerate(dates):
+        c = 100.0 + i
+        h = c + 10.0 if i == 15 else c + 1.0
+        rows.append({"token": 1, "symbol": "STKA", "trade_date": d, "open": c, "high": h, "low": c - 1.0, "close": c, "volume": 100000})
+    # STKB: closes at its lowest close of the 20D window even though an earlier day had a lower intraday wick
+    for i, d in enumerate(dates):
+        c = 200.0 - i
+        l = c - 10.0 if i == 15 else c - 1.0
+        rows.append({"token": 2, "symbol": "STKB", "trade_date": d, "open": c, "high": c + 1.0, "low": l, "close": c, "volume": 100000})
+
+    df = pd.DataFrame(rows)
+    cls_map = {
+        1: {"symbol": "STKA", "name": "A Ltd", "isin": "INE1", "macro": "M", "sector": "S", "industry": "I", "basic_industry": "B"},
+        2: {"symbol": "STKB", "name": "B Ltd", "isin": "INE2", "macro": "M", "sector": "S", "industry": "I", "basic_industry": "B"},
+    }
+    snap = compute_industry_strength_snapshot(df, cls_map, bench)
+    by_sym = {r["symbol"]: r for r in snap.stock_metric_rows}
+    assert by_sym["STKA"]["at_20d_high"] is True
+    assert by_sym["STKA"]["at_20d_low"] is False
+    assert by_sym["STKB"]["at_20d_low"] is True
+    assert by_sym["STKB"]["at_20d_high"] is False
