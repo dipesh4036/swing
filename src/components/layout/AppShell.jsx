@@ -2,11 +2,13 @@
 
 import React, { useState } from "react";
 import Sidebar from "./Sidebar";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import ThemeToggle from "@/components/shared/ThemeToggle";
+import GlobalSearchPalette from "@/components/shared/GlobalSearchPalette";
 
 export function AppShell({ children }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-bg text-text antialiased flex w-full transition-colors duration-150">
@@ -41,6 +43,15 @@ export function AppShell({ children }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Search stocks"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-bg-secondary text-xs font-medium text-text-secondary hover:text-text cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>⌘K</span>
+            </button>
             <div className="flex items-center gap-1.5 text-xs text-bullish font-medium bg-bullish-bg px-2.5 py-1 rounded-md border border-bullish-border">
               <span className="w-1.5 h-1.5 rounded-full bg-bullish animate-pulse" />
               <span>Live Feed</span>
@@ -49,11 +60,29 @@ export function AppShell({ children }) {
           </div>
         </header>
 
+        {/* Desktop Search Bar Strip */}
+        <div className="hidden lg:flex items-center justify-end px-6 py-2 border-b border-border bg-surface sticky top-0 z-30">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search stocks"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-bg-secondary text-xs font-medium text-text-secondary hover:text-text cursor-pointer"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span>Search stocks</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border text-xs text-text-secondary">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
+
         {/* Content Body */}
         <main className="flex-1 min-w-0 w-full">
           {children}
         </main>
       </div>
+
+      <GlobalSearchPalette open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }

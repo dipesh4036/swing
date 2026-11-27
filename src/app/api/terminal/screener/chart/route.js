@@ -57,6 +57,26 @@ export async function GET(request) {
       }
       stockRow = indRes.rows[0];
       asOfStr = String(stockRow.trade_date).split("T")[0];
+    } else if (sourceParam === "search") {
+      // Z4: Global search chart support (validate token in active NSE EQ instruments)
+      const srchRes = await queryWithRetry(
+        `SELECT i.symbol,
+                (SELECT MAX(trade_date)::text FROM stock_candles WHERE token = i.token) AS trade_date,
+                m.rs_rating AS rs_rank
+         FROM instruments i
+         LEFT JOIN latest_industry_stock_metrics m ON m.token = i.token
+         WHERE i.token = $1 AND i.exchange = 'NSE' AND COALESCE(i.is_active, TRUE) = TRUE
+         LIMIT 1;`,
+        [token]
+      );
+      if (srchRes.rows.length === 0) {
+        return NextResponse.json(
+          { error: `Stock with token ${token} not found in active NSE instruments.` },
+          { status: 404, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      stockRow = srchRes.rows[0];
+      asOfStr = stockRow.trade_date ? String(stockRow.trade_date).split("T")[0] : null;
     } else {
       if (!screener || !VALID_SCREENERS.includes(screener)) {
         return NextResponse.json(

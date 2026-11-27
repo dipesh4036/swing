@@ -58,7 +58,7 @@ const DailyPlanView = loadTsModule("src/components/plan/DailyPlanView.tsx", {
   },
   "@/components/industry-strength/TopGroupsStrip": { __esModule: true, default: noop },
   "@/components/industry-strength/BottomSheet": { __esModule: true, default: noop },
-  "@/components/industry-strength/StockDetailPanel": { __esModule: true, default: noop },
+  "@/components/shared/StockChartModal": { __esModule: true, default: noop },
 }).default;
 
 const html = renderToString(React.createElement(DailyPlanView));

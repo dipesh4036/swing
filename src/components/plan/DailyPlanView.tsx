@@ -19,7 +19,7 @@ import { BaseCard } from "@/components/ui/card";
 import TopGroupsStrip from "@/components/industry-strength/TopGroupsStrip";
 import BottomSheet from "@/components/industry-strength/BottomSheet";
 import { SignedReturn } from "@/components/industry-strength/RankPrimitives";
-import StockDetailPanel from "@/components/industry-strength/StockDetailPanel";
+import StockChartModal, { ChartStockItem } from "@/components/shared/StockChartModal";
 
 const PATTERN_CONCURRENCY = 4;
 
@@ -614,22 +614,28 @@ export default function DailyPlanView() {
       </BottomSheet>
 
       {selectedStock && (
-        <StockDetailPanel
+        <StockChartModal
           stock={{
             token: selectedStock.token,
             symbol: selectedStock.symbol,
             name: selectedStock.symbol,
             industry: selectedStock.industryLabel,
-            in_universe: true,
             close: selectedStock.close,
-            ret_1d: selectedStock.ret1dPct,
-            pct_from_52w_high: selectedStock.pctFrom52wHigh,
-            rs_rank: selectedStock.rsRank,
+            ret1dPct: selectedStock.ret1dPct,
+            source: "industry",
           }}
-          source="industry"
-          onShowSector={() => {
-            setSelectedStock(null);
-            router.push("/sectors");
+          items={data?.candidates.map((c): ChartStockItem => ({
+            token: c.token,
+            symbol: c.symbol,
+            name: c.symbol,
+            industry: c.industryLabel,
+            close: c.close,
+            ret1dPct: c.ret1dPct,
+            source: "industry",
+          }))}
+          onSelectStock={(next) => {
+            const found = data?.candidates.find((c) => c.token === next.token);
+            if (found) setSelectedStock(found);
           }}
           onClose={() => setSelectedStock(null)}
         />

@@ -37,6 +37,7 @@ export const ALLOWLIST = {
     ["src/components/screener/ScreenerGrid.jsx", "Mini chart series & marker colors"],
     ["src/components/industry-strength/RotationChart.tsx", "Multi-series SVG/chart line palette"],
     ["src/components/industry-strength/StockDetailPanel.jsx", "Lightweight-charts canvas theme & EMA line colors"],
+    ["src/components/shared/StockChartModal.tsx", "Lightweight-charts canvas theme, volume & SMA series colors"],
     ["src/components/market-breadth/LargeMidSmall.js", "Cap-series chart line palette (Large/Mid/Small)"],
     ["src/components/market-breadth/ParticipationHistory.js", "Participation chart series palette"],
     ["src/components/market-breadth/StageComparisonChart.js", "Weinstein stage chart series palette"],

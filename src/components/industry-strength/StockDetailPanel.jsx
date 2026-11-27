@@ -200,12 +200,35 @@ export function StockDetailPanel({
     };
   }, [chartCandles, isDark, activePatterns, focusedPatternId, patternLayers]);
 
+  const [isExpandedFull, setIsExpandedFull] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") {
+        if (isExpandedFull) setIsExpandedFull(false);
+        else onClose?.();
+      } else if (e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setIsExpandedFull((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isExpandedFull, onClose]);
+
   if (!stock) return null;
 
   const hasScreenerHits = stock.screeners && stock.screeners.length > 0;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] bg-surface border-l border-border shadow-2xl flex flex-col overflow-y-auto">
+    <div
+      className={`fixed inset-y-0 right-0 z-50 bg-surface border-l border-border shadow-2xl flex flex-col overflow-y-auto ${
+        isExpandedFull ? "inset-0 w-full" : "w-full sm:w-[520px]"
+      }`}
+    >
       {/* Header */}
       <div className="p-4 border-b border-border bg-bg-secondary/40 flex items-start justify-between">
         <div>
@@ -226,14 +249,24 @@ export function StockDetailPanel({
             Sector: <strong className="text-text">{stock.sector}</strong>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 rounded text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
-          title="Close panel (Esc)"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setIsExpandedFull((v) => !v)}
+            className="px-2 py-1 rounded border border-border text-xs font-medium text-text-secondary hover:text-text hover:bg-bg-hover cursor-pointer"
+            title="Toggle full screen (F)"
+          >
+            {isExpandedFull ? "Exit full screen" : "F full screen"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
+            title="Close panel (Esc)"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Metrics Grid */}
