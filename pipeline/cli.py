@@ -110,6 +110,12 @@ def main():
     top_grp_parser = subparsers.add_parser("backfill-top-groups", help="Backfill industry_top_groups from daily_industry_strength")
     top_grp_parser.add_argument("--days", type=int, default=30, help="Number of trailing trading dates to backfill")
 
+    plan_build_parser = subparsers.add_parser("plan-build", help="Build and store Daily Plan for a trade date")
+    plan_build_parser.add_argument("--date", default=None, help="Target date YYYY-MM-DD (defaults to latest)")
+
+    plan_backfill_parser = subparsers.add_parser("plan-backfill", help="Backfill Daily Plan for trailing trading dates")
+    plan_backfill_parser.add_argument("--days", type=int, default=30, help="Number of trailing trading dates to backfill")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -379,6 +385,28 @@ def main():
         try:
             from pipeline.industry_top_groups import backfill_top_groups
             res = backfill_top_groups(days=args.days, generate_notes_latest=True)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "plan-build":
+        logger.info("Executing 'plan-build' command...")
+        try:
+            from pipeline.plan import build_daily_plan
+            res = build_daily_plan(trade_date=args.date)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "plan-backfill":
+        logger.info("Executing 'plan-backfill' command...")
+        try:
+            from pipeline.plan import backfill_daily_plan
+            res = backfill_daily_plan(days=args.days)
             print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback

@@ -442,6 +442,16 @@ def run_daily_workflow(
         send_telegram_alert(msg)
         return {"status": "failed", "step": "compute_and_publish_all", "error": str(e), "trimmed": False}
 
+    # Step 8b. build_daily_plan (non-fatal)
+    try:
+        from pipeline.plan import build_daily_plan
+        logger.info("Step 8b: build_daily_plan")
+        res8b = build_daily_plan()
+        logger.info(f"Step 8b complete: daily_plan built ({res8b}).")
+    except Exception as pe:
+        logger.warning(f"Step 8b (build_daily_plan) failed, continuing in degraded mode: {pe}")
+        degraded_steps.append("build_daily_plan")
+
     # 9. trim (LAST step, executed only after all prior steps succeed)
     logger.info(f"Step 9/9: trim (retention={RETENTION_YEARS}y)")
     t0 = time.time()
