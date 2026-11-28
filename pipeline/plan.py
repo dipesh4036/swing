@@ -291,9 +291,14 @@ def build_plan_template_summary(plan_payload: Dict[str, Any]) -> str:
     if caps.get("status") == "available":
         parts.append(f"Cap leadership: {caps['leader']}.")
 
-    top_names = [g["label"] for g in (top_ind.get("groups") or [])[:3]]
+    qual_groups = [g for g in (top_ind.get("groups") or []) if g.get("qualifies", True)]
+    top_names = [g["label"] for g in qual_groups[:3]]
     if top_names:
         parts.append(f"Top industries: {', '.join(top_names)} ({tot_cand} candidates).")
+    elif top_ind.get("status") == "available" and (top_ind.get("groups") or []):
+        cutoff = top_ind["groups"][0].get("cutoff")
+        cutoff_str = f"top {cutoff}" if cutoff is not None else "cut-off"
+        parts.append(f"No industry met the {cutoff_str} across all four timeframes (0 candidates).")
     elif brk.get("status") == "available":
         s2_n = (brk.get("stage2_pct") or {}).get("nifty500")
         if s2_n is not None:
@@ -666,7 +671,7 @@ def build_daily_plan(
                            t.r_1d, t.r_1w, t.r_1m, t.r_3m, t.worst_rank, t.mean_rank,
                            t.med_1d, t.med_1w, t.med_1m, t.med_3m,
                            t.n_20d_high, t.n_20d_low, t.pct_above_50dma, t.n_eligible,
-                           t.note_text, t.note_source
+                           t.note_text, t.note_source, t.qualifies, t.cutoff
                     FROM industry_top_groups t
                     JOIN industry_groups g ON g.group_id = t.group_id
                     WHERE t.snapshot_date = %s AND t.level = %s AND t.universe = %s
@@ -699,10 +704,14 @@ def build_daily_plan(
                     "nEligible": int(r[19]),
                     "noteText": str(r[20]),
                     "noteSource": str(r[21]),
+                    "qualifies": bool(r[22]) if r[22] is not None else True,
+                    "cutoff": int(r[23]) if r[23] is not None else None,
                     "hiddenCandidates": 0,
                 }
                 for r in tg_rows
             ]
+            qualifying_groups = [g for g in top_groups_list if g.get("qualifies", True)]
+            candidate_reason = "ok"
             if top_groups_list and industry_source_date:
                 top_industries_block = {
                     "status": "available",
@@ -710,8 +719,10 @@ def build_daily_plan(
                     "level": CANDIDATE_TOP_INDUSTRY_LEVEL,
                     "universe": CANDIDATE_TOP_INDUSTRY_UNIVERSE,
                     "groups": top_groups_list,
+                    "candidate_reason": "ok",
                 }
             else:
+                candidate_reason = "no_stock_metrics"
                 top_industries_block = {
                     "status": "unavailable",
                     "reason": f"No industry_top_groups rows on or before {plan_date}",
@@ -719,14 +730,15 @@ def build_daily_plan(
                     "level": CANDIDATE_TOP_INDUSTRY_LEVEL,
                     "universe": CANDIDATE_TOP_INDUSTRY_UNIVERSE,
                     "groups": [],
+                    "candidate_reason": candidate_reason,
                 }
 
-            # 5. Final Candidates (using same industry_source_date consistently)
+            # 5. Final Candidates (using QUALIFYING groups and same industry_source_date)
             candidates: List[Dict[str, Any]] = []
             total_candidates = 0
             control_rows: List[Dict[str, Any]] = []
             if top_groups_list and industry_source_date:
-                top_labels = [g["label"] for g in top_groups_list]
+                top_labels = [g["label"] for g in qualifying_groups]
                 cur.execute(
                     """
                     SELECT m.token, m.symbol, m.industry, m.is_liquid, m.rs_rating,
@@ -761,7 +773,7 @@ def build_daily_plan(
                             "stage": stages.get(tok, 0),
                         })
                 elif allow_historical_metrics:
-                    all_stock_rows = _compute_historical_stock_metrics(cur, industry_source_date, industry_filter=top_labels)
+                    all_stock_rows = _compute_historical_stock_metrics(cur, industry_source_date, industry_filter=top_labels or None)
 
                 stock_rows = [s for s in all_stock_rows if s.get("industry") in top_labels]
 
@@ -778,16 +790,26 @@ def build_daily_plan(
                 hidden_by_industry: Dict[str, int] = {}
                 candidates, total_candidates = filter_and_order_candidates(
                     stock_rows,
-                    top_groups_list,
+                    qualifying_groups,
                     hits_map,
                     hidden_by_industry_out=hidden_by_industry,
                 )
                 for g in top_groups_list:
                     g["hiddenCandidates"] = int(hidden_by_industry.get(g["label"], 0))
 
-                if store_control and all_stock_rows:
+                if not all_stock_rows:
+                    candidate_reason = "no_stock_metrics"
+                elif not qualifying_groups:
+                    candidate_reason = "no_qualifying_industry"
+                elif total_candidates == 0:
+                    candidate_reason = "none_passed_filter"
+                else:
+                    candidate_reason = "ok"
+                top_industries_block["candidate_reason"] = candidate_reason
+
+                if store_control and all_stock_rows and qualifying_groups:
                     from pipeline.plan_outcomes import select_control_candidates
-                    control_rows = select_control_candidates(all_stock_rows, top_groups_list, plan_date)
+                    control_rows = select_control_candidates(all_stock_rows, qualifying_groups, plan_date)
 
             summary_payload = {
                 "plan_date": plan_date,

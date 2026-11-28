@@ -401,7 +401,7 @@ export async function getRankings(
              t.r_1d, t.r_1w, t.r_1m, t.r_3m, t.worst_rank, t.mean_rank,
              t.med_1d, t.med_1w, t.med_1m, t.med_3m,
              t.n_20d_high, t.n_20d_low, t.pct_above_50dma, t.n_eligible,
-             t.note_text, t.note_source
+             t.note_text, t.note_source, t.qualifies, t.cutoff
       FROM industry_top_groups t
       JOIN industry_groups g ON g.group_id = t.group_id
       WHERE t.level = $1 AND t.universe = $2
@@ -438,6 +438,8 @@ export async function getRankings(
         nEligible: toInt(r.n_eligible),
         noteText: String(r.note_text),
         noteSource: r.note_source === "gemini" ? "gemini" : "template",
+        qualifies: r.qualifies !== undefined && r.qualifies !== null ? Boolean(r.qualifies) : true,
+        cutoff: r.cutoff !== undefined && r.cutoff !== null ? toInt(r.cutoff) : null,
       }));
     }
   } catch {

@@ -4,6 +4,7 @@ and optional constrained Gemini/template one-sentence summary.
 """
 
 import logging
+import math
 import os
 import re
 import time
@@ -13,6 +14,7 @@ import requests
 from psycopg2.extras import execute_values
 
 from pipeline.db import get_connection
+from pipeline.plan_rules import TOP_GROUP_CUTOFF_FRACTION, TOP_GROUP_CUTOFF_MIN
 
 logger = logging.getLogger("pipeline.industry_top_groups")
 
@@ -103,6 +105,8 @@ def compute_top_groups_for_slice(
             "n_eligible": int(r["n_eligible"]),
         })
 
+    cutoff = max(TOP_GROUP_CUTOFF_MIN, math.ceil(TOP_GROUP_CUTOFF_FRACTION * len(eligible)))
+
     scored.sort(
         key=lambda x: (
             x["worst_rank"],
@@ -114,11 +118,21 @@ def compute_top_groups_for_slice(
     top = scored[:3]
     for idx, item in enumerate(top, start=1):
         item["pos"] = idx
+        item["cutoff"] = cutoff
+        item["qualifies"] = bool(item["worst_rank"] <= cutoff)
     return top
 
 
 def build_template_note(entry: Dict[str, Any]) -> str:
     """Deterministic fallback summary sentence."""
+    if not entry.get("qualifies", True):
+        cutoff = entry.get("cutoff")
+        cutoff_str = f" > top {cutoff}" if cutoff is not None else ""
+        return (
+            f"Below cut-off (worst #{entry['worst_rank']}{cutoff_str}): "
+            f"#{entry['r_1d']} on 1D, #{entry['r_1w']} on 1W, "
+            f"#{entry['r_1m']} on 1M, #{entry['r_3m']} on 3M."
+        )
     return (
         f"Best combined ranks: "
         f"#{entry['r_1d']} on 1D, #{entry['r_1w']} on 1W, "
@@ -309,7 +323,7 @@ def publish_top_groups(
             for univ in UNIVERSES:
                 top = compute_top_groups_for_slice(buckets.get((lvl, univ), []), snap_str, lvl, univ)
                 for item in top:
-                    if generate_notes:
+                    if generate_notes and item.get("qualifies", True):
                         note_text, note_source = generate_note(item, http_post=http_post, call_budget=budget)
                     else:
                         note_text, note_source = build_template_note(item), "template"
@@ -325,6 +339,7 @@ def publish_top_groups(
                         item["n_20d_high"], item["n_20d_low"],
                         item["pct_above_50dma"], item["n_eligible"],
                         note_text, note_source,
+                        bool(item.get("qualifies", True)), item.get("cutoff"),
                     ))
 
         with conn.cursor() as cur:
@@ -338,7 +353,7 @@ def publish_top_groups(
                         r_1d, r_1w, r_1m, r_3m, worst_rank, mean_rank,
                         med_1d, med_1w, med_1m, med_3m,
                         n_20d_high, n_20d_low, pct_above_50dma, n_eligible,
-                        note_text, note_source
+                        note_text, note_source, qualifies, cutoff
                     ) VALUES %s;
                     """,
                     insert_rows,

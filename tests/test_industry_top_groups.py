@@ -125,3 +125,22 @@ def test_gemini_note_validation_and_fallbacks(monkeypatch):
         raise TimeoutError("timed out")
     txt6, src6 = generate_note(entry, http_post=_timeout)
     assert src6 == "template" and txt6 == tpl
+
+
+def test_cutoff_formula_qualifies_and_none_qualify():
+    import math
+    from pipeline.plan_rules import TOP_GROUP_CUTOFF_FRACTION, TOP_GROUP_CUTOFF_MIN
+
+    expected = {12: 5, 20: 5, 54: 11, 183: 37}
+    for n, exp in expected.items():
+        assert max(TOP_GROUP_CUTOFF_MIN, math.ceil(TOP_GROUP_CUTOFF_FRACTION * n)) == exp
+
+    rows = []
+    for i in range(12):
+        rows.append(_row(f"g{i}", f"Grp{i:02d}", float(12 - i), float(12 - i), float(12 - i), float(i + 1), trend=i + 1))
+    top = compute_top_groups_for_slice(rows, "2026-11-27", "industry", "all")
+    assert len(top) == 3
+    assert all(t["cutoff"] == 5 for t in top)
+    assert all(t["qualifies"] is False for t in top)
+    note = build_template_note(top[0])
+    assert "Below cut-off" in note and "Best" not in note

@@ -112,6 +112,8 @@ export interface TopGroupRow {
   nEligible: number;
   noteText: string;
   noteSource: "gemini" | "template";
+  qualifies?: boolean;
+  cutoff?: number | null;
 }
 
 export interface RankingsResponse {

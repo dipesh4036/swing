@@ -3,7 +3,7 @@ Single-source rule thresholds and constants for Tab 4: Daily Plan.
 Mirrored in docs/PLAN_RULES.md. Do not scatter thresholds elsewhere.
 """
 
-PLAN_RULES_VERSION = "plan_v1"
+PLAN_RULES_VERSION = "plan_v2"
 
 # Retention window for stored daily_plan and daily_plan_candidates rows
 PLAN_RETENTION_DAYS = 90  # Keep 90 calendar days for historical plan review
@@ -35,9 +35,11 @@ FOLLOW_THROUGH_LOOKBACK_SESSIONS = 5  # Check stage2_breakout picks from 5 sessi
 FOLLOW_THROUGH_MIN_SAMPLE = 10  # Require >= 10 prior breakouts; else "too few to judge"
 STAGE2_UNIVERSES = ("nifty500", "liquid")  # Track weinstein_stage_2_pct across benchmark and liquid stocks
 
-# 4. Top 3 Industries (industry_top_groups from UX1)
+# 4. Top 3 Industries (industry_top_groups from UX1, v2 cut-off)
 CANDIDATE_TOP_INDUSTRY_LEVEL = "industry"  # Prefer 'industry' level Top 3 (deduplicated if multiple)
 CANDIDATE_TOP_INDUSTRY_UNIVERSE = "all"  # Use 'all' universe Top 3 for candidate industry pool
+TOP_GROUP_CUTOFF_MIN = 5  # Minimum cut-off rank (for small slices like macro/sector)
+TOP_GROUP_CUTOFF_FRACTION = 0.20  # Top 20% across all four timeframes (cutoff = max(5, ceil(0.20 * N)))
 
 # 5. Final Candidate Filter & Ordering
 CANDIDATE_MIN_RS_RATING = 70.0  # Minimum RS rating >= 70 (leader tier)

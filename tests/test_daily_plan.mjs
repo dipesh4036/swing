@@ -63,4 +63,56 @@ const DailyPlanView = loadTsModule("src/components/plan/DailyPlanView.tsx", {
 
 const html = renderToString(React.createElement(DailyPlanView));
 assert.ok(typeof html === "string" && html.length > 0);
+
+// K1 SSR test: TopGroupsStrip never renders a non-qualifying group as top (collapsed Closest block)
+const TopGroupsStrip = loadTsModule("src/components/industry-strength/TopGroupsStrip.tsx", {
+  "lucide-react": new Proxy({}, { get: () => noop }),
+  "./RankPrimitives": {
+    __esModule: true,
+    RankBadge: noop,
+    SignedReturn: noop,
+    format20dHL: () => "1H / 0L",
+  },
+}).default;
+
+const nonQualHtml = renderToString(
+  React.createElement(TopGroupsStrip, {
+    topGroupsAsOf: "2026-11-27",
+    loading: false,
+    onSelectGroup: () => {},
+    topGroups: [
+      {
+        pos: 1,
+        groupId: "ind:1",
+        label: "NonQualGroup",
+        sectorLabel: "Sec",
+        parentId: null,
+        fullPath: "Sec > NonQualGroup",
+        r1d: 1,
+        r1w: 25,
+        r1m: 15,
+        r3m: 14,
+        worstRank: 25,
+        meanRank: 13.75,
+        med1d: 1.0,
+        med1w: -1.0,
+        med1m: 2.0,
+        med3m: -5.0,
+        n20dHigh: 2,
+        n20dLow: 1,
+        pctAbove50dma: 50,
+        nEligible: 10,
+        noteText: "Below cut-off",
+        noteSource: "template",
+        qualifies: false,
+        cutoff: 11,
+      },
+    ],
+  })
+);
+const cleanNonQualHtml = nonQualHtml.replace(/<!-- -->/g, "");
+assert.ok(cleanNonQualHtml.includes("No industry is in the top 11 on all four timeframes today."));
+assert.ok(cleanNonQualHtml.includes("Closest (not meeting the cut-off)"));
+assert.ok(!cleanNonQualHtml.includes("NonQualGroup"), "Non-qualifying group must stay collapsed and never render as top");
+
 console.log("✓ DailyPlanView SSR & /api/plan date validation tests passed!");

@@ -1,9 +1,89 @@
 "use client";
 
-import React from "react";
-import { Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { TopGroupRow } from "@/lib/industry-types";
 import { RankBadge, SignedReturn, format20dHL } from "./RankPrimitives";
+
+function GroupCard({
+  g,
+  onSelectGroup,
+  belowCutoff = false,
+}: {
+  g: TopGroupRow;
+  onSelectGroup: (groupId: string) => void;
+  belowCutoff?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectGroup(g.groupId)}
+      className="w-[88%] sm:w-[62%] lg:w-auto shrink-0 snap-start text-left rounded-xl border border-border bg-surface hover:border-primary/50 hover:bg-bg-secondary/40 p-3.5 transition-colors duration-150 cursor-pointer flex flex-col justify-between gap-2.5"
+    >
+      <div className="space-y-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {!belowCutoff && <RankBadge rank={g.pos} medal />}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-text truncate">{g.label}</div>
+              {g.sectorLabel && g.sectorLabel !== g.label && (
+                <div className="text-xs text-text-secondary truncate">{g.sectorLabel}</div>
+              )}
+            </div>
+          </div>
+          <span
+            className={`shrink-0 px-1.5 py-0.5 rounded border tabular-nums text-xs font-semibold ${
+              belowCutoff
+                ? "bg-warning-bg border-border text-warning"
+                : "bg-bg-secondary border-border text-text-secondary"
+            }`}
+          >
+            {belowCutoff ? `Below cut-off · worst #${g.worstRank}` : `Worst #${g.worstRank}`}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5 pt-1">
+          {[
+            { tf: "1D", r: g.r1d, med: g.med1d },
+            { tf: "1W", r: g.r1w, med: g.med1w },
+            { tf: "1M", r: g.r1m, med: g.med1m },
+            { tf: "3M", r: g.r3m, med: g.med3m },
+          ].map((item) => (
+            <div
+              key={item.tf}
+              className="rounded-md bg-bg-secondary/70 px-1.5 py-1 border border-border/60"
+            >
+              <div className="flex items-center justify-between text-xs text-text-secondary tabular-nums">
+                <span>{item.tf}</span>
+                <span className="text-[13px] font-semibold text-text">#{item.r}</span>
+              </div>
+              <div className="mt-0.5">
+                <SignedReturn value={item.med} size="xs" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-text-secondary tabular-nums pt-0.5">
+          <span>20D {format20dHL(g.n20dHigh, g.n20dLow)}</span>
+          <span>
+            &gt;50 SMA{" "}
+            {g.pctAbove50dma !== null && g.pctAbove50dma !== undefined
+              ? `${g.pctAbove50dma.toFixed(0)}%`
+              : "—"}
+          </span>
+        </div>
+      </div>
+
+      <p className="text-xs text-text-secondary leading-snug line-clamp-2 flex items-start gap-1">
+        {g.noteSource === "gemini" && (
+          <Sparkles className="w-3 h-3 text-primary dark:text-indigo-300 shrink-0 mt-0.5" aria-label="AI summary" />
+        )}
+        <span>{g.noteText}</span>
+      </p>
+    </button>
+  );
+}
 
 export default function TopGroupsStrip({
   topGroups,
@@ -16,6 +96,8 @@ export default function TopGroupsStrip({
   loading: boolean;
   onSelectGroup: (groupId: string) => void;
 }) {
+  const [showClosest, setShowClosest] = useState(false);
+
   if (loading && topGroups.length === 0) {
     return (
       <section aria-label="Top 3 across timeframes" className="space-y-2">
@@ -44,9 +126,14 @@ export default function TopGroupsStrip({
     );
   }
 
+  const qualifying = topGroups.filter((g) => g.qualifies !== false);
+  const nonQualifying = topGroups.filter((g) => g.qualifies === false);
+  const cutoff = topGroups[0]?.cutoff ?? null;
+  const cutoffLabel = cutoff !== null ? `top ${cutoff}` : "cut-off";
+
   return (
     <section aria-label="Top 3 across timeframes" className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
             Best Across All Timeframes
@@ -57,82 +144,46 @@ export default function TopGroupsStrip({
             </span>
           )}
         </div>
-        {topGroups.length < 3 && (
+        {qualifying.length > 0 && qualifying.length < 3 && (
           <span className="text-xs text-text-secondary">
-            Only {topGroups.length} {topGroups.length === 1 ? "group qualifies" : "groups qualify"} across all four timeframes.
+            Only {qualifying.length} {qualifying.length === 1 ? "group is" : "groups are"} in the {cutoffLabel} on all four timeframes today.
           </span>
         )}
       </div>
 
-      <div className="flex lg:grid lg:grid-cols-3 gap-3 overflow-x-auto snap-x snap-mandatory pb-1 -mx-1 px-1 lg:mx-0 lg:px-0">
-        {topGroups.map((g) => (
-          <button
-            key={g.groupId}
-            type="button"
-            onClick={() => onSelectGroup(g.groupId)}
-            className="w-[88%] sm:w-[62%] lg:w-auto shrink-0 snap-start text-left rounded-xl border border-border bg-surface hover:border-primary/50 hover:bg-bg-secondary/40 p-3.5 transition-colors duration-150 cursor-pointer flex flex-col justify-between gap-2.5"
-          >
-            <div className="space-y-1.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <RankBadge rank={g.pos} medal />
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-text truncate">{g.label}</div>
-                    {g.sectorLabel && g.sectorLabel !== g.label && (
-                      <div className="text-xs text-text-secondary truncate">{g.sectorLabel}</div>
-                    )}
-                  </div>
-                </div>
-                <span className="shrink-0 px-1.5 py-0.5 rounded bg-bg-secondary border border-border tabular-nums text-xs font-semibold text-text-secondary tabular-nums">
-                  Worst #{g.worstRank}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-4 gap-1.5 pt-1">
-                {[
-                  { tf: "1D", r: g.r1d, med: g.med1d },
-                  { tf: "1W", r: g.r1w, med: g.med1w },
-                  { tf: "1M", r: g.r1m, med: g.med1m },
-                  { tf: "3M", r: g.r3m, med: g.med3m },
-                ].map((item) => (
-                  <div
-                    key={item.tf}
-                    className="rounded-md bg-bg-secondary/70 px-1.5 py-1 border border-border/60"
-                  >
-                    <div className="flex items-center justify-between text-xs text-text-secondary tabular-nums">
-                      <span>{item.tf}</span>
-                      <span className="text-[13px] font-semibold text-text">#{item.r}</span>
-                    </div>
-                    <div className="mt-0.5">
-                      <SignedReturn value={item.med} size="xs" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-text-secondary tabular-nums">
-                <span>20D {format20dHL(g.n20dHigh, g.n20dLow)}</span>
-                <span>
-                  &gt;50 SMA {g.pctAbove50dma !== null ? `${g.pctAbove50dma.toFixed(0)}%` : "—"}
-                </span>
-              </div>
-
-              <p className="text-[13px] leading-snug text-text-secondary line-clamp-2">
-                {g.noteText}
-              </p>
-
-              {g.noteSource === "gemini" && (
-                <div className="inline-flex items-center gap-1 text-xs text-text-secondary">
-                  <Sparkles className="w-3 h-3" />
-                  <span>AI-written from the numbers</span>
+      {qualifying.length > 0 ? (
+        <div className="flex lg:grid lg:grid-cols-3 gap-3 overflow-x-auto snap-x snap-mandatory pb-1 -mx-1 px-1 lg:mx-0 lg:px-0">
+          {qualifying.map((g) => (
+            <GroupCard key={g.groupId} g={g} onSelectGroup={onSelectGroup} />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="rounded-xl border border-border bg-surface p-3.5 text-xs text-text-secondary">
+            No industry is in the {cutoffLabel} on all four timeframes today.
+          </div>
+          {nonQualifying.length > 0 && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                aria-expanded={showClosest}
+                onClick={() => setShowClosest((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text cursor-pointer"
+              >
+                {showClosest ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                <span>Closest (not meeting the cut-off)</span>
+              </button>
+              {showClosest && (
+                <div className="flex lg:grid lg:grid-cols-3 gap-3 overflow-x-auto snap-x snap-mandatory pb-1 -mx-1 px-1 lg:mx-0 lg:px-0">
+                  {nonQualifying.map((g) => (
+                    <GroupCard key={g.groupId} g={g} onSelectGroup={onSelectGroup} belowCutoff />
+                  ))}
                 </div>
               )}
             </div>
-          </button>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
