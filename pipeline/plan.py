@@ -406,16 +406,21 @@ def _compute_historical_stock_metrics(
     industry_filter: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Compute liquid stock metrics strictly from stock_candles <= as_of_date (zero look-ahead)
-    for historical backfill dates where latest_industry_stock_metrics is absent.
+    Compute stock metrics strictly from stock_candles <= as_of_date (zero look-ahead)
+    using the exact same liquidity (pipeline.liquidity), RS (pipeline.industry_strength),
+    and Stage 2 (pipeline.compute) functions as the live pipeline.
     """
+    from pipeline.compute import compute_weinstein_stages
+    from pipeline.industry_strength import compute_ibd_rs_score, last_break_index
+    from pipeline.liquidity import is_liquid_from_series
+
     cur.execute(
         """
         WITH dates AS (
             SELECT trade_date FROM trading_days WHERE trade_date <= %s ORDER BY trade_date DESC LIMIT 255
         ),
         bounds AS (SELECT MIN(trade_date) AS min_d, MAX(trade_date) AS max_d FROM dates)
-        SELECT c.token, i.symbol, i.industry, c.trade_date::text, c.high::float, c.close::float
+        SELECT c.token, i.symbol, i.industry, c.trade_date::text, c.high::float, c.close::float, COALESCE(c.volume, 0)::float
         FROM stock_candles c
         JOIN instruments i ON i.token = c.token
         CROSS JOIN bounds b
@@ -427,65 +432,76 @@ def _compute_historical_stock_metrics(
         (as_of_date,),
     )
     by_tok: Dict[int, Dict[str, Any]] = {}
-    for tok, sym, ind, td, hi, cl in cur.fetchall():
+    for tok, sym, ind, td, hi, cl, vol in cur.fetchall():
         t = int(tok)
-        entry = by_tok.setdefault(t, {"token": t, "symbol": sym, "industry": ind, "dates": [], "highs": [], "closes": []})
+        entry = by_tok.setdefault(t, {"token": t, "symbol": sym, "industry": ind, "dates": [], "highs": [], "closes": [], "vols": []})
         entry["dates"].append(str(td).split("T")[0])
         entry["highs"].append(float(hi) if hi is not None else float(cl))
         entry["closes"].append(float(cl))
+        entry["vols"].append(float(vol))
 
-    # Weighted 3M/6M/9M/1Y RS score across all liquid stocks for percentile rank
-    raw_scores: List[Tuple[int, float]] = []
+    raw_scores: Dict[int, float] = {}
     metrics_by_tok: Dict[int, Dict[str, Any]] = {}
     for t, entry in by_tok.items():
         closes = entry["closes"]
         highs = entry["highs"]
+        vols = entry["vols"]
         dates = entry["dates"]
         if not closes or dates[-1] != as_of_date:
             continue
         n = len(closes)
-        c0 = closes[-1]
+        c0 = float(closes[-1])
         if c0 <= 0:
             continue
-        r63 = (c0 / closes[max(0, n - 64)] - 1.0) if n > 1 else 0.0
-        r126 = (c0 / closes[max(0, n - 127)] - 1.0) if n > 1 else 0.0
-        r189 = (c0 / closes[max(0, n - 190)] - 1.0) if n > 1 else 0.0
-        r252 = (c0 / closes[max(0, n - 253)] - 1.0) if n > 1 else 0.0
-        score = 0.4 * r63 + 0.2 * r126 + 0.2 * r189 + 0.2 * r252
-        raw_scores.append((t, score))
 
-        hi252 = max(highs[-252:])
-        off_hi = ((hi252 - c0) / hi252) * 100.0 if hi252 > 0 else 100.0
+        liq = is_liquid_from_series(closes, vols)
+        brk_date = last_break_index(np.array(closes, dtype=float), dates, lookback=252)
+
+        rs_sc = compute_ibd_rs_score(closes, brk_date)
+        if rs_sc is not None:
+            raw_scores[t] = rs_sc
+
+        if brk_date and brk_date in dates:
+            brk_idx = dates.index(brk_date)
+            post_highs = highs[brk_idx:]
+        else:
+            post_highs = highs
+        hi_win = post_highs[-252:]
+        hi52 = float(max(hi_win)) if hi_win else 0.0
+        off_hi = ((hi52 - c0) / hi52) * 100.0 if hi52 > 0 else 100.0
         ret1d = ((c0 / closes[-2]) - 1.0) * 100.0 if n >= 2 and closes[-2] > 0 else None
 
         stage = 0
         if n >= 170:
             arr = np.array(closes, dtype=float)
-            sma150_now = float(np.mean(arr[-150:]))
-            sma150_prev = float(np.mean(arr[-170:-20]))
-            if sma150_prev > 0:
-                slope = ((sma150_now - sma150_prev) / sma150_prev) * 100.0
-                if c0 > sma150_now and slope >= 1.0:
-                    stage = 2
+            sma150 = np.full(n, np.nan, dtype=float)
+            slopes = np.full(n, np.nan, dtype=float)
+            csum = np.cumsum(arr)
+            sma150[149:] = (csum[149:] - np.concatenate(([0.0], csum[:-150]))) / 150.0
+            for j in range(169, n):
+                if sma150[j - 20] > 0:
+                    slopes[j] = ((sma150[j] - sma150[j - 20]) / sma150[j - 20]) * 100.0
+            st_dict = compute_weinstein_stages(arr, sma150, slopes)
+            if st_dict["stage_2"][-1] == 1:
+                stage = 2
 
         metrics_by_tok[t] = {
             "token": t,
             "symbol": entry["symbol"],
             "industry": entry["industry"],
-            "is_liquid": True,
-            "pct_from_52w_high": off_hi,
+            "is_liquid": liq,
+            "pct_from_52w_high": round(off_hi, 2),
             "close": c0,
             "ret_1d_pct": ret1d,
             "stage": stage,
-            "rs_rating": 0.0,
+            "rs_rating": None,
         }
 
     if raw_scores:
-        raw_scores.sort(key=lambda x: x[1])
-        total_n = len(raw_scores)
-        for idx, (t, _) in enumerate(raw_scores):
-            pct = round((idx / max(1, total_n - 1)) * 99.0, 2) if total_n > 1 else 50.0
-            metrics_by_tok[t]["rs_rating"] = pct
+        ordered = sorted(raw_scores, key=raw_scores.get)
+        n_rated = len(ordered)
+        for idx, t in enumerate(ordered):
+            metrics_by_tok[t]["rs_rating"] = max(1, min(99, round(100 * (idx + 1) / n_rated)))
 
     if industry_filter is not None:
         allowed = set(industry_filter)

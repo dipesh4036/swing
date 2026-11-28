@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from pipeline.liquidity import is_liquid_from_series
+
 logger = logging.getLogger("pipeline.industry_strength")
 
 RS_WINDOW = 26
@@ -29,6 +31,20 @@ CORP_ACTION_JUMP = 0.40
 METHODOLOGY_VERSION = "rs_sts_v1"
 
 LEVELS = ("macro", "sector", "industry", "basic_industry")
+
+
+def compute_ibd_rs_score(closes, brk_date: Optional[str]) -> Optional[float]:
+    """Compute raw IBD-style RS score (2*3M + 6M + 9M + 12M) if >63 sessions and no break."""
+    if len(closes) <= 63 or brk_date is not None:
+        return None
+    last_close = float(closes[-1])
+    if last_close <= 0:
+        return None
+    r3 = last_close / float(closes[-64]) - 1.0
+    r6 = (last_close / float(closes[-127]) - 1.0) if len(closes) > 126 else r3
+    r9 = (last_close / float(closes[-190]) - 1.0) if len(closes) > 189 else r3
+    r12 = (last_close / float(closes[-253]) - 1.0) if len(closes) > 252 else r3
+    return 2.0 * r3 + r6 + r9 + r12
 
 
 def make_group_id(level: str, full_path: str) -> str:
@@ -462,8 +478,7 @@ def compute_industry_strength_snapshot(
         stock_close_maps[tok_int] = close_map
 
         last_close = float(closes[-1])
-        vol_sma_50 = float(np.mean(vols[-50:])) if len(vols) >= 50 else 0.0
-        is_liquid = bool(last_close >= 20.0 and vol_sma_50 >= 25000.0)
+        is_liquid = is_liquid_from_series(closes, vols)
 
         # Corporate-action discontinuity guard
         brk_date = last_break_index(closes, dates, lookback=252)
@@ -529,12 +544,9 @@ def compute_industry_strength_snapshot(
                 rs_sts = percentrank_inc(srs, srs[-1]) * 100.0
 
         # IBD-style RS rating score (2*3M + 6M + 9M + 12M)
-        if len(closes) > 63 and brk_date is None:
-            r3 = last_close / float(closes[-64]) - 1.0
-            r6 = (last_close / float(closes[-127]) - 1.0) if len(closes) > 126 else r3
-            r9 = (last_close / float(closes[-190]) - 1.0) if len(closes) > 189 else r3
-            r12 = (last_close / float(closes[-253]) - 1.0) if len(closes) > 252 else r3
-            rs_rating_scores[tok_int] = 2.0 * r3 + r6 + r9 + r12
+        rs_sc = compute_ibd_rs_score(closes, brk_date)
+        if rs_sc is not None:
+            rs_rating_scores[tok_int] = rs_sc
 
         stock_rows.append({
             "trade_date": latest_date,

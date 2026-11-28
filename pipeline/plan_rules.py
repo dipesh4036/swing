@@ -47,6 +47,8 @@ CANDIDATE_REQUIRED_STAGE = 2  # Stage 2 (our definition: close > SMA150 and 20D 
 CANDIDATE_MAX_OFF_52W_HIGH_PCT = 25.0  # Exclude stocks > 25% below 52-week high
 CANDIDATE_MAX_PER_INDUSTRY = 5  # Cap candidates per Top-3 industry at 5 so one group cannot dominate
 CANDIDATE_MAX_ROWS = 20  # Cap daily candidate list at 20 rows
+LIQUID_PRICE_MIN = 20.0  # Minimum close price (Rs) for liquid universe (shared via pipeline/liquidity.py)
+LIQUID_VOL_SMA50_MIN = 25000.0  # Minimum 50-session average volume for liquid universe
 SCREENER_PRIORITY = {
     "stage2_breakout": 0,
     "vcp": 1,
