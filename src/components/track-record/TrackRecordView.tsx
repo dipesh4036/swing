@@ -167,7 +167,7 @@ export default function TrackRecordView() {
       </div>
 
       {/* 2. Sticky Controls */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-bg-page/95 backdrop-blur-xs border-y border-border overflow-x-auto no-scrollbar">
+      <div className="sticky top-0 z-20 py-2 bg-bg-page/95 backdrop-blur-xs border-y border-border overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-2 min-w-max">
           <div className="flex items-center gap-1" role="group" aria-label="Horizon sessions">
             {([1, 5, 10, 20] as const).map((h) => (

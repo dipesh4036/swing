@@ -131,10 +131,6 @@ let loginPromise = null;
 let loginFailureCount = 0;
 let loginNegativeCacheUntil = 0;
 
-export function clearSmartApiCandleCache() {
-  candleCache.clear();
-}
-
 export function invalidateSmartApiSession() {
   sessionCache = { jwtToken: null, expiresAt: 0 };
 }
@@ -238,6 +234,10 @@ export async function getSmartApiToken() {
  * In-memory candle cache: token -> { candles, cachedAt }
  */
 const candleCache = new Map();
+
+export function clearSmartApiCandleCache() {
+  candleCache.clear();
+}
 
 /**
  * Fetch a single candle chunk from SmartAPI with timeout and exponential backoff
