@@ -61,6 +61,8 @@ jobs:
       GITHUB_REPO: ${{ github.repository }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
       EQUITY_PARQUET_PATH: "data/equity_ohlcv.parquet"
       RETENTION_YEARS: "3"
       DAILY_SOURCE: ${{ github.event.inputs.source || vars.DAILY_SOURCE || 'bhavcopy' }}
