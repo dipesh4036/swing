@@ -151,8 +151,9 @@ import { CHART_THEME } from "@/lib/chart-theme";
 - `RankPrimitives` (`RankBadge`, `RankChangeChip`, `SignedReturn`, `format20dHL`): Shared tabular primitives (`tabular-nums`), enforcing colour + sign/arrow on every return and rank move, and `"—"` for null/unverified `20D H/L`.
 - `BottomSheet`: Accessible modal sheet (Esc + backdrop close, `duration-150`) used for mobile Filters and the mobile Rotation Chart.
 
-### Tab 4: Daily Plan (`src/components/plan/`)
-- `DailyPlanView`: Top-down 6-block routine (`/plan`): header with stored-date picker + P3 summary, `Market State` card, `Where Money Is Going` cap-leadership card, `Breakouts & Stage 2` card, `TopGroupsStrip` reuse, and `Final Candidates` list (64 px mobile rows / desktop table, Copy/CSV, lazy client-side pattern tags with concurrency 4, and `StockChartModal` drill-in). Reuses `BaseCard`, `TopGroupsStrip`, `BottomSheet`, `SignedReturn`, and `StockChartModal`.
+### Tab 4: Daily Plan (`src/components/plan/` & `src/app/(terminal)/plan/`)
+- `DailyPlanPage` (`src/app/(terminal)/plan/page.jsx`): Server-rendered wrapper inside `AppShell` hosting `DailyPlanView`.
+- `DailyPlanView` (`src/components/plan/DailyPlanView.tsx`): Top-down 6-block routine (`/plan`): header with stored-date picker + P3 summary, `1. Market State` card, `2. Where Money Is Going` cap-leadership card, `3. Breakouts & Stage 2` card (`Stage 2: close > SMA150 & 20D slope >= 1%`), `4. Top 3 Industries` (`TopGroupsStrip` reuse + `"Industries as of <date>"` badge when stale), and `5. Final Candidates` grouped visually by Top-3 industry (max `5` per industry, `+N more in <industry> (not shown)`, 64 px mobile rows / desktop table, Copy/CSV, lazy client-side pattern tags with concurrency 4, and `StockChartModal` drill-in). Uses `BaseCard` (`bg-surface`), `bg-bg-secondary`, `text-text`, `text-text-secondary`, `bg-primary-subtle text-primary dark:text-indigo-300`, `bg-warning-bg text-warning`, `SignedReturn`, `BottomSheet`, `StockChartModal`, Inter + `tabular-nums`, `>= 12px` labels, and `>= 13px` data values.
 
 ### Global Search & Chart Overlay (`src/components/shared/`)
 - `GlobalSearchPalette`: Mounted in `AppShell`, opens on `Cmd/Ctrl+K` or header button, debounced 150 ms search via `/api/stock-search?q=`, keyboard navigation (`↑`/`↓`/`Enter`/`Esc`), opens `StockChartModal` (`source=search`). Never overrides `Cmd+C`.

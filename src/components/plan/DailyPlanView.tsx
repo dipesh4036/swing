@@ -269,7 +269,7 @@ export default function DailyPlanView() {
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     1. Market State
                   </h2>
-                  <Link href="/" className="text-xs font-medium text-primary hover:underline">
+                  <Link href="/" className="text-xs font-medium text-primary dark:text-indigo-300 hover:underline">
                     Open Breadth
                   </Link>
                 </div>
@@ -298,15 +298,15 @@ export default function DailyPlanView() {
                     <div className="grid grid-cols-3 gap-2 pt-1 text-xs tabular-nums">
                       <div className="rounded bg-bg-secondary p-2">
                         <div className="text-xs text-text-secondary">&gt;50 SMA</div>
-                        <div className="font-semibold text-text">{data.market.pct_above_50sma?.toFixed(1)}%</div>
+                        <div className="text-[13px] font-semibold text-text">{data.market.pct_above_50sma?.toFixed(1)}%</div>
                       </div>
                       <div className="rounded bg-bg-secondary p-2">
                         <div className="text-xs text-text-secondary">&gt;200 SMA</div>
-                        <div className="font-semibold text-text">{data.market.pct_above_200sma?.toFixed(1)}%</div>
+                        <div className="text-[13px] font-semibold text-text">{data.market.pct_above_200sma?.toFixed(1)}%</div>
                       </div>
                       <div className="rounded bg-bg-secondary p-2">
                         <div className="text-xs text-text-secondary">Net 20D H/L</div>
-                        <div className="font-semibold text-text">
+                        <div className="text-[13px] font-semibold text-text">
                           {(data.market.net_highs_20d ?? 0) > 0 ? `+${data.market.net_highs_20d}` : data.market.net_highs_20d}
                         </div>
                       </div>
@@ -321,7 +321,7 @@ export default function DailyPlanView() {
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     2. Where Money Is Going
                   </h2>
-                  <span className="text-xs font-semibold text-text">
+                  <span className="text-[13px] font-semibold text-text">
                     {data.caps.status === "available" ? data.caps.leader : "Not available"}
                   </span>
                 </div>
@@ -335,10 +335,10 @@ export default function DailyPlanView() {
                     {data.caps.segments.map((seg) => (
                       <div key={seg.key} className="py-1.5 flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="font-medium text-text flex items-center gap-1.5">
+                          <div className="text-[13px] font-medium text-text flex items-center gap-1.5">
                             <span>{seg.label}</span>
                             {data.caps.leader === seg.label && (
-                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary text-xs font-semibold">
+                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary dark:text-indigo-300 text-xs font-semibold">
                                 Leading
                               </span>
                             )}
@@ -347,14 +347,14 @@ export default function DailyPlanView() {
                             &gt;50 SMA {seg.pct_above_50sma !== null ? `${seg.pct_above_50sma.toFixed(0)}%` : "—"}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0 tabular-nums">
+                        <div className="flex items-center gap-3 shrink-0 tabular-nums text-[13px]">
                           <div className="text-right">
                             <div className="text-xs text-text-secondary">5D</div>
-                            <SignedReturn value={seg.ret_5d} size="xs" />
+                            <SignedReturn value={seg.ret_5d} size="sm" />
                           </div>
                           <div className="text-right">
                             <div className="text-xs text-text-secondary">20D</div>
-                            <SignedReturn value={seg.ret_20d} size="xs" />
+                            <SignedReturn value={seg.ret_20d} size="sm" />
                           </div>
                         </div>
                       </div>
@@ -369,7 +369,7 @@ export default function DailyPlanView() {
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     3. Breakouts &amp; Stage 2
                   </h2>
-                  <Link href="/screener" className="text-xs font-medium text-primary hover:underline">
+                  <Link href="/screener" className="text-xs font-medium text-primary dark:text-indigo-300 hover:underline">
                     Open Screener
                   </Link>
                 </div>
@@ -391,7 +391,7 @@ export default function DailyPlanView() {
                           <div key={row.key} className="py-1 flex items-center justify-between">
                             <span className="font-sans text-text">{row.label}</span>
                             <span className="text-text-secondary">
-                              <strong className="text-text">{c?.today ?? 0}</strong>{" "}
+                              <strong className="text-[13px] text-text">{c?.today ?? 0}</strong>{" "}
                               <span className="text-xs text-text-secondary">
                                 (1D: {c?.prev_1d ?? "—"}, 5D: {c?.prev_5d ?? "—"})
                               </span>
@@ -403,13 +403,16 @@ export default function DailyPlanView() {
 
                     <div className="pt-1 border-t border-border flex items-center justify-between text-xs tabular-nums">
                       <span className="text-text-secondary">
-                        Stage 2: N500 {data.breakouts.stage2_pct?.nifty500?.toFixed(1) ?? "—"}% · Liq{" "}
-                        {data.breakouts.stage2_pct?.liquid?.toFixed(1) ?? "—"}%
+                        Stage 2 (close &gt; SMA150 &amp; 20D slope &ge; 1%):{" "}
+                        <strong className="text-[13px] text-text">
+                          N500 {data.breakouts.stage2_pct?.nifty500?.toFixed(1) ?? "—"}% · Liq{" "}
+                          {data.breakouts.stage2_pct?.liquid?.toFixed(1) ?? "—"}%
+                        </strong>
                       </span>
                     </div>
                     <div className="text-xs text-text-secondary">
                       5D Follow-through:{" "}
-                      <strong className="tabular-nums text-text">
+                      <strong className="text-[13px] tabular-nums text-text">
                         {data.breakouts.follow_through?.label ?? "too few to judge"}
                       </strong>
                     </div>
@@ -420,11 +423,18 @@ export default function DailyPlanView() {
 
             {/* 5. Top 3 Industries (reusing TopGroupsStrip from UX3) */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  4. Top 3 Industries ({data.topIndustries.level})
-                </span>
-                <Link href="/sectors" className="text-xs font-medium text-primary hover:underline">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                    4. Top 3 Industries ({data.topIndustries.level})
+                  </span>
+                  {data.topIndustries.as_of && data.topIndustries.as_of !== data.planDate && (
+                    <span className="px-2 py-0.5 rounded bg-warning-bg text-warning text-xs font-medium">
+                      Industries as of {data.topIndustries.as_of}
+                    </span>
+                  )}
+                </div>
+                <Link href="/sectors" className="text-xs font-medium text-primary dark:text-indigo-300 hover:underline">
                   Open Industries
                 </Link>
               </div>
@@ -447,15 +457,22 @@ export default function DailyPlanView() {
             <div className="space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                    5. Final Candidates ({data.candidates.length}
-                    {data.totalCandidates > data.candidates.length
-                      ? ` · ${data.totalCandidates - data.candidates.length} more`
-                      : ""}
-                    )
-                  </h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                      5. Final Candidates ({data.candidates.length}
+                      {data.totalCandidates > data.candidates.length
+                        ? ` · ${data.totalCandidates - data.candidates.length} more`
+                        : ""}
+                      )
+                    </h2>
+                    {data.topIndustries.as_of && data.topIndustries.as_of !== data.planDate && (
+                      <span className="px-2 py-0.5 rounded bg-warning-bg text-warning text-xs font-medium">
+                        Industries as of {data.topIndustries.as_of}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-text-secondary">
-                    Candidates = Stage 2, RS &ge; 70, inside today&apos;s top 3 industries. A filter result, not advice.
+                    Candidates = Stage 2 (close &gt; SMA150 &amp; 20D slope &ge; 1%), RS &ge; 70, max 5 per top-3 industry. A filter result, not advice.
                   </p>
                 </div>
 
@@ -497,99 +514,162 @@ export default function DailyPlanView() {
                   No qualifying candidates for {data.planDate}.
                 </BaseCard>
               ) : (
-                <>
-                  {/* Mobile ~64px rows */}
-                  <div className="lg:hidden divide-y divide-border rounded-xl border border-border bg-surface overflow-hidden">
-                    {data.candidates.map((c) => {
-                      const pat = patternsByToken[c.token];
-                      return (
-                        <button
-                          key={c.token}
-                          type="button"
-                          onClick={() => setSelectedStock(c)}
-                          className="w-full text-left px-3 py-2.5 min-h-[64px] hover:bg-bg-secondary/40 cursor-pointer space-y-1"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="tabular-nums text-xs text-text-secondary tabular-nums">#{c.rank}</span>
-                              <span className="text-[13px] font-semibold text-text truncate">{c.symbol}</span>
-                              <span className="text-xs text-text-secondary truncate">{c.industryLabel}</span>
-                            </div>
-                            <span className="tabular-nums text-xs font-semibold text-text tabular-nums shrink-0">
-                              RS {c.rsRank.toFixed(0)}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1 text-xs">
-                            <span className="text-text-secondary">{c.reasons.join(" · ")}</span>
-                            {pat && (
-                              <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary font-medium">
-                                {pat}
+                <div className="space-y-3">
+                  {(() => {
+                    const groupsMeta = data.topIndustries.groups || [];
+                    const grouped: Array<{
+                      label: string;
+                      pos: number | null;
+                      worstRank: number | null;
+                      hiddenCandidates: number;
+                      rows: typeof data.candidates;
+                    }> = [];
+                    const seenInd = new Set<string>();
+                    for (const g of groupsMeta) {
+                      const rows = data.candidates.filter((c) => c.industryLabel === g.label);
+                      const hidden = Number((g as { hiddenCandidates?: number }).hiddenCandidates || 0);
+                      if (rows.length > 0 || hidden > 0) {
+                        seenInd.add(g.label);
+                        grouped.push({
+                          label: g.label,
+                          pos: g.pos,
+                          worstRank: g.worstRank,
+                          hiddenCandidates: hidden,
+                          rows,
+                        });
+                      }
+                    }
+                    for (const c of data.candidates) {
+                      if (!seenInd.has(c.industryLabel)) {
+                        seenInd.add(c.industryLabel);
+                        grouped.push({
+                          label: c.industryLabel,
+                          pos: null,
+                          worstRank: null,
+                          hiddenCandidates: 0,
+                          rows: data.candidates.filter((x) => x.industryLabel === c.industryLabel),
+                        });
+                      }
+                    }
+
+                    return grouped.map((grp) => (
+                      <div key={grp.label} className="rounded-xl border border-border bg-surface overflow-hidden">
+                        <div className="px-3.5 py-2.5 bg-bg-secondary border-b border-border flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {grp.pos !== null && (
+                              <span className="px-2 py-0.5 rounded bg-primary-subtle text-primary dark:text-indigo-300 text-xs font-semibold tabular-nums">
+                                Top #{grp.pos}
+                              </span>
+                            )}
+                            <span className="text-[13px] font-semibold text-text truncate">{grp.label}</span>
+                            {grp.worstRank !== null && (
+                              <span className="text-xs text-text-secondary tabular-nums">
+                                Worst #{grp.worstRank}
                               </span>
                             )}
                           </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          {grp.hiddenCandidates > 0 && (
+                            <span className="text-xs text-text-secondary">
+                              +{grp.hiddenCandidates} more in {grp.label} (not shown)
+                            </span>
+                          )}
+                        </div>
 
-                  {/* Desktop table */}
-                  <div className="hidden lg:block rounded-xl border border-border bg-surface overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-bg-secondary border-b border-border text-xs uppercase tracking-wider text-text-secondary">
-                        <tr>
-                          <th className="px-3 py-2.5 text-left">#</th>
-                          <th className="px-3 py-2.5 text-left">Symbol</th>
-                          <th className="px-3 py-2.5 text-left">Industry</th>
-                          <th className="px-3 py-2.5 text-right">RS</th>
-                          <th className="px-3 py-2.5 text-right">Close</th>
-                          <th className="px-3 py-2.5 text-right">1D %</th>
-                          <th className="px-3 py-2.5 text-left">Hits &amp; Pattern</th>
-                          <th className="px-3 py-2.5 text-left">Reasons</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border-subtle">
-                        {data.candidates.map((c) => {
-                          const pat = patternsByToken[c.token];
-                          return (
-                            <tr
-                              key={c.token}
-                              onClick={() => setSelectedStock(c)}
-                              className="hover:bg-bg-hover cursor-pointer"
-                            >
-                              <td className="px-3 py-2.5 tabular-nums text-text-secondary">{c.rank}</td>
-                              <td className="px-3 py-2.5 font-semibold text-text">{c.symbol}</td>
-                              <td className="px-3 py-2.5 text-text-secondary">{c.industryLabel}</td>
-                              <td className="px-3 py-2.5 text-right tabular-nums font-semibold tabular-nums text-text">
-                                {c.rsRank.toFixed(0)}
-                              </td>
-                              <td className="px-3 py-2.5 text-right tabular-nums text-text">
-                                {c.close !== null ? `₹${c.close.toFixed(2)}` : "—"}
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <SignedReturn value={c.ret1dPct} size="xs" />
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <div className="flex flex-wrap gap-1">
-                                  {c.screenerHits.map((h) => (
-                                    <span key={h} className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-xs tabular-nums text-text">
-                                      {h}
-                                    </span>
-                                  ))}
+                        {/* Mobile ~64px rows */}
+                        <div className="lg:hidden divide-y divide-border">
+                          {grp.rows.map((c) => {
+                            const pat = patternsByToken[c.token];
+                            return (
+                              <button
+                                key={c.token}
+                                type="button"
+                                onClick={() => setSelectedStock(c)}
+                                className="w-full text-left px-3 py-2.5 min-h-[64px] hover:bg-bg-secondary/40 cursor-pointer space-y-1"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="tabular-nums text-[13px] text-text-secondary">#{c.rank}</span>
+                                    <span className="text-[13px] font-semibold text-text truncate">{c.symbol}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 shrink-0 tabular-nums text-[13px]">
+                                    <span className="font-semibold text-text">RS {c.rsRank.toFixed(0)}</span>
+                                    {c.close !== null && (
+                                      <span className="text-text-secondary">₹{c.close.toFixed(2)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1 text-xs">
+                                  <span className="text-text-secondary">{c.reasons.join(" · ")}</span>
                                   {pat && (
-                                    <span className="px-1.5 py-0.5 rounded bg-primary-subtle border border-accent-border text-xs font-medium text-primary">
+                                    <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary dark:text-indigo-300 font-medium">
                                       {pat}
                                     </span>
                                   )}
                                 </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-text-secondary">{c.reasons.join(" · ")}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Desktop table */}
+                        <div className="hidden lg:block overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead className="bg-bg-secondary/60 border-b border-border text-xs uppercase tracking-wider text-text-secondary">
+                              <tr>
+                                <th className="px-3 py-2 text-left">#</th>
+                                <th className="px-3 py-2 text-left">Symbol</th>
+                                <th className="px-3 py-2 text-right">RS</th>
+                                <th className="px-3 py-2 text-right">Close</th>
+                                <th className="px-3 py-2 text-right">1D %</th>
+                                <th className="px-3 py-2 text-left">Hits &amp; Pattern</th>
+                                <th className="px-3 py-2 text-left">Reasons</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border-subtle">
+                              {grp.rows.map((c) => {
+                                const pat = patternsByToken[c.token];
+                                return (
+                                  <tr
+                                    key={c.token}
+                                    onClick={() => setSelectedStock(c)}
+                                    className="hover:bg-bg-hover cursor-pointer"
+                                  >
+                                    <td className="px-3 py-2.5 tabular-nums text-[13px] text-text-secondary">{c.rank}</td>
+                                    <td className="px-3 py-2.5 text-[13px] font-semibold text-text">{c.symbol}</td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums text-[13px] font-semibold text-text">
+                                      {c.rsRank.toFixed(0)}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums text-[13px] text-text">
+                                      {c.close !== null ? `₹${c.close.toFixed(2)}` : "—"}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right text-[13px]">
+                                      <SignedReturn value={c.ret1dPct} size="sm" />
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="flex flex-wrap gap-1">
+                                        {c.screenerHits.map((h) => (
+                                          <span key={h} className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border text-xs tabular-nums text-text">
+                                            {h}
+                                          </span>
+                                        ))}
+                                        {pat && (
+                                          <span className="px-1.5 py-0.5 rounded bg-primary-subtle border border-accent-border text-xs font-medium text-primary dark:text-indigo-300">
+                                            {pat}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-text-secondary">{c.reasons.join(" · ")}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               )}
             </div>
           </>
@@ -605,7 +685,7 @@ export default function DailyPlanView() {
             <strong className="text-text">Cap Leadership:</strong> Highest 20-session index return across Large (Nifty 50 / Nifty 100 breadth), Mid (Nifty Midcap 150), and Small (Nifty Smallcap 250) when leading by &ge; 1.0 percentage point; else &ldquo;no clear leader&rdquo;.
           </p>
           <p>
-            <strong className="text-text">Candidate Filter:</strong> Liquid stocks in today&apos;s Top 3 industries (industry level, minimax across 1D/1W/1M/3M), RS &ge; 70, Weinstein Stage 2, and within 25% of 52W high. Ordered by screener hit priority, RS descending, and industry rank. Capped at 20 rows.
+            <strong className="text-text">Candidate Filter:</strong> Liquid stocks in today&apos;s Top 3 industries (industry level, minimax across 1D/1W/1M/3M), RS &ge; 70, Stage 2 (our definition: close &gt; SMA150 and 20-day SMA150 slope &ge; 1%), and within 25% of 52W high. Ordered by screener hit priority, RS descending, and industry rank. Capped at 5 per industry and 20 rows total.
           </p>
           <p className="text-text-secondary">
             Deterministic filter output defined in docs/PLAN_RULES.md; not advice.
