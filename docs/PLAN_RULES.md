@@ -1,6 +1,8 @@
-# Daily Plan Rules (`plan_v1`)
+# Daily Plan Rules (`plan_v2`)
 
 Single source of truth: [`pipeline/plan_rules.py`](../pipeline/plan_rules.py). Every threshold is deterministic; no AI is used in selection or ordering.
+
+> **v2 Change (`plan_v2`):** Added Top-3 cut-off `cutoff = max(5, ceil(0.20 * N))` (`TOP_GROUP_CUTOFF_MIN = 5`, `TOP_GROUP_CUTOFF_FRACTION = 0.20`, where `N` = eligible groups with `>= 5` stocks and non-null 1D/1W/1M/3M medians). In `plan_v1`, pure minimax could pick groups ranked `#25`/`#26` on a timeframe. Groups qualify only if `worst_rank <= cutoff`; non-qualifying groups are never used for Daily Plan candidates. Existing `plan_v1` rows and Track Record outcomes remain untouched and grouped by `rules_version`.
 
 ## Verified Source Tables & Latest Dates
 | Block | Source Tables & Columns | Verified Latest `trade_date` | Missing / Stale Handling |

@@ -40,3 +40,6 @@ Tab 3 (`/sectors`) is powered by NSE's 4-level industry taxonomy (**Macro → Se
 ## Legacy Cleanup (`020_drop_legacy_sector_tables.sql`)
 - Legacy sector rotation components, routes, and pipeline modules have been removed.
 - Migration `pipeline/migrations/020_drop_legacy_sector_tables.sql` is staged (unapplied) to drop `sector_stock_metrics`, `daily_sector_breadth`, `daily_industry_breadth`, `daily_industry_index`, `industry_stock_metrics`, and `stock_industry` after owner sign-off.
+
+## RS-STS Quantisation Note (K3)
+`rs_sts` in `daily_industry_strength` is **not** a cross-sectional percentile across groups — it is a time-series `percentrank_inc(rs_series, rs_series[-1]) * 100.0` of each group's own equal-weight RS series over a **26-session window** (`25` intervals). Because `100 / 25 = 4.0%`, every `rs_sts` value is an exact multiple of `4.0%` (`0.0, 4.0, 8.0, 12.0, ...`) by construction. Missing/insufficient RS history produces `NULL` (rendered as `"—"` in the UI, never a default).

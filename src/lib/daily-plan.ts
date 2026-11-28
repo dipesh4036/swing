@@ -46,6 +46,7 @@ export interface PlanBreakoutsBlock {
 export interface PlanTopIndustriesBlock {
   status: "available" | "unavailable";
   reason?: string;
+  candidate_reason?: "ok" | "no_stock_metrics" | "no_qualifying_industry" | "none_passed_filter";
   as_of: string | null;
   level: string;
   universe: string;

@@ -336,7 +336,7 @@ export default function DailyPlanView() {
                       <div key={seg.key} className="py-1.5 flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-[13px] font-medium text-text flex items-center gap-1.5">
-                            <span>{seg.label}</span>
+                            <span>{seg.key === "large" ? "Large Cap · NIFTY 50" : seg.label}</span>
                             {data.caps.leader === seg.label && (
                               <span className="px-1.5 py-0.2 rounded bg-primary-subtle text-primary dark:text-indigo-300 text-xs font-semibold">
                                 Leading
@@ -511,7 +511,13 @@ export default function DailyPlanView() {
 
               {data.candidates.length === 0 ? (
                 <BaseCard padding="p-6" className="text-center text-xs text-text-secondary">
-                  No qualifying candidates for {data.planDate}.
+                  {data.topIndustries.candidate_reason === "no_qualifying_industry"
+                    ? `No industry met the cut-off on ${data.topIndustries.as_of || data.planDate}.`
+                    : data.topIndustries.candidate_reason === "no_stock_metrics"
+                      ? `Stock data for ${data.planDate} is not stored.`
+                      : data.topIndustries.candidate_reason === "none_passed_filter"
+                        ? `No stock passed the filters for ${data.planDate}.`
+                        : `No qualifying candidates for ${data.planDate}.`}
                 </BaseCard>
               ) : (
                 <div className="space-y-3">
