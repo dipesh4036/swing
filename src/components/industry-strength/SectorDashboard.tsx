@@ -242,7 +242,9 @@ export default function SectorDashboard() {
             data?.snapshotDate
               ? `${data.snapshotDate} · ${data.coverage.eligibleStocks.toLocaleString("en-IN")} liquid · ${
                   data.coverage.coveragePct ?? "—"
-                }% classified · ${data.coverage.nseVerifiedPct ?? "—"}% NSE-verified`
+                }% classified · NSE-verified: ${data.coverage.nseVerifiedStocks} of ${data.coverage.eligibleStocks} shown stocks (${
+                  data.coverage.nseVerifiedPct ?? "—"
+                }%)`
               : "No completed snapshot available"
           }
           action={
@@ -282,6 +284,7 @@ export default function SectorDashboard() {
                 Top 3 picks groups with the lowest worst rank across 1D, 1W, 1M, and 3M median returns (minimax).
                 Table Rank combines Trend (1M/3M/6M), Breadth (&gt;50/&gt;200 SMA), and Leaders (RS &ge; 70).
                 Timeframe chips update only the MED column.
+                RS-STS: where this group&apos;s current relative strength stands among its own last 26 sessions (0–100, steps of 4).
               </p>
             </div>
           </BaseCard>

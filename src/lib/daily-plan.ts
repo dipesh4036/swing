@@ -76,6 +76,7 @@ export interface DailyPlanResponse {
   breakouts: PlanBreakoutsBlock;
   topIndustries: PlanTopIndustriesBlock;
   totalCandidates: number;
+  nseVerifiedCount?: number;
   candidates: PlanCandidateRow[];
   summaryText: string;
   summarySource: "gemini" | "template";
@@ -117,14 +118,18 @@ export async function getDailyPlan(
 
   const candRes = await q(
     `
-    SELECT rank, token, symbol, industry_label, level, rs_rank, stage,
-           screener_hits, reasons, close, ret_1d_pct, pct_from_52w_high
-    FROM daily_plan_candidates
-    WHERE plan_date = $1
-    ORDER BY rank ASC;
+    SELECT c.rank, c.token, c.symbol, c.industry_label, c.level, c.rs_rank, c.stage,
+           c.screener_hits, c.reasons, c.close, c.ret_1d_pct, c.pct_from_52w_high,
+           (i.classification_source = 'nse_quote') AS nse_verified
+    FROM daily_plan_candidates c
+    LEFT JOIN instruments i ON i.token = c.token
+    WHERE c.plan_date = $1
+    ORDER BY c.rank ASC;
     `,
     [targetDate]
   );
+
+  const nseVerifiedCount = candRes.rows.filter((c) => Boolean(c.nse_verified)).length;
 
   const candidates: PlanCandidateRow[] = candRes.rows.map((c) => ({
     rank: Number(c.rank),
@@ -149,6 +154,7 @@ export async function getDailyPlan(
     breakouts: row.breakouts as PlanBreakoutsBlock,
     topIndustries: row.top_industries as PlanTopIndustriesBlock,
     totalCandidates: Number(row.total_candidates ?? candidates.length),
+    nseVerifiedCount,
     candidates,
     summaryText: String(row.summary_text || ""),
     summarySource: row.summary_source === "gemini" ? "gemini" : "template",

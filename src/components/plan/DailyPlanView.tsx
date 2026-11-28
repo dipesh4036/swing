@@ -465,6 +465,11 @@ export default function DailyPlanView() {
                         : ""}
                       )
                     </h2>
+                    {data.candidates.length > 0 && typeof data.nseVerifiedCount === "number" && (
+                      <span className="px-2 py-0.5 rounded bg-bg-secondary border border-border text-xs text-text-secondary">
+                        NSE-verified: {data.nseVerifiedCount} of {data.candidates.length} shown stocks
+                      </span>
+                    )}
                     {data.topIndustries.as_of && data.topIndustries.as_of !== data.planDate && (
                       <span className="px-2 py-0.5 rounded bg-warning-bg text-warning text-xs font-medium">
                         Industries as of {data.topIndustries.as_of}
