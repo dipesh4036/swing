@@ -55,6 +55,13 @@ const NAV_ITEMS = [
         icon: BarChart3,
         active: true,
       },
+      {
+        id: "track-record",
+        name: "Track Record",
+        href: "/track-record",
+        icon: TrendingUp,
+        active: true,
+      },
     ],
   },
 ];
