@@ -79,14 +79,14 @@ def format_daily_telegram_text(plan: Dict[str, Any]) -> str:
         qual_groups = [g for g in (top_ind.get("groups") or []) if g.get("qualifies", True)]
         if qual_groups:
             ind_str = ", ".join(
-                f"#{g['pos']} {g['label']} (w#{g['worstRank']})"
+                f"#{g['pos']} {g['label']} (worst #{g['worstRank']})"
                 for g in qual_groups[:3]
             )
-            lines.append(f"Top 3{stale}: {ind_str}")
+            lines.append(f"Top 3 qualifying{stale}: {ind_str}")
         else:
             cutoff = top_ind["groups"][0].get("cutoff")
             cutoff_str = f"top {cutoff}" if cutoff is not None else "cut-off"
-            lines.append(f"Top 3{stale}: none met {cutoff_str}")
+            lines.append(f"Top 3 qualifying{stale}: none met {cutoff_str}")
 
     if cands:
         by_ind: Dict[str, List[str]] = {}

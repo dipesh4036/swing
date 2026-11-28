@@ -51,8 +51,17 @@ def test_format_truncation_and_banned_word_fallback():
     txt = format_daily_telegram_text(_sample_plan(long_names=True))
     assert len(txt) <= 900
     assert "Industries as of 2026-11-23" in txt
+    assert "worst #25" in txt
+    assert "Top 3 qualifying" in txt
     assert "https://swing.dipeshdev.site/plan" in txt
     assert validate_telegram_text(txt) is True
+
+    no_qual = _sample_plan()
+    for g in no_qual["top_industries"]["groups"]:
+        g["qualifies"] = False
+        g["cutoff"] = 10
+    txt_nq = format_daily_telegram_text(no_qual)
+    assert "Top 3 qualifying (Industries as of 2026-11-23): none met top 10" in txt_nq
 
     bad_plan = _sample_plan()
     bad_plan["market"]["state"] = "Strong buy"  # banned word

@@ -824,8 +824,11 @@ def build_daily_plan(
                 top_industries_block["candidate_reason"] = candidate_reason
 
                 if store_control and all_stock_rows and qualifying_groups:
-                    from pipeline.plan_outcomes import select_control_candidates
-                    control_rows = select_control_candidates(all_stock_rows, qualifying_groups, plan_date)
+                    from pipeline.plan_outcomes import select_control_candidates, select_top_industries_any_stock
+                    control_rows = (
+                        select_control_candidates(all_stock_rows, qualifying_groups, plan_date)
+                        + select_top_industries_any_stock(all_stock_rows, qualifying_groups, plan_date)
+                    )
 
             summary_payload = {
                 "plan_date": plan_date,

@@ -90,6 +90,108 @@ def select_control_candidates(
     return selected
 
 
+def select_filter_only_candidates(
+    stock_rows: List[Dict[str, Any]],
+    top_industries: List[Dict[str, Any]],
+    max_per_industry: int = CONTROL_MAX_PER_INDUSTRY,
+    max_rows: int = CONTROL_MAX_ROWS,
+) -> List[Dict[str, Any]]:
+    """
+    Screener-independent candidate set ('filter_only') for B3 Track Record:
+    same filter (qualifying industry, Stage 2, RS >= 70, liquid, <= 25% off 52W high),
+    ordered by RS desc then symbol asc, capped at 5 per industry and 20 total.
+    """
+    top_labels = {str(t["label"]) for t in top_industries}
+    eligible: List[Dict[str, Any]] = []
+    seen: set = set()
+    for s in stock_rows:
+        tok = int(s["token"])
+        if tok in seen:
+            continue
+        ind = s.get("industry")
+        if not ind or ind not in top_labels:
+            continue
+        if not s.get("is_liquid"):
+            continue
+        rs = s.get("rs_rating")
+        if rs is None or float(rs) < CANDIDATE_MIN_RS_RATING:
+            continue
+        if int(s.get("stage") or 0) != CANDIDATE_REQUIRED_STAGE:
+            continue
+        off_hi = s.get("pct_from_52w_high")
+        if off_hi is None or float(off_hi) > CANDIDATE_MAX_OFF_52W_HIGH_PCT:
+            continue
+        seen.add(tok)
+        eligible.append({
+            "token": tok,
+            "symbol": str(s["symbol"]),
+            "industry_label": str(ind),
+            "rs_rating": float(rs),
+        })
+
+    eligible.sort(key=lambda r: (-r["rs_rating"], r["symbol"]))
+    per_ind: Dict[str, int] = {}
+    selected: List[Dict[str, Any]] = []
+    for item in eligible:
+        ind = item["industry_label"]
+        if per_ind.get(ind, 0) >= max_per_industry:
+            continue
+        per_ind[ind] = per_ind.get(ind, 0) + 1
+        selected.append(item)
+        if len(selected) >= max_rows:
+            break
+    return selected
+
+
+def select_top_industries_any_stock(
+    stock_rows: List[Dict[str, Any]],
+    top_industries: List[Dict[str, Any]],
+    plan_date: str,
+    max_per_industry: int = CONTROL_MAX_PER_INDUSTRY,
+    max_rows: int = CONTROL_MAX_ROWS,
+) -> List[Dict[str, Any]]:
+    """
+    B4 control: ALL liquid stocks in the qualifying top-3 industries (no Stage 2, no RS filter),
+    shuffled deterministically with sha256(plan_date) and capped at 5 per industry, 20 total.
+    """
+    top_labels = {str(t["label"]) for t in top_industries}
+    eligible: List[Dict[str, Any]] = []
+    seen: set = set()
+    for s in stock_rows:
+        tok = int(s["token"])
+        if tok in seen:
+            continue
+        ind = s.get("industry")
+        if not ind or ind not in top_labels:
+            continue
+        if not s.get("is_liquid"):
+            continue
+        seen.add(tok)
+        eligible.append({
+            "token": tok,
+            "symbol": str(s["symbol"]),
+            "industry_label": str(ind),
+            "group_name": "top_industries_any_stock",
+        })
+
+    eligible.sort(key=lambda r: (r["token"], r["symbol"]))
+    seed_int = int(hashlib.sha256(f"{plan_date}:top_any".encode("utf-8")).hexdigest(), 16)
+    rng = random.Random(seed_int)
+    rng.shuffle(eligible)
+
+    per_ind: Dict[str, int] = {}
+    selected: List[Dict[str, Any]] = []
+    for item in eligible:
+        ind = item["industry_label"]
+        if per_ind.get(ind, 0) >= max_per_industry:
+            continue
+        per_ind[ind] = per_ind.get(ind, 0) + 1
+        selected.append(item)
+        if len(selected) >= max_rows:
+            break
+    return selected
+
+
 def compute_outcome_row(
     plan_date: str,
     token: int,
@@ -217,11 +319,15 @@ def compute_outcome_row(
 def compute_plan_outcomes(
     as_of: Optional[str] = None,
     default_source: str = "live",
+    candidate_set: Optional[str] = None,
+    method: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Fill every matured (plan_date, token, horizon) in plan_outcomes and plan_outcomes_control.
+    Fill every matured (plan_date, token, horizon, candidate_set) in plan_outcomes and plan_outcomes_control.
     Idempotent upsert; preserves existing 'live' source.
     """
+    eff_cset = candidate_set or ("filter_only" if default_source == "backfill" else "displayed")
+    eff_method = method or ("live_v1" if default_source == "live" else "backfill_v1")
     with get_connection() as conn:
         with conn.cursor() as cur:
             if as_of:
@@ -341,6 +447,7 @@ def compute_plan_outcomes(
                     cand_rows.append((
                         out["plan_date"], out["token"], out["symbol"], out["industry_label"],
                         out["rules_version"], out["source"], out["horizon"],
+                        eff_cset, eff_method,
                         out["base_close"], out["base_open_next"], out["fwd_date"], out["fwd_close"],
                         out["ret_from_close_pct"], out["ret_from_open_pct"],
                         out["bench_ret_from_close_pct"], out["bench_ret_from_open_pct"],
@@ -354,17 +461,19 @@ def compute_plan_outcomes(
                     """
                     INSERT INTO plan_outcomes (
                       plan_date, token, symbol, industry_label, rules_version, source, horizon,
+                      candidate_set, method,
                       base_close, base_open_next, fwd_date, fwd_close,
                       ret_from_close_pct, ret_from_open_pct,
                       bench_ret_from_close_pct, bench_ret_from_open_pct,
                       excess_from_close_pct, excess_from_open_pct,
                       status, missing_reason
                     ) VALUES %s
-                    ON CONFLICT (plan_date, token, horizon) DO UPDATE SET
+                    ON CONFLICT (plan_date, token, horizon, candidate_set) DO UPDATE SET
                       symbol = EXCLUDED.symbol,
                       industry_label = EXCLUDED.industry_label,
                       rules_version = EXCLUDED.rules_version,
                       source = CASE WHEN plan_outcomes.source = 'live' THEN 'live' ELSE EXCLUDED.source END,
+                      method = CASE WHEN plan_outcomes.source = 'live' THEN plan_outcomes.method ELSE EXCLUDED.method END,
                       base_close = EXCLUDED.base_close,
                       base_open_next = EXCLUDED.base_open_next,
                       fwd_date = EXCLUDED.fwd_date,
@@ -402,6 +511,7 @@ def compute_plan_outcomes(
                     ctrl_rows.append((
                         out["plan_date"], out["token"], out["symbol"], out["industry_label"],
                         item["group_name"], out["rules_version"], out["source"], out["horizon"],
+                        eff_method,
                         out["base_close"], out["base_open_next"], out["fwd_date"], out["fwd_close"],
                         out["ret_from_close_pct"], out["ret_from_open_pct"],
                         out["bench_ret_from_close_pct"], out["bench_ret_from_open_pct"],
@@ -415,6 +525,7 @@ def compute_plan_outcomes(
                     """
                     INSERT INTO plan_outcomes_control (
                       plan_date, token, symbol, industry_label, group_name, rules_version, source, horizon,
+                      method,
                       base_close, base_open_next, fwd_date, fwd_close,
                       ret_from_close_pct, ret_from_open_pct,
                       bench_ret_from_close_pct, bench_ret_from_open_pct,
@@ -426,6 +537,7 @@ def compute_plan_outcomes(
                       industry_label = EXCLUDED.industry_label,
                       rules_version = EXCLUDED.rules_version,
                       source = CASE WHEN plan_outcomes_control.source = 'live' THEN 'live' ELSE EXCLUDED.source END,
+                      method = CASE WHEN plan_outcomes_control.source = 'live' THEN plan_outcomes_control.method ELSE EXCLUDED.method END,
                       base_close = EXCLUDED.base_close,
                       base_open_next = EXCLUDED.base_open_next,
                       fwd_date = EXCLUDED.fwd_date,
@@ -488,13 +600,13 @@ def backfill_plans_and_outcomes(sessions: int = 120) -> Dict[str, Any]:
         build_daily_plan(
             d,
             generate_summary=False,
-            store_control=False,
+            store_control=True,
             allow_historical_metrics=True,
             prune_old=False,
         )
         built += 1
 
-    outcomes_res = compute_plan_outcomes(default_source="backfill")
+    outcomes_res = compute_plan_outcomes(default_source="backfill", candidate_set="filter_only", method="backfill_v1")
 
     if target_dates:
         from pipeline.plan_rules import PLAN_RETENTION_DAYS
