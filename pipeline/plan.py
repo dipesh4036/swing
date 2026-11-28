@@ -20,6 +20,7 @@ from pipeline.industry_top_groups import BANNED_NOTE_WORDS_RE, GEMINI_TIMEOUT_SE
 from pipeline.plan_rules import (
     BREAKOUT_SCREENERS,
     CANDIDATE_MAX_OFF_52W_HIGH_PCT,
+    CANDIDATE_MAX_PER_INDUSTRY,
     CANDIDATE_MAX_ROWS,
     CANDIDATE_MIN_RS_RATING,
     CANDIDATE_REQUIRED_STAGE,
@@ -152,16 +153,18 @@ def filter_and_order_candidates(
     stock_rows: List[Dict[str, Any]],
     top_industries: List[Dict[str, Any]],
     screener_hits_by_token: Dict[int, List[str]],
+    max_per_industry: int = CANDIDATE_MAX_PER_INDUSTRY,
+    hidden_by_industry_out: Optional[Dict[str, int]] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Deterministic candidate filter (Block 5):
     - In today's top-3 industries (industry level, deduplicated)
     - rs_rating >= 70
-    - stage == 2
+    - stage == 2 (close > SMA150 and 20D SMA150 slope >= 1%)
     - is_liquid == True
     - pct_from_52w_high <= 25.0
     Ordered by screener hit priority, rs_rank desc, industry pos asc, symbol asc.
-    Capped at 20 rows.
+    Capped at max_per_industry (5) per industry and 20 rows total.
     """
     pos_by_label = {str(t["label"]): int(t["pos"]) for t in top_industries}
     if not pos_by_label:
@@ -219,7 +222,22 @@ def filter_and_order_candidates(
 
     matched.sort(key=lambda r: (r["_prio"], -r["rs_rank"], r["_ind_pos"], r["symbol"]))
     total_matching = len(matched)
-    capped = matched[:CANDIDATE_MAX_ROWS]
+
+    total_per_ind: Dict[str, int] = {str(t["label"]): 0 for t in top_industries}
+    shown_per_ind: Dict[str, int] = {str(t["label"]): 0 for t in top_industries}
+    capped: List[Dict[str, Any]] = []
+
+    for item in matched:
+        ind_label = item["industry_label"]
+        total_per_ind[ind_label] = total_per_ind.get(ind_label, 0) + 1
+        if shown_per_ind.get(ind_label, 0) < max_per_industry and len(capped) < CANDIDATE_MAX_ROWS:
+            capped.append(item)
+            shown_per_ind[ind_label] = shown_per_ind.get(ind_label, 0) + 1
+
+    if hidden_by_industry_out is not None:
+        for lbl, tot in total_per_ind.items():
+            hidden_by_industry_out[lbl] = max(0, tot - shown_per_ind.get(lbl, 0))
+
     for idx, item in enumerate(capped, start=1):
         item["rank"] = idx
         item.pop("_prio", None)
@@ -532,22 +550,35 @@ def build_daily_plan(
                     "as_of": scr_dates[0] if scr_dates else None,
                 }
 
-            # 4. Top 3 Industries
+            # 4. Top 3 Industries (use plan_date, or latest available snapshot <= plan_date)
             cur.execute(
                 """
-                SELECT t.pos, t.group_id, g.label, g.sector_label, g.parent_id, g.full_path,
-                       t.r_1d, t.r_1w, t.r_1m, t.r_3m, t.worst_rank, t.mean_rank,
-                       t.med_1d, t.med_1w, t.med_1m, t.med_3m,
-                       t.n_20d_high, t.n_20d_low, t.pct_above_50dma, t.n_eligible,
-                       t.note_text, t.note_source
-                FROM industry_top_groups t
-                JOIN industry_groups g ON g.group_id = t.group_id
-                WHERE t.snapshot_date = %s AND t.level = %s AND t.universe = %s
-                ORDER BY t.pos ASC;
+                SELECT MAX(snapshot_date)::text
+                FROM industry_top_groups
+                WHERE snapshot_date <= %s AND level = %s AND universe = %s;
                 """,
                 (plan_date, CANDIDATE_TOP_INDUSTRY_LEVEL, CANDIDATE_TOP_INDUSTRY_UNIVERSE),
             )
-            tg_rows = cur.fetchall()
+            src_row = cur.fetchone()
+            industry_source_date = str(src_row[0]).split("T")[0] if src_row and src_row[0] else None
+
+            tg_rows = []
+            if industry_source_date:
+                cur.execute(
+                    """
+                    SELECT t.pos, t.group_id, g.label, g.sector_label, g.parent_id, g.full_path,
+                           t.r_1d, t.r_1w, t.r_1m, t.r_3m, t.worst_rank, t.mean_rank,
+                           t.med_1d, t.med_1w, t.med_1m, t.med_3m,
+                           t.n_20d_high, t.n_20d_low, t.pct_above_50dma, t.n_eligible,
+                           t.note_text, t.note_source
+                    FROM industry_top_groups t
+                    JOIN industry_groups g ON g.group_id = t.group_id
+                    WHERE t.snapshot_date = %s AND t.level = %s AND t.universe = %s
+                    ORDER BY t.pos ASC;
+                    """,
+                    (industry_source_date, CANDIDATE_TOP_INDUSTRY_LEVEL, CANDIDATE_TOP_INDUSTRY_UNIVERSE),
+                )
+                tg_rows = cur.fetchall()
             top_groups_list = [
                 {
                     "pos": int(r[0]),
@@ -572,13 +603,14 @@ def build_daily_plan(
                     "nEligible": int(r[19]),
                     "noteText": str(r[20]),
                     "noteSource": str(r[21]),
+                    "hiddenCandidates": 0,
                 }
                 for r in tg_rows
             ]
-            if top_groups_list:
+            if top_groups_list and industry_source_date:
                 top_industries_block = {
                     "status": "available",
-                    "as_of": plan_date,
+                    "as_of": industry_source_date,
                     "level": CANDIDATE_TOP_INDUSTRY_LEVEL,
                     "universe": CANDIDATE_TOP_INDUSTRY_UNIVERSE,
                     "groups": top_groups_list,
@@ -586,19 +618,18 @@ def build_daily_plan(
             else:
                 top_industries_block = {
                     "status": "unavailable",
-                    "reason": f"No industry_top_groups rows for {plan_date}",
+                    "reason": f"No industry_top_groups rows on or before {plan_date}",
                     "as_of": None,
                     "level": CANDIDATE_TOP_INDUSTRY_LEVEL,
                     "universe": CANDIDATE_TOP_INDUSTRY_UNIVERSE,
                     "groups": [],
                 }
 
-            # 5. Final Candidates (only when top_industries exist for plan_date)
+            # 5. Final Candidates (using same industry_source_date consistently)
             candidates: List[Dict[str, Any]] = []
             total_candidates = 0
-            if top_groups_list:
+            if top_groups_list and industry_source_date:
                 top_labels = [g["label"] for g in top_groups_list]
-                # Check if latest_industry_stock_metrics matches plan_date; otherwise compute from stock_candles + instruments <= plan_date
                 cur.execute(
                     """
                     SELECT m.token, m.symbol, m.industry, m.is_liquid, m.rs_rating,
@@ -612,13 +643,13 @@ def build_daily_plan(
                         LIMIT 1
                     ) AND m.industry = ANY(%s);
                     """,
-                    (plan_date, top_labels),
+                    (industry_source_date, top_labels),
                 )
                 m_rows = cur.fetchall()
                 stock_rows: List[Dict[str, Any]] = []
                 if m_rows:
                     toks = [int(r[0]) for r in m_rows]
-                    stages = _compute_stage2_tokens_at_date(cur, plan_date, toks)
+                    stages = _compute_stage2_tokens_at_date(cur, industry_source_date, toks)
                     for r in m_rows:
                         tok = int(r[0])
                         stock_rows.append({
@@ -643,7 +674,15 @@ def build_daily_plan(
                     (plan_date,),
                 )
                 hits_map = {int(r[0]): list(r[1]) for r in cur.fetchall()}
-                candidates, total_candidates = filter_and_order_candidates(stock_rows, top_groups_list, hits_map)
+                hidden_by_industry: Dict[str, int] = {}
+                candidates, total_candidates = filter_and_order_candidates(
+                    stock_rows,
+                    top_groups_list,
+                    hits_map,
+                    hidden_by_industry_out=hidden_by_industry,
+                )
+                for g in top_groups_list:
+                    g["hiddenCandidates"] = int(hidden_by_industry.get(g["label"], 0))
 
             summary_payload = {
                 "plan_date": plan_date,

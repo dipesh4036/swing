@@ -41,8 +41,9 @@ CANDIDATE_TOP_INDUSTRY_UNIVERSE = "all"  # Use 'all' universe Top 3 for candidat
 
 # 5. Final Candidate Filter & Ordering
 CANDIDATE_MIN_RS_RATING = 70.0  # Minimum RS rating >= 70 (leader tier)
-CANDIDATE_REQUIRED_STAGE = 2  # Weinstein Stage 2 (stage_2 == 1: close > sma150 and sma150 20D slope >= 1%)
+CANDIDATE_REQUIRED_STAGE = 2  # Stage 2 (our definition: close > SMA150 and 20D SMA150 slope >= 1%)
 CANDIDATE_MAX_OFF_52W_HIGH_PCT = 25.0  # Exclude stocks > 25% below 52-week high
+CANDIDATE_MAX_PER_INDUSTRY = 5  # Cap candidates per Top-3 industry at 5 so one group cannot dominate
 CANDIDATE_MAX_ROWS = 20  # Cap daily candidate list at 20 rows
 SCREENER_PRIORITY = {
     "stage2_breakout": 0,

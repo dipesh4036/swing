@@ -87,12 +87,17 @@ def test_candidate_filter_exclusions_ordering_and_cap():
         # Excluded: > 25% below 52W high
         {"token": 5, "symbol": "OUT_52W", "industry": "Healthcare Services", "is_liquid": True, "rs_rating": 95, "stage": 2, "pct_from_52w_high": 25.1, "close": 100, "ret_1d_pct": 1.0},
     ]
-    # Add 22 qualifying stocks
+    # Add 22 qualifying stocks distributed across 5 industries (so global cap of 20 triggers cleanly)
+    extra_top = top_ind + [
+        {"pos": 4, "label": "IT - Software"},
+        {"pos": 5, "label": "Auto Components"},
+    ]
+    ind_names = ["Personal Products", "Beverages", "Healthcare Services", "IT - Software", "Auto Components"]
     for i in range(22):
         stocks.append({
             "token": 100 + i,
             "symbol": f"CAND{i:02d}",
-            "industry": "Personal Products" if i == 0 else "Beverages",
+            "industry": ind_names[i % 5],
             "is_liquid": True,
             "rs_rating": 70.0 + i,
             "stage": 2,
@@ -103,13 +108,61 @@ def test_candidate_filter_exclusions_ordering_and_cap():
     # Give CAND00 a stage2_breakout hit so it must rank #1 despite lower RS than CAND21
     hits = {100: ["stage2_breakout"], 101: ["vcp"]}
 
-    capped, total = filter_and_order_candidates(stocks, top_ind, hits)
+    capped, total = filter_and_order_candidates(stocks, extra_top, hits)
     assert total == 22
     assert len(capped) == 20
     assert capped[0]["symbol"] == "CAND00"
     assert capped[1]["symbol"] == "CAND01"
     assert capped[2]["symbol"] == "CAND21"  # highest RS among non-hit rows
     assert all(s["symbol"] not in {c["symbol"] for c in capped} for s in stocks[:5])
+
+
+def test_per_industry_cap_hidden_count_and_ordering():
+    top_ind = [
+        {"pos": 1, "label": "Healthcare Services"},
+        {"pos": 2, "label": "Personal Products"},
+        {"pos": 3, "label": "Beverages"},
+    ]
+    stocks = []
+    # 8 qualifying stocks in Healthcare Services (cap = 5 -> 3 hidden)
+    for i in range(8):
+        stocks.append({
+            "token": 200 + i,
+            "symbol": f"HC{i:02d}",
+            "industry": "Healthcare Services",
+            "is_liquid": True,
+            "rs_rating": 75.0 + i,
+            "stage": 2,
+            "pct_from_52w_high": 8.0,
+            "close": 100.0 + i,
+            "ret_1d_pct": 1.0,
+        })
+    # 3 qualifying stocks in Personal Products (< 5 -> 0 hidden)
+    for i in range(3):
+        stocks.append({
+            "token": 300 + i,
+            "symbol": f"PP{i:02d}",
+            "industry": "Personal Products",
+            "is_liquid": True,
+            "rs_rating": 80.0 + i,
+            "stage": 2,
+            "pct_from_52w_high": 6.0,
+            "close": 200.0 + i,
+            "ret_1d_pct": 2.0,
+        })
+    # Give HC00 a vcp hit so it beats higher-RS HC07 inside the group
+    hits = {200: ["vcp"]}
+    hidden = {}
+    capped, total = filter_and_order_candidates(stocks, top_ind, hits, hidden_by_industry_out=hidden)
+    assert total == 11
+    assert len(capped) == 8  # 5 from Healthcare Services + 3 from Personal Products
+    hc_shown = [c for c in capped if c["industry_label"] == "Healthcare Services"]
+    pp_shown = [c for c in capped if c["industry_label"] == "Personal Products"]
+    assert [c["symbol"] for c in hc_shown] == ["HC00", "HC07", "HC06", "HC05", "HC04"]
+    assert [c["symbol"] for c in pp_shown] == ["PP02", "PP01", "PP00"]
+    assert hidden["Healthcare Services"] == 3
+    assert hidden["Personal Products"] == 0
+    assert hidden["Beverages"] == 0
 
 
 def test_plan_summary_gemini_and_fallbacks(monkeypatch):
