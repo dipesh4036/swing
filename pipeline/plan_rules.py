@@ -58,3 +58,17 @@ BANNED_ADVICE_WORDS = (
     "buy", "sell", "target", "stop", "entry", "signal", "score",
     "probability", "guaranteed", "recommend", "should", "invest", "expect", "forecast",
 )  # Never emit advisory, predictive, or scoring language
+
+# 7. Track Record & Outcomes (Tab 5)
+OUTCOME_HORIZONS = (1, 5, 10, 20)  # Trading sessions after plan_date
+OUTCOME_RETENTION_DAYS = 400  # Keep outcomes 400 calendar days (longer than 90-day candidates)
+OUTCOME_BENCHMARK_INDEX = "NIFTY 500"
+OUTCOME_SPLIT_JUMP_PCT = 40.0  # Flag unadjusted 1-day jump > ±40% as missing (corporate action)
+CONTROL_GROUP_NAME = "same_filter_any_industry"
+CONTROL_MAX_ROWS = 20
+CONTROL_MAX_PER_INDUSTRY = 5
+DEDUPE_WINDOW_SESSIONS = 10  # First-appearance dedupe rolling window (trading sessions)
+TELEGRAM_SUMMARY_MAX_CHARS = 900  # Plain-text daily Telegram summary cap
+TRACK_RECORD_BANNED_WORDS = BANNED_ADVICE_WORDS + (
+    "works", "wins", "win rate", "accuracy", "edge", "alpha", "profitable", "outperforms", "beats the market",
+)

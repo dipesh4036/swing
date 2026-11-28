@@ -395,11 +395,107 @@ def _compute_stage2_tokens_at_date(cur, target_date: str, candidate_tokens: List
     return stages
 
 
+def _compute_historical_stock_metrics(
+    cur,
+    as_of_date: str,
+    industry_filter: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Compute liquid stock metrics strictly from stock_candles <= as_of_date (zero look-ahead)
+    for historical backfill dates where latest_industry_stock_metrics is absent.
+    """
+    cur.execute(
+        """
+        WITH dates AS (
+            SELECT trade_date FROM trading_days WHERE trade_date <= %s ORDER BY trade_date DESC LIMIT 255
+        ),
+        bounds AS (SELECT MIN(trade_date) AS min_d, MAX(trade_date) AS max_d FROM dates)
+        SELECT c.token, i.symbol, i.industry, c.trade_date::text, c.high::float, c.close::float
+        FROM stock_candles c
+        JOIN instruments i ON i.token = c.token
+        CROSS JOIN bounds b
+        WHERE i.exchange = 'NSE' AND i.instrument_type = 'EQ' AND COALESCE(i.is_active, TRUE) = TRUE
+          AND COALESCE(i.is_traded, TRUE) = TRUE
+          AND c.trade_date >= b.min_d AND c.trade_date <= b.max_d
+        ORDER BY c.token ASC, c.trade_date ASC;
+        """,
+        (as_of_date,),
+    )
+    by_tok: Dict[int, Dict[str, Any]] = {}
+    for tok, sym, ind, td, hi, cl in cur.fetchall():
+        t = int(tok)
+        entry = by_tok.setdefault(t, {"token": t, "symbol": sym, "industry": ind, "dates": [], "highs": [], "closes": []})
+        entry["dates"].append(str(td).split("T")[0])
+        entry["highs"].append(float(hi) if hi is not None else float(cl))
+        entry["closes"].append(float(cl))
+
+    # Weighted 3M/6M/9M/1Y RS score across all liquid stocks for percentile rank
+    raw_scores: List[Tuple[int, float]] = []
+    metrics_by_tok: Dict[int, Dict[str, Any]] = {}
+    for t, entry in by_tok.items():
+        closes = entry["closes"]
+        highs = entry["highs"]
+        dates = entry["dates"]
+        if not closes or dates[-1] != as_of_date:
+            continue
+        n = len(closes)
+        c0 = closes[-1]
+        if c0 <= 0:
+            continue
+        r63 = (c0 / closes[max(0, n - 64)] - 1.0) if n > 1 else 0.0
+        r126 = (c0 / closes[max(0, n - 127)] - 1.0) if n > 1 else 0.0
+        r189 = (c0 / closes[max(0, n - 190)] - 1.0) if n > 1 else 0.0
+        r252 = (c0 / closes[max(0, n - 253)] - 1.0) if n > 1 else 0.0
+        score = 0.4 * r63 + 0.2 * r126 + 0.2 * r189 + 0.2 * r252
+        raw_scores.append((t, score))
+
+        hi252 = max(highs[-252:])
+        off_hi = ((hi252 - c0) / hi252) * 100.0 if hi252 > 0 else 100.0
+        ret1d = ((c0 / closes[-2]) - 1.0) * 100.0 if n >= 2 and closes[-2] > 0 else None
+
+        stage = 0
+        if n >= 170:
+            arr = np.array(closes, dtype=float)
+            sma150_now = float(np.mean(arr[-150:]))
+            sma150_prev = float(np.mean(arr[-170:-20]))
+            if sma150_prev > 0:
+                slope = ((sma150_now - sma150_prev) / sma150_prev) * 100.0
+                if c0 > sma150_now and slope >= 1.0:
+                    stage = 2
+
+        metrics_by_tok[t] = {
+            "token": t,
+            "symbol": entry["symbol"],
+            "industry": entry["industry"],
+            "is_liquid": True,
+            "pct_from_52w_high": off_hi,
+            "close": c0,
+            "ret_1d_pct": ret1d,
+            "stage": stage,
+            "rs_rating": 0.0,
+        }
+
+    if raw_scores:
+        raw_scores.sort(key=lambda x: x[1])
+        total_n = len(raw_scores)
+        for idx, (t, _) in enumerate(raw_scores):
+            pct = round((idx / max(1, total_n - 1)) * 99.0, 2) if total_n > 1 else 50.0
+            metrics_by_tok[t]["rs_rating"] = pct
+
+    if industry_filter is not None:
+        allowed = set(industry_filter)
+        return [m for m in metrics_by_tok.values() if m["industry"] in allowed]
+    return list(metrics_by_tok.values())
+
+
 def build_daily_plan(
     trade_date: Optional[str] = None,
     conn=None,
     generate_summary: bool = True,
     http_post: Optional[Callable[..., Any]] = None,
+    store_control: bool = False,
+    allow_historical_metrics: bool = False,
+    prune_old: bool = True,
 ) -> Dict[str, Any]:
     """
     Build and store daily_plan + daily_plan_candidates for `trade_date` (or latest market breadth date).
@@ -628,6 +724,7 @@ def build_daily_plan(
             # 5. Final Candidates (using same industry_source_date consistently)
             candidates: List[Dict[str, Any]] = []
             total_candidates = 0
+            control_rows: List[Dict[str, Any]] = []
             if top_groups_list and industry_source_date:
                 top_labels = [g["label"] for g in top_groups_list]
                 cur.execute(
@@ -641,18 +738,18 @@ def build_daily_plan(
                           AND EXISTS (SELECT 1 FROM latest_industry_stock_metrics m2 WHERE m2.snapshot_id = s.snapshot_id)
                         ORDER BY s.completed_at DESC
                         LIMIT 1
-                    ) AND m.industry = ANY(%s);
+                    );
                     """,
-                    (industry_source_date, top_labels),
+                    (industry_source_date,),
                 )
                 m_rows = cur.fetchall()
-                stock_rows: List[Dict[str, Any]] = []
+                all_stock_rows: List[Dict[str, Any]] = []
                 if m_rows:
                     toks = [int(r[0]) for r in m_rows]
                     stages = _compute_stage2_tokens_at_date(cur, industry_source_date, toks)
                     for r in m_rows:
                         tok = int(r[0])
-                        stock_rows.append({
+                        all_stock_rows.append({
                             "token": tok,
                             "symbol": r[1],
                             "industry": r[2],
@@ -663,6 +760,10 @@ def build_daily_plan(
                             "ret_1d_pct": float(r[7]) if r[7] is not None else None,
                             "stage": stages.get(tok, 0),
                         })
+                elif allow_historical_metrics:
+                    all_stock_rows = _compute_historical_stock_metrics(cur, industry_source_date, industry_filter=top_labels)
+
+                stock_rows = [s for s in all_stock_rows if s.get("industry") in top_labels]
 
                 cur.execute(
                     """
@@ -683,6 +784,10 @@ def build_daily_plan(
                 )
                 for g in top_groups_list:
                     g["hiddenCandidates"] = int(hidden_by_industry.get(g["label"], 0))
+
+                if store_control and all_stock_rows:
+                    from pipeline.plan_outcomes import select_control_candidates
+                    control_rows = select_control_candidates(all_stock_rows, top_groups_list, plan_date)
 
             summary_payload = {
                 "plan_date": plan_date,
@@ -745,10 +850,29 @@ def build_daily_plan(
                         for c in candidates
                     ],
                 )
-            cur.execute(
-                "DELETE FROM daily_plan WHERE plan_date < (%s::date - (%s || ' days')::interval);",
-                (plan_date, PLAN_RETENTION_DAYS),
-            )
+            if store_control:
+                cur.execute("DELETE FROM plan_control WHERE plan_date = %s;", (plan_date,))
+                if control_rows:
+                    execute_values(
+                        cur,
+                        """
+                        INSERT INTO plan_control (
+                            plan_date, token, symbol, industry_label, group_name, rules_version
+                        ) VALUES %s;
+                        """,
+                        [
+                            (
+                                plan_date, c["token"], c["symbol"], c["industry_label"],
+                                c["group_name"], PLAN_RULES_VERSION,
+                            )
+                            for c in control_rows
+                        ],
+                    )
+            if prune_old:
+                cur.execute(
+                    "DELETE FROM daily_plan WHERE plan_date < (%s::date - (%s || ' days')::interval);",
+                    (plan_date, PLAN_RETENTION_DAYS),
+                )
         conn.commit()
         logger.info(
             "Built daily_plan for %s: market=%s, leader=%s, candidates=%d/%d, summary=%s",

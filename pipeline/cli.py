@@ -116,6 +116,12 @@ def main():
     plan_backfill_parser = subparsers.add_parser("plan-backfill", help="Backfill Daily Plan for trailing trading dates")
     plan_backfill_parser.add_argument("--days", type=int, default=30, help="Number of trailing trading dates to backfill")
 
+    plan_outcomes_parser = subparsers.add_parser("plan-outcomes", help="Compute matured Track Record outcomes")
+    plan_outcomes_parser.add_argument("--as-of", dest="as_of", default=None, help="Optional cutoff date YYYY-MM-DD")
+
+    plan_outcomes_bf_parser = subparsers.add_parser("plan-outcomes-backfill", help="Backfill Daily Plan and Track Record outcomes")
+    plan_outcomes_bf_parser.add_argument("--sessions", type=int, default=120, help="Trailing trading sessions to backfill")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -395,7 +401,7 @@ def main():
         logger.info("Executing 'plan-build' command...")
         try:
             from pipeline.plan import build_daily_plan
-            res = build_daily_plan(trade_date=args.date)
+            res = build_daily_plan(trade_date=args.date, store_control=True)
             print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback
@@ -407,6 +413,28 @@ def main():
         try:
             from pipeline.plan import backfill_daily_plan
             res = backfill_daily_plan(days=args.days)
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "plan-outcomes":
+        logger.info("Executing 'plan-outcomes' command...")
+        try:
+            from pipeline.plan_outcomes import compute_plan_outcomes
+            res = compute_plan_outcomes(as_of=args.as_of, default_source="live")
+            print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "plan-outcomes-backfill":
+        logger.info("Executing 'plan-outcomes-backfill' command...")
+        try:
+            from pipeline.plan_outcomes import backfill_plans_and_outcomes
+            res = backfill_plans_and_outcomes(sessions=args.sessions)
             print(json.dumps(res, indent=2))
         except Exception as e:
             import traceback
