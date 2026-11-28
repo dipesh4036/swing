@@ -446,10 +446,28 @@ def run_daily_workflow(
     try:
         from pipeline.plan import build_daily_plan
         logger.info("Step 8b: build_daily_plan")
-        res8b = build_daily_plan()
+        res8b = build_daily_plan(store_control=True)
         logger.info(f"Step 8b complete: daily_plan built ({res8b}).")
     except Exception as pe:
         logger.warning(f"Step 8b (build_daily_plan) failed, continuing non-fatally: {pe}")
+
+    # Step 8c. compute_plan_outcomes (non-fatal)
+    try:
+        from pipeline.plan_outcomes import compute_plan_outcomes
+        logger.info("Step 8c: compute_plan_outcomes")
+        res8c = compute_plan_outcomes(default_source="live")
+        logger.info(f"Step 8c complete: plan_outcomes updated ({res8c}).")
+    except Exception as oe:
+        logger.warning(f"Step 8c (compute_plan_outcomes) failed, continuing non-fatally: {oe}")
+
+    # Step 8d. send_daily_plan_telegram (non-fatal, idempotent)
+    try:
+        from pipeline.plan_notify import send_daily_plan_telegram
+        logger.info("Step 8d: send_daily_plan_telegram")
+        res8d = send_daily_plan_telegram()
+        logger.info(f"Step 8d complete: telegram summary ({res8d}).")
+    except Exception as te:
+        logger.warning(f"Step 8d (send_daily_plan_telegram) failed, continuing non-fatally: {te}")
 
     # 9. trim (LAST step, executed only after all prior steps succeed)
     logger.info(f"Step 9/9: trim (retention={RETENTION_YEARS}y)")
