@@ -294,7 +294,13 @@ export default function GroupDetails({
                   <tr>
                     <th onClick={() => handleSort("symbol")} className="px-3 py-2 text-left cursor-pointer hover:text-text">Symbol</th>
                     <th className="px-3 py-2 text-right">Close</th>
-                    <th onClick={() => handleSort("rs_sts")} className="px-3 py-2 text-right cursor-pointer hover:text-text">RS_STS</th>
+                    <th
+                      onClick={() => handleSort("rs_sts")}
+                      title="RS-STS: where this group's current relative strength stands among its own last 26 sessions (0–100, steps of 4)."
+                      className="px-3 py-2 text-right cursor-pointer hover:text-text"
+                    >
+                      RS_STS
+                    </th>
                     <th onClick={() => handleSort("rs_rating")} className="px-3 py-2 text-right cursor-pointer hover:text-text">RS Rank</th>
                     <th onClick={() => handleSort("ret_1d")} className="px-3 py-2 text-right cursor-pointer hover:text-text">1D</th>
                     <th onClick={() => handleSort("ret_1w")} className="px-3 py-2 text-right cursor-pointer hover:text-text">1W</th>

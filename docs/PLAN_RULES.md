@@ -1,6 +1,8 @@
-# Daily Plan Rules (`plan_v2`)
+# Daily Plan Rules (`plan_v3`)
 
 Single source of truth: [`pipeline/plan_rules.py`](../pipeline/plan_rules.py). Every threshold is deterministic; no AI is used in selection or ordering.
+
+> **v3 Change (`plan_v3`):** Added rupee-turnover liquidity gate in `pipeline/liquidity.py` (`TURNOVER_MEDIAN20_MIN = 5_000_000.0`, i.e., 20-session median of `close × volume >= ₹5 crore`), in addition to `close >= ₹20` and `50-session average volume >= 25,000`. Existing `plan_v1` and `plan_v2` rows remain untouched and grouped by `rules_version`.
 
 > **v2 Change (`plan_v2`):** Added Top-3 cut-off `cutoff = max(5, ceil(0.20 * N))` (`TOP_GROUP_CUTOFF_MIN = 5`, `TOP_GROUP_CUTOFF_FRACTION = 0.20`, where `N` = eligible groups with `>= 5` stocks and non-null 1D/1W/1M/3M medians). In `plan_v1`, pure minimax could pick groups ranked `#25`/`#26` on a timeframe. Groups qualify only if `worst_rank <= cutoff`; non-qualifying groups are never used for Daily Plan candidates. Existing `plan_v1` rows and Track Record outcomes remain untouched and grouped by `rules_version`.
 

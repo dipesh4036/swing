@@ -352,6 +352,11 @@ export default function TrackRecordView() {
                         <td className="px-3 py-2.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-[13px] font-semibold text-text">{row.label}</span>
+                            {row.key === "all_liquid" && (
+                              <span className="px-2 py-0.5 rounded bg-bg-secondary border border-border text-xs text-text-secondary">
+                                per plan-date median
+                              </span>
+                            )}
                             {(row.key === "control" || row.key === "control_top_any") && row.n_rows === 0 && (
                               <span className="px-2 py-0.5 rounded bg-bg-secondary border border-border text-xs text-text-secondary">
                                 {row.starts_at ? `starts ${row.starts_at}` : "starts from next live run"}

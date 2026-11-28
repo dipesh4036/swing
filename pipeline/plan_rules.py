@@ -3,7 +3,7 @@ Single-source rule thresholds and constants for Tab 4: Daily Plan.
 Mirrored in docs/PLAN_RULES.md. Do not scatter thresholds elsewhere.
 """
 
-PLAN_RULES_VERSION = "plan_v2"
+PLAN_RULES_VERSION = "plan_v3"
 
 # Retention window for stored daily_plan and daily_plan_candidates rows
 PLAN_RETENTION_DAYS = 90  # Keep 90 calendar days for historical plan review
@@ -49,6 +49,7 @@ CANDIDATE_MAX_PER_INDUSTRY = 5  # Cap candidates per Top-3 industry at 5 so one 
 CANDIDATE_MAX_ROWS = 20  # Cap daily candidate list at 20 rows
 LIQUID_PRICE_MIN = 20.0  # Minimum close price (Rs) for liquid universe (shared via pipeline/liquidity.py)
 LIQUID_VOL_SMA50_MIN = 25000.0  # Minimum 50-session average volume for liquid universe
+LIQUID_TURNOVER_MEDIAN20_MIN = 5_000_000.0  # plan_v3: 20-session median rupee turnover (close×vol) >= ₹5 crore
 SCREENER_PRIORITY = {
     "stage2_breakout": 0,
     "vcp": 1,

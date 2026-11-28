@@ -85,11 +85,12 @@ export default function RankingTable({
 }: RankingTableProps) {
   const canDrill = level !== "basic_industry" && Boolean(onDrillDown);
 
-  const renderHeader = (key: string, label: string, align = "right", extraClass = "") => {
+  const renderHeader = (key: string, label: string, align = "right", extraClass = "", title?: string) => {
     const active = sortBy === key;
     return (
       <th
         key={key}
+        title={title}
         className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.04em] text-text-secondary whitespace-nowrap cursor-pointer select-none hover:text-text ${
           align === "left" ? "text-left" : "text-right"
         } ${extraClass}`}
@@ -143,7 +144,13 @@ export default function RankingTable({
                 {renderHeader(`median_${period}`, `MED (${period.toUpperCase()})`)}
                 {renderHeader("n_20d_high", "20D H/L")}
                 {renderHeader("pct_above_50dma", ">50 SMA")}
-                {renderHeader("rs_sts", "RS-STS")}
+                {renderHeader(
+                  "rs_sts",
+                  "RS-STS",
+                  "right",
+                  "",
+                  "RS-STS: where this group's current relative strength stands among its own last 26 sessions (0–100, steps of 4)."
+                )}
                 {moreColumns && (
                   <>
                     {renderHeader("median_1d", "1D")}

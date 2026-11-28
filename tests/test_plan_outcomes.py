@@ -100,3 +100,40 @@ def test_control_selection_reproducible_and_capped():
     for x in c1:
         by_ind[x["industry_label"]] = by_ind.get(x["industry_label"], 0) + 1
     assert all(cnt <= 5 for cnt in by_ind.values())
+
+
+def test_every_matured_control_row_has_outcome():
+    from pipeline.plan_rules import OUTCOME_HORIZONS
+
+    trading_days = [f"2026-11-{d:02d}" for d in range(1, 25)]  # 24 sessions
+    plan_date = trading_days[0]
+    candles = {d: {"open": 100.0 + i, "close": 100.5 + i} for i, d in enumerate(trading_days)}
+    bench = {d: {"open": 1000.0 + i, "close": 1001.0 + i} for i, d in enumerate(trading_days)}
+
+    ctrl_item = {
+        "plan_date": plan_date,
+        "token": 999,
+        "symbol": "CTRL1",
+        "industry_label": "OtherA",
+        "group_name": "same_filter_any_industry",
+        "rules_version": "plan_v2",
+    }
+
+    outcomes = []
+    for h in OUTCOME_HORIZONS:
+        out = compute_outcome_row(
+            ctrl_item["plan_date"],
+            ctrl_item["token"],
+            ctrl_item["symbol"],
+            ctrl_item["industry_label"],
+            ctrl_item["rules_version"],
+            "backfill",
+            h,
+            trading_days,
+            candles,
+            bench,
+        )
+        assert out is not None, f"Expected outcome row for matured horizon h={h}"
+        outcomes.append(out)
+    assert len(outcomes) == len(OUTCOME_HORIZONS)
+    assert all(o["status"] == "matured" for o in outcomes)

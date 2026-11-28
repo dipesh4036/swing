@@ -789,7 +789,11 @@ def build_daily_plan(
                             "stage": stages.get(tok, 0),
                         })
                 elif allow_historical_metrics:
-                    all_stock_rows = _compute_historical_stock_metrics(cur, industry_source_date, industry_filter=top_labels or None)
+                    # D6.2: when storing control, fetch all stocks (no industry_filter)
+                    # so select_control_candidates can find stocks *outside* top industries.
+                    # Without store_control, restrict to top_labels for speed.
+                    hist_filter = None if store_control else (top_labels or None)
+                    all_stock_rows = _compute_historical_stock_metrics(cur, industry_source_date, industry_filter=hist_filter)
 
                 stock_rows = [s for s in all_stock_rows if s.get("industry") in top_labels]
 
@@ -915,6 +919,12 @@ def build_daily_plan(
                     (plan_date, PLAN_RETENTION_DAYS),
                 )
         conn.commit()
+        if not allow_historical_metrics and not os.environ.get("SKIP_BACKFILL_FIDELITY"):
+            try:
+                from pipeline.data_audit import run_backfill_fidelity_check
+                run_backfill_fidelity_check(plan_date, conn=conn, run_kind="ci")
+            except Exception as exc:
+                logger.warning("Backfill fidelity check skipped/failed for %s: %s", plan_date, exc)
         logger.info(
             "Built daily_plan for %s: market=%s, leader=%s, candidates=%d/%d, summary=%s",
             plan_date,
