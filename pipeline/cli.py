@@ -122,6 +122,9 @@ def main():
     plan_outcomes_bf_parser = subparsers.add_parser("plan-outcomes-backfill", help="Backfill Daily Plan and Track Record outcomes")
     plan_outcomes_bf_parser.add_argument("--sessions", type=int, default=120, help="Trailing trading sessions to backfill")
 
+    data_audit_parser = subparsers.add_parser("data-audit", help="Run Data Trust verification checks and record to data_audit")
+    data_audit_parser.add_argument("--manual", action="store_true", help="Run manual Angel + D3 NSE classification checks")
+
     args = parser.parse_args()
 
     if args.command == "trim":
@@ -436,6 +439,17 @@ def main():
             from pipeline.plan_outcomes import backfill_plans_and_outcomes
             res = backfill_plans_and_outcomes(sessions=args.sessions)
             print(json.dumps(res, indent=2))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "data-audit":
+        logger.info("Executing 'data-audit' command...")
+        try:
+            from pipeline.data_audit import run_data_audit_cli
+            rc = run_data_audit_cli(manual=args.manual)
+            sys.exit(rc)
         except Exception as e:
             import traceback
             traceback.print_exc()

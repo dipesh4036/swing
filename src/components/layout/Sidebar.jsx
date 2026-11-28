@@ -19,6 +19,7 @@ import {
   X,
   Radio,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 
 import ThemeToggle from "@/components/shared/ThemeToggle";
@@ -60,6 +61,13 @@ const NAV_ITEMS = [
         name: "Track Record",
         href: "/track-record",
         icon: TrendingUp,
+        active: true,
+      },
+      {
+        id: "data-trust",
+        name: "Data Trust",
+        href: "/data-trust",
+        icon: ShieldCheck,
         active: true,
       },
     ],

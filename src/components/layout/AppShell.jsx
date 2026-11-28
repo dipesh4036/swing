@@ -1,14 +1,36 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import Sidebar from "./Sidebar";
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, ShieldCheck, ShieldAlert } from "lucide-react";
 import ThemeToggle from "@/components/shared/ThemeToggle";
 import GlobalSearchPalette from "@/components/shared/GlobalSearchPalette";
 
 export function AppShell({ children }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [trustChip, setTrustChip] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/data-trust?chip=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.chip) setTrustChip(d.chip);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const chipStyle =
+    trustChip?.status === "passing"
+      ? "bg-bullish-bg border-bullish-border text-bullish"
+      : trustChip?.status === "failing"
+        ? "bg-bearish-bg border-bearish-border text-bearish"
+        : "bg-bg-secondary border-border text-text-secondary";
 
   return (
     <div className="min-h-screen bg-bg text-text antialiased flex w-full transition-colors duration-150">
@@ -61,7 +83,18 @@ export function AppShell({ children }) {
         </header>
 
         {/* Desktop Search Bar Strip */}
-        <div className="hidden lg:flex items-center justify-end px-6 py-2 border-b border-border bg-surface sticky top-0 z-30">
+        <div className="hidden lg:flex items-center justify-end gap-2.5 px-6 py-2 border-b border-border bg-surface sticky top-0 z-30">
+          <Link
+            href="/data-trust"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors hover:opacity-90 ${chipStyle}`}
+          >
+            {trustChip?.status === "passing" ? (
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            ) : (
+              <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span>{trustChip?.label ?? "Data trust"}</span>
+          </Link>
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
