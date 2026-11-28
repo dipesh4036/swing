@@ -6,6 +6,8 @@ export const VALID_HORIZONS = [1, 5, 10, 20] as const;
 export const VALID_REFS = ["close", "open"] as const;
 export const VALID_SOURCES = ["live", "all"] as const;
 export const VALID_DEDUPES = ["first", "all"] as const;
+export const VALID_CANDIDATE_SETS = ["filter_only", "displayed"] as const;
+export const VALID_SUPERSEDED = ["0", "1"] as const;
 export const DEDUPE_WINDOW_SESSIONS = 10;
 
 export interface TrackRecordParams {
@@ -13,6 +15,8 @@ export interface TrackRecordParams {
   ref: "close" | "open";
   source: "live" | "all";
   dedupe: "first" | "all";
+  candidate_set: "filter_only" | "displayed";
+  include_superseded: "0" | "1";
   version: string;
 }
 
@@ -44,7 +48,17 @@ export function parseTrackRecordParams(searchParams: URLSearchParams): {
     return { ok: false, error: `Invalid dedupe '${dedupeRaw}'. Allowed: first, all.` };
   }
 
-  const versionRaw = searchParams.get("version") ?? "plan_v1";
+  const candSetRaw = searchParams.get("candidate_set") ?? "filter_only";
+  if (!VALID_CANDIDATE_SETS.includes(candSetRaw as "filter_only" | "displayed")) {
+    return { ok: false, error: `Invalid candidate_set '${candSetRaw}'. Allowed: filter_only, displayed.` };
+  }
+
+  const supRaw = searchParams.get("include_superseded") ?? "0";
+  if (!VALID_SUPERSEDED.includes(supRaw as "0" | "1")) {
+    return { ok: false, error: `Invalid include_superseded '${supRaw}'. Allowed: 0, 1.` };
+  }
+
+  const versionRaw = searchParams.get("version") ?? "plan_v2";
   if (!/^[a-zA-Z0-9_-]{1,32}$/.test(versionRaw)) {
     return { ok: false, error: "Invalid version parameter." };
   }
@@ -56,6 +70,8 @@ export function parseTrackRecordParams(searchParams: URLSearchParams): {
       ref: refRaw as "close" | "open",
       source: sourceRaw as "live" | "all",
       dedupe: dedupeRaw as "first" | "all",
+      candidate_set: candSetRaw as "filter_only" | "displayed",
+      include_superseded: supRaw as "0" | "1",
       version: versionRaw,
     },
   };
@@ -79,7 +95,7 @@ export interface OutcomeRow {
 }
 
 export interface GroupSummaryStats {
-  key: "candidates" | "control" | "all_liquid";
+  key: "candidates" | "control" | "control_top_any" | "all_liquid" | "cap_nifty100" | "cap_midcap150" | "cap_smallcap250" | "cap_outside";
   label: string;
   n_rows: number;
   n_unique_stocks: number;
@@ -134,7 +150,7 @@ export function dedupeFirstInWindow<T extends { plan_date: string; token: number
 }
 
 export function summarizeGroup(
-  key: "candidates" | "control",
+  key: GroupSummaryStats["key"],
   label: string,
   rows: OutcomeRow[],
   ref: "close" | "open",
@@ -219,9 +235,9 @@ export async function getTrackRecordData(
   params: TrackRecordParams,
   q: QueryFn = queryWithRetry
 ) {
-  const { horizon, ref, source, dedupe, version } = params;
+  const { horizon, ref, source, dedupe, candidate_set, include_superseded, version } = params;
 
-  const [tdRes, covRes, candRes, ctrlRes, ctrlStartRes, recentPlansRes] = await Promise.all([
+  const [tdRes, covRes, candRes, ctrlRes, ctrlStartRes, recentPlansRes, capRes] = await Promise.all([
     q(`SELECT trade_date::text AS d FROM trading_days ORDER BY trade_date ASC;`),
     q(
       `
@@ -235,9 +251,11 @@ export async function getTrackRecordData(
         COUNT(*) FILTER (WHERE horizon = 20 AND status = 'matured') AS h20,
         MAX(fwd_date)::text AS max_fwd_date
       FROM plan_outcomes
-      WHERE rules_version = $1;
+      WHERE rules_version = $1
+        AND candidate_set = $2
+        AND ($3 = '1' OR COALESCE(method, '') <> 'backfill_v0');
       `,
-      [version]
+      [version, candidate_set, include_superseded]
     ),
     q(
       `
@@ -250,13 +268,15 @@ export async function getTrackRecordData(
       WHERE rules_version = $1
         AND horizon = $2
         AND ($3 = 'all' OR source = $3)
+        AND candidate_set = $4
+        AND ($5 = '1' OR COALESCE(method, '') <> 'backfill_v0')
       ORDER BY plan_date ASC, token ASC;
       `,
-      [version, horizon, source]
+      [version, horizon, source, candidate_set, include_superseded]
     ),
     q(
       `
-      SELECT plan_date::text, token, symbol, industry_label, source, horizon,
+      SELECT plan_date::text, token, symbol, industry_label, source, horizon, group_name,
              ret_from_close_pct::float, ret_from_open_pct::float,
              bench_ret_from_close_pct::float, bench_ret_from_open_pct::float,
              excess_from_close_pct::float, excess_from_open_pct::float,
@@ -265,9 +285,10 @@ export async function getTrackRecordData(
       WHERE rules_version = $1
         AND horizon = $2
         AND ($3 = 'all' OR source = $3)
+        AND ($4 = '1' OR COALESCE(method, '') <> 'backfill_v0')
       ORDER BY plan_date ASC, token ASC;
       `,
-      [version, horizon, source]
+      [version, horizon, source, include_superseded]
     ),
     q(`SELECT MIN(plan_date)::text AS d FROM plan_control;`),
     q(
@@ -276,6 +297,8 @@ export async function getTrackRecordData(
         SELECT DISTINCT plan_date
         FROM plan_outcomes
         WHERE rules_version = $1
+          AND candidate_set = $2
+          AND ($3 = '1' OR COALESCE(method, '') <> 'backfill_v0')
         ORDER BY plan_date DESC
         LIMIT 30
       )
@@ -286,9 +309,19 @@ export async function getTrackRecordData(
       JOIN recent_dates rd ON rd.plan_date = o.plan_date
       LEFT JOIN daily_plan_candidates c ON c.plan_date = o.plan_date AND c.token = o.token
       WHERE o.rules_version = $1
+        AND o.candidate_set = $2
+        AND ($3 = '1' OR COALESCE(o.method, '') <> 'backfill_v0')
       ORDER BY o.plan_date DESC, COALESCE(c.rank, 999) ASC, o.symbol ASC, o.horizon ASC;
       `,
-      [version]
+      [version, candidate_set, include_superseded]
+    ),
+    q(
+      `
+      SELECT symbol, index_name
+      FROM index_constituents
+      WHERE index_name IN ('nifty100', 'nifty_midcap150', 'nifty_smallcap250')
+        AND COALESCE(is_active, TRUE) = TRUE;
+      `
     ),
   ]);
 
@@ -314,14 +347,63 @@ export async function getTrackRecordData(
   });
 
   const rawCand = candRes.rows.map(mapOutcomeRow);
-  const rawCtrl = ctrlRes.rows.map(mapOutcomeRow);
+  const rawCtrlSame = ctrlRes.rows
+    .filter((r) => !r.group_name || r.group_name === "same_filter_any_industry")
+    .map(mapOutcomeRow);
+  const rawCtrlTopAny = ctrlRes.rows
+    .filter((r) => r.group_name === "top_industries_any_stock")
+    .map(mapOutcomeRow);
 
   const candFiltered = dedupe === "first" ? dedupeFirstInWindow(rawCand, tdIdx) : rawCand;
-  const ctrlFiltered = dedupe === "first" ? dedupeFirstInWindow(rawCtrl, tdIdx) : rawCtrl;
+  const ctrlSameFiltered = dedupe === "first" ? dedupeFirstInWindow(rawCtrlSame, tdIdx) : rawCtrlSame;
+  const ctrlTopAnyFiltered = dedupe === "first" ? dedupeFirstInWindow(rawCtrlTopAny, tdIdx) : rawCtrlTopAny;
 
   const candSummary = summarizeGroup("candidates", "Plan candidates", candFiltered, ref);
   const ctrlStartDate = ctrlStartRes.rows[0]?.d ? String(ctrlStartRes.rows[0].d).split("T")[0] : null;
-  const ctrlSummary = summarizeGroup("control", "Same filter, any industry", ctrlFiltered, ref, ctrlStartDate);
+  const ctrlSummary = summarizeGroup("control", "Same filter, any industry", ctrlSameFiltered, ref, ctrlStartDate);
+  const ctrlTopAnySummary = summarizeGroup(
+    "control_top_any",
+    "Top industries, any liquid stock",
+    ctrlTopAnyFiltered,
+    ref,
+    ctrlStartDate
+  );
+
+  // Cap-segment breakdown for Plan candidates (Nifty 100 / Midcap 150 / Smallcap 250 / Outside Nifty 500)
+  const capPriority: Record<string, number> = {
+    nifty100: 1,
+    nifty_midcap150: 2,
+    nifty_smallcap250: 3,
+  };
+  const capBySymbol = new Map<string, string>();
+  for (const r of capRes.rows) {
+    const sym = String(r.symbol || "");
+    const idxName = String(r.index_name || "");
+    const prev = capBySymbol.get(sym);
+    if (!prev || (capPriority[idxName] ?? 99) < (capPriority[prev] ?? 99)) {
+      capBySymbol.set(sym, idxName);
+    }
+  }
+  const candByCap: Record<"nifty100" | "nifty_midcap150" | "nifty_smallcap250" | "outside", OutcomeRow[]> = {
+    nifty100: [],
+    nifty_midcap150: [],
+    nifty_smallcap250: [],
+    outside: [],
+  };
+  for (const r of candFiltered) {
+    const seg = capBySymbol.get(r.symbol);
+    if (seg === "nifty100" || seg === "nifty_midcap150" || seg === "nifty_smallcap250") {
+      candByCap[seg].push(r);
+    } else {
+      candByCap.outside.push(r);
+    }
+  }
+  const capSegments = [
+    summarizeGroup("cap_nifty100", "Nifty 100", candByCap.nifty100, ref),
+    summarizeGroup("cap_midcap150", "Midcap 150", candByCap.nifty_midcap150, ref),
+    summarizeGroup("cap_smallcap250", "Smallcap 250", candByCap.nifty_smallcap250, ref),
+    summarizeGroup("cap_outside", "Outside Nifty 500", candByCap.outside, ref),
+  ];
 
   // All-liquid baseline over the exact same matured plan_dates
   const maturedDates = Array.from(
@@ -496,6 +578,29 @@ export async function getTrackRecordData(
     ? String(cov.max_fwd_date).split("T")[0]
     : tradingDays[tradingDays.length - 1] ?? null;
 
+  const allDates = Array.from(new Set(candFiltered.map((r) => r.plan_date))).sort();
+  const firstPlanDate = allDates[0] ?? null;
+  const lastPlanDate = allDates[allDates.length - 1] ?? null;
+  let nifty500PeriodRetPct: number | null = null;
+  if (firstPlanDate && lastPlanDate && firstPlanDate !== lastPlanDate) {
+    const periodRes = await q(
+      `
+      SELECT trade_date::text AS td, close::float
+      FROM daily_index_ohlcv
+      WHERE index_name = 'NIFTY 500' AND trade_date IN ($1::date, $2::date)
+      ORDER BY trade_date ASC;
+      `,
+      [firstPlanDate, lastPlanDate]
+    );
+    if (periodRes.rows.length >= 2) {
+      const c0 = Number(periodRes.rows[0].close);
+      const c1 = Number(periodRes.rows[periodRes.rows.length - 1].close);
+      if (c0 > 0 && c1 > 0) {
+        nifty500PeriodRetPct = Number((((c1 / c0) - 1) * 100).toFixed(2));
+      }
+    }
+  }
+
   return {
     params,
     asOf: tradingDays[tradingDays.length - 1] ?? null,
@@ -513,7 +618,14 @@ export async function getTrackRecordData(
         20: Number(cov.h20 || 0),
       },
     },
-    summaries: [candSummary, ctrlSummary, allLiquidSummary],
+    summaries: [candSummary, ctrlSummary, ctrlTopAnySummary, allLiquidSummary],
+    context: {
+      planDatesCount: allDates.length,
+      firstDate: firstPlanDate,
+      lastDate: lastPlanDate,
+      nifty500PeriodRetPct,
+      capSegments,
+    },
     distribution,
     recentPlans,
   };

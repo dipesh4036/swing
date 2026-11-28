@@ -16,11 +16,21 @@ import {
       ref: "open",
       source: "all",
       dedupe: "first",
-      version: "plan_v1",
+      candidate_set: "filter_only",
+      include_superseded: "0",
+      version: "plan_v2",
     });
   }
 
-  for (const bad of ["horizon=3", "ref=high", "source=backfill", "dedupe=none", "version=bad;sql"]) {
+  for (const bad of [
+    "horizon=3",
+    "ref=high",
+    "source=backfill",
+    "dedupe=none",
+    "candidate_set=invalid",
+    "include_superseded=2",
+    "version=bad;sql",
+  ]) {
     const res = parseTrackRecordParams(new URLSearchParams(bad));
     assert.equal(res.ok, false, `Expected '${bad}' to be rejected`);
   }

@@ -18,7 +18,7 @@ import { BaseCard } from "@/components/ui/card";
 import { SignedReturn } from "@/components/industry-strength/RankPrimitives";
 
 interface GroupSummary {
-  key: "candidates" | "control" | "all_liquid";
+  key: "candidates" | "control" | "control_top_any" | "all_liquid" | "cap_nifty100" | "cap_midcap150" | "cap_smallcap250" | "cap_outside";
   label: string;
   n_rows: number;
   n_unique_stocks: number;
@@ -63,6 +63,8 @@ interface TrackRecordPayload {
     ref: "close" | "open";
     source: "live" | "all";
     dedupe: "first" | "all";
+    candidate_set: "filter_only" | "displayed";
+    include_superseded: "0" | "1";
     version: string;
   };
   asOf: string | null;
@@ -76,6 +78,13 @@ interface TrackRecordPayload {
     maturedByHorizon: Record<string, number>;
   };
   summaries: GroupSummary[];
+  context?: {
+    planDatesCount: number;
+    firstDate: string | null;
+    lastDate: string | null;
+    nifty500PeriodRetPct: number | null;
+    capSegments: GroupSummary[];
+  };
   distribution: DistBin[];
   recentPlans: RecentPlanRow[];
 }
@@ -90,6 +99,8 @@ export default function TrackRecordView() {
   const [refPrice, setRefPrice] = useState<"open" | "close">("open");
   const [liveOnly, setLiveOnly] = useState(false);
   const [firstOnly, setFirstOnly] = useState(true);
+  const [candidateSet, setCandidateSet] = useState<"filter_only" | "displayed">("filter_only");
+  const [includeSuperseded, setIncludeSuperseded] = useState(false);
 
   const [data, setData] = useState<TrackRecordPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,6 +116,8 @@ export default function TrackRecordView() {
         ref: refPrice,
         source: liveOnly ? "live" : "all",
         dedupe: firstOnly ? "first" : "all",
+        candidate_set: candidateSet,
+        include_superseded: includeSuperseded ? "1" : "0",
       });
       const res = await fetch(`/api/track-record?${qs.toString()}`);
       if (res.status === 401) {
@@ -122,7 +135,7 @@ export default function TrackRecordView() {
     } finally {
       setLoading(false);
     }
-  }, [horizon, refPrice, liveOnly, firstOnly]);
+  }, [horizon, refPrice, liveOnly, firstOnly, candidateSet, includeSuperseded]);
 
   useEffect(() => {
     fetchTrackRecord();
@@ -243,6 +256,48 @@ export default function TrackRecordView() {
           >
             First appearance only
           </button>
+
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
+
+          <div className="flex items-center gap-1" role="group" aria-label="Candidate set">
+            <button
+              type="button"
+              aria-pressed={candidateSet === "filter_only"}
+              onClick={() => setCandidateSet("filter_only")}
+              className={`h-7 px-2.5 rounded-md border text-xs font-medium cursor-pointer ${
+                candidateSet === "filter_only"
+                  ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300 font-semibold"
+                  : "bg-surface border-border text-text-secondary hover:text-text"
+              }`}
+            >
+              Filter only
+            </button>
+            <button
+              type="button"
+              aria-pressed={candidateSet === "displayed"}
+              onClick={() => setCandidateSet("displayed")}
+              className={`h-7 px-2.5 rounded-md border text-xs font-medium cursor-pointer ${
+                candidateSet === "displayed"
+                  ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300 font-semibold"
+                  : "bg-surface border-border text-text-secondary hover:text-text"
+              }`}
+            >
+              Displayed (live)
+            </button>
+          </div>
+
+          <button
+            type="button"
+            aria-pressed={includeSuperseded}
+            onClick={() => setIncludeSuperseded((v) => !v)}
+            className={`h-7 px-2.5 rounded-md border text-xs font-medium cursor-pointer ${
+              includeSuperseded
+                ? "bg-primary-subtle border-accent-border text-primary dark:text-indigo-300 font-semibold"
+                : "bg-surface border-border text-text-secondary hover:text-text"
+            }`}
+          >
+            Include superseded backfill
+          </button>
         </div>
       </div>
 
@@ -297,7 +352,7 @@ export default function TrackRecordView() {
                         <td className="px-3 py-2.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-[13px] font-semibold text-text">{row.label}</span>
-                            {row.key === "control" && row.n_rows === 0 && (
+                            {(row.key === "control" || row.key === "control_top_any") && row.n_rows === 0 && (
                               <span className="px-2 py-0.5 rounded bg-bg-secondary border border-border text-xs text-text-secondary">
                                 {row.starts_at ? `starts ${row.starts_at}` : "starts from next live run"}
                               </span>
@@ -339,6 +394,77 @@ export default function TrackRecordView() {
               </table>
             </div>
           </BaseCard>
+
+          {/* 3b. Context & Cap-Segment Breakdown */}
+          {data.context && (
+            <BaseCard padding="p-0" className="overflow-hidden">
+              <div className="px-3.5 py-2.5 border-b border-border bg-bg-secondary flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                  Context
+                </h2>
+                <span className="text-xs text-text-secondary tabular-nums">
+                  {data.context.planDatesCount} plan dates
+                  {data.context.firstDate && data.context.lastDate
+                    ? ` (${data.context.firstDate} to ${data.context.lastDate})`
+                    : ""}
+                  {data.context.nifty500PeriodRetPct !== null
+                    ? ` · NIFTY 500 period return: ${fmtSigned(data.context.nifty500PeriodRetPct)}`
+                    : ""}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="border-b border-border bg-bg-secondary/50 text-xs uppercase tracking-wider text-text-secondary">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cap Segment (Plan candidates)</th>
+                      <th className="px-3 py-2 text-right">n (rows)</th>
+                      <th className="px-3 py-2 text-right">Unique</th>
+                      <th className="px-3 py-2 text-right">Above NIFTY 500</th>
+                      <th className="px-3 py-2 text-right">Median Return</th>
+                      <th className="px-3 py-2 text-right">Median Excess</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-subtle">
+                    {data.context.capSegments.map((seg) => {
+                      const smallSample = seg.n_rows < 30;
+                      const valCls = smallSample ? "text-text-secondary" : "text-text";
+                      return (
+                        <tr key={seg.key}>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[13px] font-medium text-text">{seg.label}</span>
+                              {smallSample && (
+                                <span className="px-2 py-0.5 rounded bg-warning-bg text-warning text-xs font-medium">
+                                  Too few to judge (n={seg.n_rows})
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${valCls}`}>
+                            {seg.n_rows}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${valCls}`}>
+                            {seg.n_unique_stocks}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${valCls}`}>
+                            {seg.n_rows > 0
+                              ? `${seg.n_beat_bench} of ${seg.n_rows} (${seg.pct_beat_bench?.toFixed(1) ?? "0.0"}%)`
+                              : "—"}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums text-[13px] font-medium ${valCls}`}>
+                            {fmtSigned(seg.median_ret)}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums text-[13px] font-medium ${valCls}`}>
+                            {fmtSigned(seg.median_excess)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </BaseCard>
+          )}
 
           {/* 4. Distribution Chart */}
           <BaseCard padding="p-3.5" className="space-y-2.5">
