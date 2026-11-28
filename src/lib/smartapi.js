@@ -131,6 +131,10 @@ let loginPromise = null;
 let loginFailureCount = 0;
 let loginNegativeCacheUntil = 0;
 
+export function clearSmartApiCandleCache() {
+  candleCache.clear();
+}
+
 export function invalidateSmartApiSession() {
   sessionCache = { jwtToken: null, expiresAt: 0 };
 }
@@ -280,8 +284,14 @@ async function fetchCandleChunk(tokenStr, fromDateStr, toDateStr, allowReauth = 
       const errCode = String(json?.errorcode || "");
       const msg = String(json?.message || "").toLowerCase();
 
-      // Rate limit backoff
-      if (res.status === 429 || res.status === 403 || msg.includes("exceeding access rate") || msg.includes("too many requests")) {
+      // 403 means blocked/unauthorised — do not retry with back-off
+      if (res.status === 403) {
+        console.warn(`SmartAPI getCandleData returned status=403 code=${errCode} for token=${tokenStr}`);
+        return null;
+      }
+
+      // Rate limit backoff (429 / exceeding access rate only)
+      if (res.status === 429 || msg.includes("exceeding access rate") || msg.includes("too many requests")) {
         await sleep(backoffMs);
         backoffMs = Math.min(backoffMs * 2, 8000);
         continue;
@@ -358,11 +368,14 @@ export async function fetchAllCandlesFromSmartAPI(token) {
     chunkStart = new Date(chunkEnd.getTime() + 24 * 60 * 60 * 1000);
   }
 
-  // Fetch all chunks sequentially
+  // Fetch all chunks sequentially; any failing chunk (null) aborts so caller falls back to DB
   const rawCandleRows = [];
 
   for (const range of chunkRanges) {
     const rows = await fetchCandleChunk(tokenStr, range.fromStr, range.toStr);
+    if (rows === null) {
+      return null;
+    }
     if (Array.isArray(rows) && rows.length > 0) {
       rawCandleRows.push(...rows);
     }
@@ -391,6 +404,17 @@ export async function fetchAllCandlesFromSmartAPI(token) {
 
   if (sortedCandles.length === 0) {
     return null;
+  }
+
+  // Validate continuity: any gap > 7 calendar days aborts so caller falls back to DB
+  for (let i = 1; i < sortedCandles.length; i++) {
+    const prevDate = sortedCandles[i - 1].date;
+    const currDate = sortedCandles[i].date;
+    const diffDays = (Date.parse(currDate) - Date.parse(prevDate)) / 86400000;
+    if (diffDays > 7) {
+      console.warn(`SmartAPI candle gap > 7 days (${prevDate} -> ${currDate}) for token=${tokenStr}`);
+      return null;
+    }
   }
 
   // Cache in memory for 3 hours (capped at MAX_CANDLE_CACHE_TOKENS with oldest eviction)
